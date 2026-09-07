@@ -4,20 +4,30 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 
-export function PetPlaceholder() {
+type PetPlaceholderProps = {
+  message?: string | null;
+};
+
+export function PetPlaceholder({ message }: PetPlaceholderProps) {
   return (
-    <ThemedView type="backgroundElement" style={styles.container}>
-      <ThemedText style={styles.emoji}>🐾</ThemedText>
-      <ThemedText type="smallBold" themeColor="textSecondary">
-        Your Pet
-      </ThemedText>
+    <ThemedView style={styles.wrapper}>
+      <ThemedView type="backgroundElement" style={styles.container}>
+        <ThemedText style={styles.emoji}>🐾</ThemedText>
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          Your Pet
+        </ThemedText>
+      </ThemedView>
+      {message ? <ThemedText type="smallBold">{message}</ThemedText> : null}
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   container: {
-    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,

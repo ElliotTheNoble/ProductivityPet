@@ -18,7 +18,7 @@ Track planned and in-progress features here. Copy the template for each new feat
 
 - **Status:** Done
 - **Description:** Show a static pet placeholder (emoji + label) on the home screen as a visual anchor for the app. No animation, stats, or reactions yet.
-- **Notes:** Implemented in `src/components/pet-placeholder.tsx`. Future pet behavior (moods, growth, reacting to task completion) is separate, later work.
+- **Notes:** Implemented in `src/components/pet-placeholder.tsx`. Future pet behavior (moods, growth, points/levels) is separate, later work. See FEATURE-005 for the simple task-completion reaction.
 
 ### [FEATURE-002] Basic task list
 
@@ -37,3 +37,9 @@ Track planned and in-progress features here. Copy the template for each new feat
 - **Status:** Done
 - **Description:** Tap a task to toggle it complete/incomplete, with a visual change (checkbox glyph + strikethrough text) showing its state.
 - **Notes:** Tapping again un-completes it (toggle, not one-way).
+
+### [FEATURE-005] Pet reacts to task completion
+
+- **Status:** Done
+- **Description:** When a task is marked complete, show a simple positive message ("Great job!") near the pet.
+- **Notes:** Implemented as a `message` prop on `PetPlaceholder` (`src/components/pet-placeholder.tsx`), driven by a `petMessage` state in `src/app/index.tsx`. The message is set when a task is completed and cleared when a task is un-completed. No points, levels, animations, or persistence — just the message.

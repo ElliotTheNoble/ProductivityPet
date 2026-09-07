@@ -18,6 +18,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [draft, setDraft] = useState('');
+  const [petMessage, setPetMessage] = useState<string | null>(null);
 
   function addTask() {
     const text = draft.trim();
@@ -27,15 +28,17 @@ export default function HomeScreen() {
   }
 
   function toggleTask(id: string) {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task))
-    );
+    const target = tasks.find((task) => task.id === id);
+    if (!target) return;
+    const completed = !target.completed;
+    setPetMessage(completed ? 'Great job!' : null);
+    setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, completed } : task)));
   }
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <PetPlaceholder />
+        <PetPlaceholder message={petMessage} />
 
         <ThemedText type="subtitle" style={styles.title}>
           Tasks

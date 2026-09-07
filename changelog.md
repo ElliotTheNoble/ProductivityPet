@@ -27,6 +27,7 @@ Track notable changes to the project here. Newest entries at the top.
 - Basic task list on the home screen with an empty-state message.
 - Ability to add a task via a text input.
 - Ability to mark a task complete/incomplete by tapping it (checkbox glyph + strikethrough).
+- Pet reaction: shows "Great job!" near the pet when a task is marked complete, cleared when un-completed.
 
 ### Changed
 - Replaced the default Expo starter content in `src/app/index.tsx` with the pet + task list screen.
