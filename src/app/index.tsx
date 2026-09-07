@@ -1,61 +1,87 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { PetPlaceholder } from '@/components/pet-placeholder';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+type Task = {
+  id: string;
+  text: string;
+  completed: boolean;
+};
 
 export default function HomeScreen() {
+  const theme = useTheme();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [draft, setDraft] = useState('');
+
+  function addTask() {
+    const text = draft.trim();
+    if (!text) return;
+    setTasks((prev) => [...prev, { id: Date.now().toString(), text, completed: false }]);
+    setDraft('');
+  }
+
+  function toggleTask(id: string) {
+    setTasks((prev) =>
+      prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task))
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+        <PetPlaceholder />
 
-        <ThemedText type="code" style={styles.code}>
-          get started
+        <ThemedText type="subtitle" style={styles.title}>
+          Tasks
         </ThemedText>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+        <View style={styles.addRow}>
+          <TextInput
+            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+            placeholder="Add a task"
+            placeholderTextColor={theme.textSecondary}
+            value={draft}
+            onChangeText={setDraft}
+            onSubmitEditing={addTask}
+            returnKeyType="done"
           />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          <Pressable onPress={addTask} style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedView type="backgroundSelected" style={styles.addButton}>
+              <ThemedText type="smallBold">Add</ThemedText>
+            </ThemedView>
+          </Pressable>
+        </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
+        <View style={styles.list}>
+          {tasks.length === 0 && (
+            <ThemedText type="small" themeColor="textSecondary">
+              No tasks yet. Add one above.
+            </ThemedText>
+          )}
+          {tasks.map((task) => (
+            <Pressable
+              key={task.id}
+              onPress={() => toggleTask(task.id)}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedView type="backgroundElement" style={styles.taskRow}>
+                <ThemedText themeColor={task.completed ? 'textSecondary' : 'text'}>
+                  {task.completed ? '☑' : '☐'}
+                </ThemedText>
+                <ThemedText
+                  style={task.completed && styles.completedText}
+                  themeColor={task.completed ? 'textSecondary' : 'text'}>
+                  {task.text}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+          ))}
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -69,30 +95,49 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    width: '100%',
     paddingHorizontal: Spacing.four,
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: Spacing.three,
+    paddingTop: Spacing.five,
     paddingBottom: BottomTabInset + Spacing.three,
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
   },
   title: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+  addRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingVertical: Spacing.two,
+  },
+  addButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  list: {
+    gap: Spacing.two,
+  },
+  taskRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
   },
 });
