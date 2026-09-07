@@ -28,7 +28,7 @@ export default function HomeScreen() {
 
   function toggleTask(id: string) {
     setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, completed: task.completed } : task))
+      prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task))
     );
   }
 

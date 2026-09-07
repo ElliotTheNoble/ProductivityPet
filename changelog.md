@@ -32,7 +32,7 @@ Track notable changes to the project here. Newest entries at the top.
 - Replaced the default Expo starter content in `src/app/index.tsx` with the pet + task list screen.
 
 ### Fixed
--
+- BUG-001: Tapping a task did not mark it complete. `toggleTask` in `src/app/index.tsx` was assigning `completed: task.completed` instead of `completed: !task.completed`, so the value never flipped. Restored the negation.
 
 ### Removed
 - Unused `HintRow` component (`src/components/hint-row.tsx`), left over from the starter template and no longer referenced after the home screen rewrite.
