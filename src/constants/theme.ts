@@ -17,6 +17,7 @@ export const Colors = {
     accent: '#F28DAE', // blush/coral accent for primary buttons
     mint: '#7FD9B6', // mint accent for progress + checkmarks
     peach: '#FBD9B8', // peach accent for the pet progress card
+    purple: '#A78BDB', // purple accent for the active nav pill
   },
   dark: {
     text: '#4A3B42',
@@ -27,6 +28,7 @@ export const Colors = {
     accent: '#F28DAE',
     mint: '#7FD9B6',
     peach: '#FBD9B8',
+    purple: '#A78BDB',
   },
 } as const;
 
@@ -67,5 +69,4 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
