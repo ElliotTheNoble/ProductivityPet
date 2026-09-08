@@ -1,13 +1,18 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import type { RoomSlug } from '@/utils/rooms';
 
 type RoomPreview = {
   name: string;
+  // null means "not a /rooms/[room] detail page" — Living Room instead
+  // navigates straight back to Home, which already is the living room.
+  slug: RoomSlug | null;
   source: number;
 };
 
@@ -18,44 +23,86 @@ type RoomPreview = {
 // sprite-cropped at runtime, same reasoning as the pet growth stages: these
 // grid cells are responsively sized (percentage width), so there's no known
 // pixel size to compute a runtime crop against.
+//
+// This preview art is intentionally kept separate from src/utils/rooms.ts's
+// room data (used by the 5 functional room detail pages) — those use full-
+// size backgrounds, not these small square preview cards.
 const ROOMS: RoomPreview[] = [
-  { name: 'Living Room', source: require('@/assets/images/rooms/room_preview_living.png') },
-  { name: 'Study Room', source: require('@/assets/images/rooms/room_preview_study.png') },
-  { name: 'Gym', source: require('@/assets/images/rooms/room_preview_gym.png') },
-  { name: 'Bedroom', source: require('@/assets/images/rooms/room_preview_bedroom.png') },
-  { name: 'Bathroom', source: require('@/assets/images/rooms/room_preview_bathroom.png') },
-  { name: 'Kitchen', source: require('@/assets/images/rooms/room_preview_kitchen.png') },
+  {
+    name: 'Living Room',
+    slug: null,
+    source: require('@/assets/images/rooms/room_preview_living.png'),
+  },
+  {
+    name: 'Study Room',
+    slug: 'study-room',
+    source: require('@/assets/images/rooms/room_preview_study.png'),
+  },
+  { name: 'Gym', slug: 'gym', source: require('@/assets/images/rooms/room_preview_gym.png') },
+  {
+    name: 'Bedroom',
+    slug: 'bedroom',
+    source: require('@/assets/images/rooms/room_preview_bedroom.png'),
+  },
+  {
+    name: 'Bathroom',
+    slug: 'bathroom',
+    source: require('@/assets/images/rooms/room_preview_bathroom.png'),
+  },
+  {
+    name: 'Kitchen',
+    slug: 'kitchen',
+    source: require('@/assets/images/rooms/room_preview_kitchen.png'),
+  },
 ];
 
 const SELECTED_ROOM = 'Living Room';
 
-// Visual layout only for now — cards are not pressable and room switching
-// does not work yet, per instructions.
+// The room preview cards are now clickable. Living Room goes back to Home
+// (the existing living room); the other 5 open their own detail page. The
+// cards' own look is unchanged — only a Pressable wrapper was added.
 export function RoomsCard() {
   const theme = useTheme();
+  const router = useRouter();
+
+  function openRoom(slug: RoomSlug | null) {
+    if (slug === null) {
+      router.push('/');
+    } else {
+      router.push({ pathname: '/rooms/[room]', params: { room: slug } });
+    }
+  }
 
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <View style={styles.headerRow}>
         <ThemedText style={styles.title}>Rooms</ThemedText>
-        <ThemedText type="smallBold" themeColor="textSecondary">
-          View All →
-        </ThemedText>
+        <Pressable
+          onPress={() => router.push('/rooms')}
+          style={({ pressed }) => pressed && styles.pressed}>
+          <ThemedText type="smallBold" themeColor="textSecondary">
+            View All →
+          </ThemedText>
+        </Pressable>
       </View>
 
       <View style={styles.grid}>
         {ROOMS.map((room) => {
           const isSelected = room.name === SELECTED_ROOM;
           return (
-            <View
+            <Pressable
               key={room.name}
-              style={[
-                styles.roomPreview,
-                { borderColor: theme.backgroundElement },
-                isSelected && { borderColor: theme.accent },
-              ]}>
-              <Image source={room.source} style={styles.previewImage} contentFit="contain" />
-            </View>
+              onPress={() => openRoom(room.slug)}
+              style={({ pressed }) => [styles.roomItem, pressed && styles.pressed]}>
+              <View
+                style={[
+                  styles.roomPreview,
+                  { borderColor: theme.backgroundElement },
+                  isSelected && { borderColor: theme.accent },
+                ]}>
+                <Image source={room.source} style={styles.previewImage} contentFit="contain" />
+              </View>
+            </Pressable>
           );
         })}
       </View>
@@ -80,13 +127,19 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '700',
   },
+  pressed: {
+    opacity: 0.7,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
-  roomPreview: {
+  roomItem: {
     width: '31%',
+  },
+  roomPreview: {
+    width: '100%',
     aspectRatio: 1,
     borderRadius: Spacing.three,
     borderWidth: 2,
