@@ -10,6 +10,7 @@ import { TaskCard, type Task } from '@/components/task-card';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { categorizeTask } from '@/utils/categorize-task';
+import { getPetStage } from '@/utils/pet-stage';
 
 const COMPLETION_MESSAGES = ['Yippee!', 'Yay!', 'Woohoo!', 'I knew you could do it!'];
 
@@ -134,6 +135,9 @@ export default function HomeScreen() {
     setTasks((prev) => prev.filter((task) => task.id !== id));
   }
 
+  const completedTaskCount = tasks.filter((task) => task.completed).length;
+  const petStage = getPetStage(completedTaskCount);
+
   const taskCard = (
     <TaskCard
       tasks={tasks}
@@ -156,15 +160,15 @@ export default function HomeScreen() {
               <View style={styles.dashboardRow}>
                 <View style={styles.leftColumn}>{taskCard}</View>
                 <View style={styles.rightColumn}>
-                  <PetRoom message={petMessage} />
+                  <PetRoom stage={petStage} message={petMessage} />
                 </View>
               </View>
-              <PetProgress />
+              <PetProgress completedTaskCount={completedTaskCount} />
             </>
           ) : (
             <>
-              <PetRoom message={petMessage} />
-              <PetProgress />
+              <PetRoom stage={petStage} message={petMessage} />
+              <PetProgress completedTaskCount={completedTaskCount} />
               {taskCard}
             </>
           )}

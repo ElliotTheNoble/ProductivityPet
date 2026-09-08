@@ -3,8 +3,10 @@ import { StyleSheet, View } from 'react-native';
 
 import { PetPlaceholder } from '@/components/pet-placeholder';
 import { Spacing } from '@/constants/theme';
+import type { PetStage } from '@/utils/pet-stage';
 
 type PetRoomProps = {
+  stage: PetStage;
   message?: string | null;
 };
 
@@ -12,7 +14,7 @@ type PetRoomProps = {
 // so the image is never stretched or cropped.
 const ROOM_ASPECT_RATIO = 1536 / 1024;
 
-export function PetRoom({ message }: PetRoomProps) {
+export function PetRoom({ stage, message }: PetRoomProps) {
   return (
     <View style={styles.scene}>
       <Image
@@ -22,7 +24,7 @@ export function PetRoom({ message }: PetRoomProps) {
       />
       <View style={styles.petOverlay} pointerEvents="box-none">
         <View style={styles.topSpacer} />
-        <PetPlaceholder message={message} />
+        <PetPlaceholder stage={stage} message={message} />
         <View style={styles.bottomSpacer} />
       </View>
     </View>

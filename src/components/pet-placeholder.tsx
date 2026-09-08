@@ -1,80 +1,51 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import type { PetStage } from '@/utils/pet-stage';
 
 type PetPlaceholderProps = {
+  stage: PetStage;
   message?: string | null;
 };
 
-// Matches assets/images/pets/egg_nest.png (1536x1024) so it's never stretched.
-const EGG_ASPECT_RATIO = 1536 / 1024;
-// Matches assets/images/pets/kitten_nest.png (1381x1139) so it's never stretched.
-const KITTEN_ASPECT_RATIO = 1381 / 1139;
-const DOUBLE_TAP_DELAY_MS = 300;
-const CRACK_MESSAGE_DURATION_MS = 1800;
-
-export function PetPlaceholder({ message }: PetPlaceholderProps) {
-  const [hasHatched, setHasHatched] = useState(false);
-  const [showCrackMessage, setShowCrackMessage] = useState(false);
-  const lastTapAtRef = useRef(0);
-  const crackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (crackTimeoutRef.current) clearTimeout(crackTimeoutRef.current);
-    };
-  }, []);
-
-  function handlePress() {
-    if (hasHatched) return;
-
-    const now = Date.now();
-    const wasDoubleTap = now - lastTapAtRef.current < DOUBLE_TAP_DELAY_MS;
-    lastTapAtRef.current = now;
-    if (!wasDoubleTap) return;
-
-    setHasHatched(true);
-    setShowCrackMessage(true);
-    if (crackTimeoutRef.current) clearTimeout(crackTimeoutRef.current);
-    crackTimeoutRef.current = setTimeout(
-      () => setShowCrackMessage(false),
-      CRACK_MESSAGE_DURATION_MS
-    );
+// Egg and Hatchling each have their own dedicated full illustration.
+// Baby/Young/Adult are pre-cropped from the shared growth sprite sheet
+// (assets/images/pets/pet_growth_stages.png) into their own files, so every
+// stage is simply "one image, sized to its own real aspect ratio" — no
+// runtime sprite-cropping needed here (that technique needs a known pixel
+// size, which this responsively-sized component doesn't have).
+function getStageImage(stage: PetStage) {
+  switch (stage) {
+    case 'Egg':
+      return { source: require('@/assets/images/pets/egg_nest.png'), aspectRatio: 1536 / 1024 };
+    case 'Hatchling':
+      return { source: require('@/assets/images/pets/kitten_nest.png'), aspectRatio: 1381 / 1139 };
+    case 'Baby':
+      return { source: require('@/assets/images/pets/pet_baby.png'), aspectRatio: 1 };
+    case 'Young':
+      return { source: require('@/assets/images/pets/pet_young.png'), aspectRatio: 1 };
+    case 'Adult':
+      return { source: require('@/assets/images/pets/pet_adult.png'), aspectRatio: 1 };
   }
+}
 
-  const bubbleText = showCrackMessage ? 'Crack!' : message;
+export function PetPlaceholder({ stage, message }: PetPlaceholderProps) {
+  const { source, aspectRatio } = getStageImage(stage);
 
   return (
     <View style={styles.wrapper}>
-      {bubbleText ? (
+      {message ? (
         <ThemedView type="backgroundElement" style={styles.bubble}>
-          <ThemedText type="smallBold">{bubbleText}</ThemedText>
+          <ThemedText type="smallBold">{message}</ThemedText>
         </ThemedView>
       ) : null}
 
-      <Pressable
-        onPress={handlePress}
-        style={({ pressed }) => [styles.pressableBase, pressed && styles.pressed]}>
-        <View
-          style={[
-            styles.petWrap,
-            { aspectRatio: hasHatched ? KITTEN_ASPECT_RATIO : EGG_ASPECT_RATIO },
-          ]}>
-          <Image
-            source={
-              hasHatched
-                ? require('@/assets/images/pets/kitten_nest.png')
-                : require('@/assets/images/pets/egg_nest.png')
-            }
-            style={styles.petImage}
-            contentFit="contain"
-          />
-        </View>
-      </Pressable>
+      <View style={[styles.petWrap, { aspectRatio }]}>
+        <Image source={source} style={styles.petImage} contentFit="contain" />
+      </View>
     </View>
   );
 }
@@ -89,13 +60,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     borderRadius: Spacing.five,
     marginBottom: Spacing.one,
-  },
-  pressableBase: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  pressed: {
-    opacity: 0.8,
   },
   petWrap: {
     width: '46%',

@@ -20,6 +20,28 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-09-08]
+
+### Added
+- Redesigned Pet Progress (`src/components/pet-progress.tsx`): "Pet Progress" / "Level X" header row, a pastel progress bar, "X / 10 tasks to next stage" text, and an Egg → Hatchling → Baby → Young → Adult stage row with arrows, the current stage highlighted with an accent-colored ring. 10 completed tasks per stage.
+- Added `assets/images/pets/pet_stages.png`, a real illustrated 5-stage sprite (Egg/Hatchling/Baby/Young/Adult), and a new `src/components/pet-stage-icon.tsx` (`PetStageIcon`) that crops the matching stage out of it — same sprite-crop technique already used for `TaskIcon`. Replaces the 🥚🐣🐱😺🐈 emoji placeholders in each stage's circle. Crop boundaries were computed by analyzing the source image's pixel data (row/column opacity density) and verified against test crops before wiring them in.
+- Automatic pet growth: the living-room pet now changes automatically (Egg → Hatchling → Baby → Young → Adult) as completed tasks cross each Pet Progress stage boundary, instead of via double-tap. New `src/utils/pet-stage.ts` centralizes the stage formula (`getPetStage`, `getPetStageIndex`, `TASKS_PER_STAGE`) so Pet Progress and the living-room pet always agree. `src/app/index.tsx` passes the derived `petStage` down through `PetRoom` to `PetPlaceholder`.
+- Added `assets/images/pets/pet_growth_stages.png` (source sprite for Baby/Young/Adult) and three pre-cropped standalone files — `pet_baby.png`, `pet_young.png`, `pet_adult.png` — generated from it by analyzing the source's pixel opacity to locate each pose, then verified visually before wiring in.
+
+### Changed
+- Pet Progress is now driven by real data instead of being a static placeholder: `src/app/index.tsx` passes `completedTaskCount` (live count of currently-completed tasks) down as a prop; `PetProgress` derives stage/level/progress from it on every render. Unchecking a task lowers `completedTaskCount` and therefore the displayed progress (and can drop a stage) the same way completing one raises it — no separate "lower progress" logic was needed. Progress persists across refresh for the same reason FEATURE-021's completion tracker does: it's derived from the already-persisted `tasks` list, not stored separately.
+- `src/components/pet-progress.tsx` now imports its stage list/formula from `src/utils/pet-stage.ts` instead of defining its own local copy (no behavior change, just de-duplicated against FEATURE-024's shared logic).
+- `src/components/pet-stage-icon.tsx`: `PetStage` type is now imported from `src/utils/pet-stage.ts` instead of being declared locally.
+- `src/components/pet-room.tsx`: now takes a required `stage: PetStage` prop and passes it through to `PetPlaceholder`.
+
+### Fixed
+-
+
+### Removed
+- Double-tap-to-hatch entirely: `src/components/pet-placeholder.tsx` no longer has any tap handling, `hasHatched`/`showCrackMessage` state, or the "Crack!" message — the component is now a plain, non-interactive image that simply renders whichever stage it's told to via props. `kitten_nest.png` is kept as the dedicated Hatchling image, per instructions.
+
+---
+
 ## [2026-09-07]
 
 ### Added
