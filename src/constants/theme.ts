@@ -9,18 +9,24 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#4A3B42',
+    background: '#FCF3E9', // cream
+    backgroundElement: '#FBE3EC', // blush pink
+    backgroundSelected: '#E6DBF8', // lavender
+    textSecondary: '#9C8790',
+    accent: '#F28DAE', // blush/coral accent for primary buttons
+    mint: '#7FD9B6', // mint accent for progress + checkmarks
+    peach: '#FBD9B8', // peach accent for the pet progress card
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#4A3B42',
+    background: '#FCF3E9',
+    backgroundElement: '#FBE3EC',
+    backgroundSelected: '#E6DBF8',
+    textSecondary: '#9C8790',
+    accent: '#F28DAE',
+    mint: '#7FD9B6',
+    peach: '#FBD9B8',
   },
 } as const;
 
