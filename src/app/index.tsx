@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ConfettiBurst } from '@/components/confetti-burst';
 import { PetProgress } from '@/components/pet-progress';
 import { PetRoom } from '@/components/pet-room';
+import { RoomsCard } from '@/components/rooms-card';
 import { TaskCard, type Task } from '@/components/task-card';
 import { ThemedView } from '@/components/themed-view';
 import { TodayMood } from '@/components/today-mood';
@@ -214,6 +215,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.rightColumn}>
                   <PetRoom stage={petStage} message={displayedPetMessage} />
+                  <RoomsCard />
                 </View>
               </View>
               <PetProgress completedTaskCount={completedTaskCount} />
@@ -224,6 +226,7 @@ export default function HomeScreen() {
               <PetProgress completedTaskCount={completedTaskCount} />
               {taskCard}
               <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
+              <RoomsCard />
             </>
           )}
         </ScrollView>
@@ -273,5 +276,6 @@ const styles = StyleSheet.create({
     flexGrow: 3,
     flexBasis: 0,
     minWidth: 380,
+    gap: Spacing.four,
   },
 });
