@@ -8,21 +8,33 @@ import { PetProgress } from '@/components/pet-progress';
 import { PetRoom } from '@/components/pet-room';
 import { TaskCard, type Task } from '@/components/task-card';
 import { ThemedView } from '@/components/themed-view';
+import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
 import { categorizeTask } from '@/utils/categorize-task';
+import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { getPetStage } from '@/utils/pet-stage';
 
 const COMPLETION_MESSAGES = ['Yippee!', 'Yay!', 'Woohoo!', 'I knew you could do it!'];
 
 // Shown briefly when a completed task gets unchecked.
 const UNCHECK_MESSAGE = 'Aww, not done yet? You got this! 💕';
-const UNCHECK_MESSAGE_DURATION_MS = 3000;
+
+// How long a reactive message (task completed/unchecked) stays on screen
+// before the speech bubble falls back to the ambient mood message.
+const TEMPORARY_MESSAGE_DURATION_MS = 3000;
 
 // How long the "all done" celebration (confetti + message) stays on screen.
 const CELEBRATION_DURATION_MS = 2200;
 
+// How often the ambient mood message re-rolls to a different line from the
+// same mood's pool while idle — occasional, not constant/rapid.
+const MOOD_MESSAGE_REFRESH_INTERVAL_MS = 60000;
+
+const DEFAULT_MOOD: Mood = 'Happy';
+
 // Local persistence only (AsyncStorage — works on native and web, no backend).
 const TASKS_STORAGE_KEY = '@ProductivityPet:tasks';
+const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 
 // Below this window width, the dashboard stacks into a single column instead
 // of showing the task card and living room side by side.
@@ -36,20 +48,55 @@ const HOME_MAX_WIDTH = 1400;
 export default function HomeScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [petMessage, setPetMessage] = useState<string | null>(null);
+  const [temporaryMessage, setTemporaryMessage] = useState<string | null>(null);
   const [messageIndex, setMessageIndex] = useState(0);
   const [isCelebrating, setIsCelebrating] = useState(false);
+  const [mood, setMood] = useState<Mood>(DEFAULT_MOOD);
+  const [isMoodHydrated, setIsMoodHydrated] = useState(false);
+  const [moodMessage, setMoodMessage] = useState(() => getRandomMoodMessage(DEFAULT_MOOD));
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const uncheckMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useWindowDimensions();
   const isWideLayout = width >= WIDE_LAYOUT_BREAKPOINT;
 
   useEffect(() => {
     return () => {
       if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
-      if (uncheckMessageTimeoutRef.current) clearTimeout(uncheckMessageTimeoutRef.current);
+      if (temporaryMessageTimeoutRef.current) clearTimeout(temporaryMessageTimeoutRef.current);
     };
   }, []);
+
+  // Load any previously saved mood once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(MOOD_STORAGE_KEY)
+      .then((stored) => {
+        if (cancelled || !stored) return;
+        if (MOODS.includes(stored as Mood)) setMood(stored as Mood);
+      })
+      .finally(() => {
+        if (!cancelled) setIsMoodHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMoodHydrated) return;
+    AsyncStorage.setItem(MOOD_STORAGE_KEY, mood).catch(() => {});
+  }, [mood, isMoodHydrated]);
+
+  // Pick a fresh random message whenever the mood changes (including once
+  // hydration loads a saved mood), then occasionally re-roll a different
+  // message from the same pool while idle — not constantly or rapidly.
+  useEffect(() => {
+    setMoodMessage(getRandomMoodMessage(mood));
+    const interval = setInterval(() => {
+      setMoodMessage((prev) => getRandomMoodMessage(mood, prev));
+    }, MOOD_MESSAGE_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [mood]);
 
   // Load any previously saved tasks once on mount.
   useEffect(() => {
@@ -95,17 +142,17 @@ export default function HomeScreen() {
     const target = tasks.find((task) => task.id === id);
     if (!target) return;
     const completed = !target.completed;
-    if (uncheckMessageTimeoutRef.current) clearTimeout(uncheckMessageTimeoutRef.current);
+    if (temporaryMessageTimeoutRef.current) clearTimeout(temporaryMessageTimeoutRef.current);
     if (completed) {
-      setPetMessage(COMPLETION_MESSAGES[messageIndex]);
+      setTemporaryMessage(COMPLETION_MESSAGES[messageIndex]);
       setMessageIndex((prev) => (prev + 1) % COMPLETION_MESSAGES.length);
     } else {
-      setPetMessage(UNCHECK_MESSAGE);
-      uncheckMessageTimeoutRef.current = setTimeout(
-        () => setPetMessage(null),
-        UNCHECK_MESSAGE_DURATION_MS
-      );
+      setTemporaryMessage(UNCHECK_MESSAGE);
     }
+    temporaryMessageTimeoutRef.current = setTimeout(
+      () => setTemporaryMessage(null),
+      TEMPORARY_MESSAGE_DURATION_MS
+    );
 
     const updatedTasks = tasks.map((task) => (task.id === id ? { ...task, completed } : task));
     setTasks(updatedTasks);
@@ -137,6 +184,9 @@ export default function HomeScreen() {
 
   const completedTaskCount = tasks.filter((task) => task.completed).length;
   const petStage = getPetStage(completedTaskCount);
+  // Reactive task messages take priority while active; otherwise the pet's
+  // bubble shows the ambient mood message.
+  const displayedPetMessage = temporaryMessage ?? moodMessage;
 
   const taskCard = (
     <TaskCard
@@ -158,18 +208,22 @@ export default function HomeScreen() {
           {isWideLayout ? (
             <>
               <View style={styles.dashboardRow}>
-                <View style={styles.leftColumn}>{taskCard}</View>
+                <View style={styles.leftColumn}>
+                  {taskCard}
+                  <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
+                </View>
                 <View style={styles.rightColumn}>
-                  <PetRoom stage={petStage} message={petMessage} />
+                  <PetRoom stage={petStage} message={displayedPetMessage} />
                 </View>
               </View>
               <PetProgress completedTaskCount={completedTaskCount} />
             </>
           ) : (
             <>
-              <PetRoom stage={petStage} message={petMessage} />
+              <PetRoom stage={petStage} message={displayedPetMessage} />
               <PetProgress completedTaskCount={completedTaskCount} />
               {taskCard}
+              <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
             </>
           )}
         </ScrollView>
@@ -213,6 +267,7 @@ const styles = StyleSheet.create({
     flexGrow: 2,
     flexBasis: 0,
     minWidth: 320,
+    gap: Spacing.four,
   },
   rightColumn: {
     flexGrow: 3,
