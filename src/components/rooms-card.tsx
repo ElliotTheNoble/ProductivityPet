@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -58,12 +59,24 @@ const ROOMS: RoomPreview[] = [
 
 const SELECTED_ROOM = 'Living Room';
 
+// How long the tapped card stays highlighted before navigating away — long
+// enough to see, short enough not to feel like a delay.
+const TAP_HIGHLIGHT_DELAY_MS = 250;
+
 // The room preview cards are now clickable. Living Room goes back to Home
 // (the existing living room); the other 5 open their own detail page. The
 // cards' own look is unchanged — only a Pressable wrapper was added.
 export function RoomsCard() {
   const theme = useTheme();
   const router = useRouter();
+  const [tappedRoom, setTappedRoom] = useState<string | null>(null);
+  const navigateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimeoutRef.current) clearTimeout(navigateTimeoutRef.current);
+    };
+  }, []);
 
   function openRoom(slug: RoomSlug | null) {
     if (slug === null) {
@@ -71,6 +84,14 @@ export function RoomsCard() {
     } else {
       router.push({ pathname: '/rooms/[room]', params: { room: slug } });
     }
+  }
+
+  function handlePressRoom(room: RoomPreview) {
+    setTappedRoom(room.name);
+    if (navigateTimeoutRef.current) clearTimeout(navigateTimeoutRef.current);
+    navigateTimeoutRef.current = setTimeout(() => {
+      openRoom(room.slug);
+    }, TAP_HIGHLIGHT_DELAY_MS);
   }
 
   return (
@@ -88,17 +109,17 @@ export function RoomsCard() {
 
       <View style={styles.grid}>
         {ROOMS.map((room) => {
-          const isSelected = room.name === SELECTED_ROOM;
+          const isHighlighted = room.name === SELECTED_ROOM || room.name === tappedRoom;
           return (
             <Pressable
               key={room.name}
-              onPress={() => openRoom(room.slug)}
+              onPress={() => handlePressRoom(room)}
               style={({ pressed }) => [styles.roomItem, pressed && styles.pressed]}>
               <View
                 style={[
                   styles.roomPreview,
                   { borderColor: theme.backgroundElement },
-                  isSelected && { borderColor: theme.accent },
+                  isHighlighted && { borderColor: theme.accent },
                 ]}>
                 <Image source={room.source} style={styles.previewImage} contentFit="contain" />
               </View>
