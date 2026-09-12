@@ -3,17 +3,31 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppointmentsCard } from '@/components/appointments-card';
 import { ConfettiBurst } from '@/components/confetti-burst';
 import { PetProgress } from '@/components/pet-progress';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
-import { TaskCard, type Task } from '@/components/task-card';
+import { TaskCard } from '@/components/task-card';
 import { ThemedView } from '@/components/themed-view';
 import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
-import { categorizeTask } from '@/utils/categorize-task';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { getPetStage } from '@/utils/pet-stage';
+import {
+  excludeDateFromTask,
+  formatFullDate,
+  getCompletedTaskCount,
+  isOccurrenceCompleted,
+  normalizeTask,
+  occursOnDate,
+  stopRepeatingFrom,
+  todayISO,
+  toggleTaskOccurrence,
+  type DisplayAppointment,
+  type DisplayTask,
+  type Task,
+} from '@/utils/tasks';
 
 const COMPLETION_MESSAGES = ['Yippee!', 'Yay!', 'Woohoo!', 'I knew you could do it!'];
 
@@ -99,14 +113,19 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [mood]);
 
-  // Load any previously saved tasks once on mount.
+  // Load any previously saved tasks once on mount. normalizeTask() gives any
+  // task saved before the planner/calendar feature existed a concrete date
+  // (today) and default kind, so it still shows up rather than disappearing
+  // from a now date-filtered list — see src/utils/tasks.ts.
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(TASKS_STORAGE_KEY)
       .then((stored) => {
         if (cancelled || !stored) return;
         try {
-          setTasks(JSON.parse(stored) as Task[]);
+          const parsed = JSON.parse(stored) as unknown[];
+          const today = todayISO();
+          setTasks(parsed.map((raw) => normalizeTask(raw, today)));
         } catch {
           // Ignore corrupted/unreadable data and keep the default empty list.
         }
@@ -126,23 +145,11 @@ export default function HomeScreen() {
     AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
   }, [tasks, isHydrated]);
 
-  function addTask(text: string) {
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        text,
-        completed: false,
-        category: categorizeTask(text),
-        important: false,
-      },
-    ]);
-  }
-
   function toggleTask(id: string) {
     const target = tasks.find((task) => task.id === id);
     if (!target) return;
-    const completed = !target.completed;
+    const today = todayISO();
+    const completed = !isOccurrenceCompleted(target, today);
     if (temporaryMessageTimeoutRef.current) clearTimeout(temporaryMessageTimeoutRef.current);
     if (completed) {
       setTemporaryMessage(COMPLETION_MESSAGES[messageIndex]);
@@ -155,14 +162,18 @@ export default function HomeScreen() {
       TEMPORARY_MESSAGE_DURATION_MS
     );
 
-    const updatedTasks = tasks.map((task) => (task.id === id ? { ...task, completed } : task));
+    const updatedTasks = toggleTaskOccurrence(tasks, id, today);
     setTasks(updatedTasks);
 
-    // Only celebrate when *this* action is what just finished the last task —
-    // never from hydrating already-complete data on load, never repeatedly
-    // while sitting at 100%, and never from deleting the last open task.
+    // Only celebrate when *this* action is what just finished the last of
+    // TODAY's tasks — never from hydrating already-complete data on load,
+    // never repeatedly while sitting at 100%, and never from deleting the
+    // last open task.
+    const todaysTasks = updatedTasks.filter((task) => task.kind !== 'event' && occursOnDate(task, today));
     const justFinishedEverything =
-      completed && updatedTasks.length > 0 && updatedTasks.every((task) => task.completed);
+      completed &&
+      todaysTasks.length > 0 &&
+      todaysTasks.every((task) => isOccurrenceCompleted(task, today));
     if (justFinishedEverything) {
       setIsCelebrating(true);
       if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
@@ -179,24 +190,79 @@ export default function HomeScreen() {
     );
   }
 
+  // Full delete — only ever used for one-time tasks and appointments, since
+  // neither has recurring history that needs protecting. A repeating item's
+  // three-dot menu instead offers stopRepeating/removeTodayOccurrence below.
   function deleteTask(id: string) {
     setTasks((prev) => prev.filter((task) => task.id !== id));
   }
 
-  const completedTaskCount = tasks.filter((task) => task.completed).length;
+  // "Stop repeating from here", using today as the reference date since
+  // Home only ever shows today. Every earlier date (and its completedDates,
+  // which is what pet progress is computed from) is left untouched — only
+  // today and future occurrences stop showing up.
+  function stopRepeating(id: string) {
+    setTasks((prev) => stopRepeatingFrom(prev, id, todayISO()));
+  }
+
+  // "Remove just this day" for today specifically — hides only today's
+  // occurrence, leaving the rest of the series (past and future) and all
+  // completion history untouched.
+  function removeTodayOccurrence(id: string) {
+    setTasks((prev) => excludeDateFromTask(prev, id, todayISO()));
+  }
+
+  const completedTaskCount = getCompletedTaskCount(tasks);
   const petStage = getPetStage(completedTaskCount);
   // Reactive task messages take priority while active; otherwise the pet's
   // bubble shows the ambient mood message.
   const displayedPetMessage = temporaryMessage ?? moodMessage;
 
+  // "Today's Tasks" and "Today's Appointments" show only what's actually
+  // scheduled for today — including today's occurrence of any repeating
+  // task — never another day's items. Appointments are always their own,
+  // separately-rendered list: they never have a completed state and never
+  // affect pet progress.
+  const today = todayISO();
+  const todaysDisplayTasks: DisplayTask[] = tasks
+    .filter((task) => task.kind !== 'event' && occursOnDate(task, today))
+    .map((task) => ({
+      id: task.id,
+      text: task.text,
+      completed: isOccurrenceCompleted(task, today),
+      category: task.category,
+      important: task.important,
+      isRepeating: !!task.repeat,
+    }));
+  const todaysDisplayAppointments: DisplayAppointment[] = tasks
+    .filter((task) => task.kind === 'event' && occursOnDate(task, today))
+    .map((task) => ({
+      id: task.id,
+      text: task.text,
+      category: task.category,
+      time: task.time,
+      isRepeating: !!task.repeat,
+    }));
+
   const taskCard = (
     <TaskCard
-      tasks={tasks}
-      onAddTask={addTask}
+      tasks={todaysDisplayTasks}
+      dateLabel={formatFullDate(today)}
       onToggleTask={toggleTask}
       onToggleImportant={toggleImportant}
       onDeleteTask={deleteTask}
+      onStopRepeating={stopRepeating}
+      onRemoveToday={removeTodayOccurrence}
       isCelebrating={isCelebrating}
+    />
+  );
+
+  const appointmentsCard = (
+    <AppointmentsCard
+      appointments={todaysDisplayAppointments}
+      onDeleteAppointment={deleteTask}
+      onStopRepeating={stopRepeating}
+      onRemoveToday={removeTodayOccurrence}
     />
   );
 
@@ -211,6 +277,7 @@ export default function HomeScreen() {
               <View style={styles.dashboardRow}>
                 <View style={styles.leftColumn}>
                   {taskCard}
+                  {appointmentsCard}
                   <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
                 </View>
                 <View style={styles.rightColumn}>
@@ -225,6 +292,7 @@ export default function HomeScreen() {
               <PetRoom stage={petStage} message={displayedPetMessage} />
               <PetProgress completedTaskCount={completedTaskCount} />
               {taskCard}
+              {appointmentsCard}
               <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
               <RoomsCard />
             </>

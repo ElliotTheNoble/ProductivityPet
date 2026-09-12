@@ -3,7 +3,7 @@
     "name": "ProductivityPet",
     "slug": "ProductivityPet",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "productivitypet",
     "userInterfaceStyle": "automatic",
@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.elliotthenoble.productivitypet",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,6 +38,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "306e386f-965a-4c5e-9625-59a00a307c5e"
+      }
     }
   }
 }

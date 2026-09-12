@@ -1,65 +1,37 @@
-import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { TaskIcon } from '@/components/task-icon';
+import { TaskMenu, type TaskMenuItem } from '@/components/task-menu';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskCategory } from '@/utils/categorize-task';
-
-export type Task = {
-  id: string;
-  text: string;
-  completed: boolean;
-  category: TaskCategory;
-  important: boolean;
-};
+import type { DisplayTask } from '@/utils/tasks';
 
 type TaskCardProps = {
-  tasks: Task[];
-  onAddTask: (text: string) => void;
+  tasks: DisplayTask[];
+  dateLabel: string;
   onToggleTask: (id: string) => void;
   onToggleImportant: (id: string) => void;
   onDeleteTask: (id: string) => void;
+  onStopRepeating: (id: string) => void;
+  onRemoveToday: (id: string) => void;
   isCelebrating: boolean;
 };
 
-// Menu box width, used to position it so its right edge lines up under the
-// three-dot icon that was tapped (pageX/pageY come from the tap event).
-const MENU_WIDTH = 190;
-
-type OpenMenu = {
-  taskId: string;
-  x: number;
-  y: number;
-};
-
+// Adding new tasks now only happens from the Tasks tab (which has date and
+// repeat controls); this card is read/manage-only for today's occurrences.
 export function TaskCard({
   tasks,
-  onAddTask,
+  dateLabel,
   onToggleTask,
   onToggleImportant,
   onDeleteTask,
+  onStopRepeating,
+  onRemoveToday,
   isCelebrating,
 }: TaskCardProps) {
   const theme = useTheme();
-  const [isAdding, setIsAdding] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
-
-  function handleSubmit() {
-    const text = draft.trim();
-    if (!text) return;
-    onAddTask(text);
-    setDraft('');
-  }
-
-  function closeMenu() {
-    setOpenMenu(null);
-  }
-
-  const menuTask = openMenu ? tasks.find((task) => task.id === openMenu.taskId) : undefined;
 
   const completedCount = tasks.filter((task) => task.completed).length;
   const completionPercent =
@@ -68,46 +40,13 @@ export function TaskCard({
   return (
     <ThemedView type="backgroundElement" style={styles.card}>
       <View style={styles.cardHeader}>
-        <ThemedText style={styles.cardTitle}>Today&apos;s Tasks</ThemedText>
-        <Pressable
-          onPress={() => setIsAdding((prev) => !prev)}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <ThemedView type="accent" style={styles.addTaskButton}>
-            <ThemedText type="smallBold" style={styles.addTaskButtonText}>
-              + Add Task
-            </ThemedText>
-          </ThemedView>
-        </Pressable>
-      </View>
-
-      {isAdding ? (
-        <View style={styles.composeRow}>
-          <TextInput
-            autoFocus
-            style={[
-              styles.input,
-              {
-                color: theme.text,
-                borderColor: theme.backgroundSelected,
-                backgroundColor: theme.background,
-              },
-            ]}
-            placeholder="What do you need to do?"
-            placeholderTextColor={theme.textSecondary}
-            value={draft}
-            onChangeText={setDraft}
-            onSubmitEditing={handleSubmit}
-            returnKeyType="done"
-          />
-          <Pressable onPress={handleSubmit} style={({ pressed }) => pressed && styles.pressed}>
-            <ThemedView type="accent" style={styles.composeAddButton}>
-              <ThemedText type="smallBold" style={styles.addTaskButtonText}>
-                Add
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
+        <View>
+          <ThemedText style={styles.cardTitle}>Today&apos;s Tasks</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {dateLabel}
+          </ThemedText>
         </View>
-      ) : null}
+      </View>
 
       <View style={styles.progressSection}>
         <ThemedText type="smallBold" themeColor={isCelebrating ? 'accent' : 'textSecondary'}>
@@ -122,7 +61,7 @@ export function TaskCard({
       <View style={styles.list}>
         {tasks.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No tasks yet. Tap + Add Task to get started.
+            No tasks for today. Add one from the Tasks tab.
           </ThemedText>
         ) : (
           tasks.map((task, index) => (
@@ -162,64 +101,69 @@ export function TaskCard({
 
                 {task.important ? <ThemedText style={styles.importantStar}>⭐</ThemedText> : null}
 
-                <Pressable
-                  hitSlop={8}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    const { pageX, pageY } = event.nativeEvent;
-                    setOpenMenu((prev) =>
-                      prev?.taskId === task.id ? null : { taskId: task.id, x: pageX, y: pageY }
-                    );
-                  }}>
-                  <ThemedText themeColor="textSecondary" style={styles.menuDots}>
-                    ⋮
-                  </ThemedText>
-                </Pressable>
+                <TaskMenu
+                  items={buildTaskMenuItems(
+                    task,
+                    onToggleImportant,
+                    onDeleteTask,
+                    onStopRepeating,
+                    onRemoveToday
+                  )}
+                />
               </View>
             </Pressable>
           ))
         )}
       </View>
-
-      <Modal visible={openMenu !== null} transparent animationType="fade" onRequestClose={closeMenu}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
-        {openMenu && menuTask ? (
-          <ThemedView
-            type="background"
-            style={[
-              styles.menuBox,
-              {
-                top: openMenu.y + Spacing.one,
-                left: Math.max(Spacing.two, openMenu.x - MENU_WIDTH),
-                borderColor: theme.backgroundSelected,
-              },
-            ]}>
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={() => {
-                onToggleImportant(menuTask.id);
-                closeMenu();
-              }}>
-              <ThemedText type="smallBold">
-                {menuTask.important ? '⭐ Remove Important' : '⭐ Mark as Important'}
-              </ThemedText>
-            </Pressable>
-            <View style={[styles.menuDivider, { backgroundColor: theme.backgroundSelected }]} />
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={() => {
-                onDeleteTask(menuTask.id);
-                closeMenu();
-              }}>
-              <ThemedText type="smallBold" style={{ color: theme.accent }}>
-                🗑️ Delete Task
-              </ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : null}
-      </Modal>
     </ThemedView>
   );
+}
+
+// Mirrors the Tasks-tab day list's menu: a repeating task gets both
+// history-safe controls (Stop Repeating From Here, Remove Just This Day)
+// instead of a single destructive delete — removing "today" only excludes
+// today's date (via excludeDateFromTask) and never touches completedDates,
+// so past completions and pet progress are unaffected either way.
+function buildTaskMenuItems(
+  task: DisplayTask,
+  onToggleImportant: (id: string) => void,
+  onDeleteTask: (id: string) => void,
+  onStopRepeating: (id: string) => void,
+  onRemoveToday: (id: string) => void
+): TaskMenuItem[] {
+  const importantItem: TaskMenuItem = {
+    key: 'important',
+    label: task.important ? '⭐ Remove Important' : '⭐ Mark as Important',
+    onPress: () => onToggleImportant(task.id),
+  };
+
+  if (task.isRepeating) {
+    return [
+      importantItem,
+      {
+        key: 'stop-repeating',
+        label: '⏹ Stop Repeating From Here',
+        onPress: () => onStopRepeating(task.id),
+        destructive: true,
+      },
+      {
+        key: 'remove-today',
+        label: '🗑️ Remove Just This Day',
+        onPress: () => onRemoveToday(task.id),
+        destructive: true,
+      },
+    ];
+  }
+
+  return [
+    importantItem,
+    {
+      key: 'delete',
+      label: '🗑️ Delete Task',
+      onPress: () => onDeleteTask(task.id),
+      destructive: true,
+    },
+  ];
 }
 
 const styles = StyleSheet.create({
@@ -240,31 +184,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 26,
     fontWeight: '700',
-  },
-  addTaskButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-  },
-  addTaskButtonText: {
-    color: '#FFFFFF',
-  },
-  composeRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  composeAddButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.7,
@@ -310,32 +229,7 @@ const styles = StyleSheet.create({
   completedText: {
     textDecorationLine: 'line-through',
   },
-  menuDots: {
-    fontSize: 18,
-    paddingHorizontal: Spacing.one,
-  },
   importantStar: {
     fontSize: 15,
-  },
-  menuBox: {
-    position: 'absolute',
-    width: MENU_WIDTH,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    paddingVertical: Spacing.one,
-    // Soft shadow so the popover reads as floating above the page.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  menuItem: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  menuDivider: {
-    height: 1,
-    marginHorizontal: Spacing.two,
   },
 });
