@@ -4,22 +4,29 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TaskCalendar } from '@/components/task-calendar';
+import { TaskEditModal, type TaskEditValues } from '@/components/task-edit-modal';
 import { TaskIcon } from '@/components/task-icon';
 import { TaskMenu, type TaskMenuItem } from '@/components/task-menu';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
 import {
   createTask,
+  editAppointmentDetails,
+  editTaskDetails,
   excludeDateFromTask,
   formatFullDate,
   getTasksForDate,
   isOccurrenceCompleted,
   normalizeTask,
+  reminderOffsetLabel,
+  sortByImportantFirst,
   stopRepeatingFrom,
   todayISO,
   toggleTaskOccurrence,
+  type ReminderOffsetMinutes,
   type RepeatRule,
   type Task,
   type TaskKind,
@@ -40,6 +47,30 @@ const WEEKDAY_TOGGLE_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 type RepeatOption = 'none' | 'daily' | 'weekly';
 
+type ReminderOption = 'none' | 'at-time' | '10-before' | '30-before' | '60-before';
+
+const REMINDER_UI_OPTIONS: ReminderOption[] = ['none', 'at-time', '10-before', '30-before', '60-before'];
+
+function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes | undefined {
+  switch (option) {
+    case 'at-time':
+      return 0;
+    case '10-before':
+      return 10;
+    case '30-before':
+      return 30;
+    case '60-before':
+      return 60;
+    default:
+      return undefined;
+  }
+}
+
+function reminderOptionLabel(option: ReminderOption): string {
+  if (option === 'none') return 'None';
+  return reminderOffsetLabel(reminderOptionToMinutes(option) as ReminderOffsetMinutes);
+}
+
 export default function TasksScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -55,6 +86,9 @@ export default function TasksScreen() {
   const [draftTime, setDraftTime] = useState('');
   const [draftRepeat, setDraftRepeat] = useState<RepeatOption>('none');
   const [draftWeeklyDays, setDraftWeeklyDays] = useState<Set<number>>(new Set());
+  const [draftReminder, setDraftReminder] = useState<ReminderOption>('none');
+
+  const [editingItem, setEditingItem] = useState<Task | null>(null);
 
   // Loads the same tasks Home saves, applying the same legacy-data repair
   // (normalizeTask) so a task added before this feature existed still shows
@@ -80,9 +114,18 @@ export default function TasksScreen() {
     };
   }, []);
 
+  // Also reconciles reminder notifications against the current tasks (see
+  // syncTaskNotifications) — this only ever touches scheduling bookkeeping
+  // fields, never anything that drives history or pet progress. Skipping
+  // setTasks when nothing changed avoids re-triggering this same effect.
   useEffect(() => {
     if (!isHydrated) return;
     AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+    syncTaskNotifications(tasks)
+      .then((updated) => {
+        if (updated !== tasks) setTasks(updated);
+      })
+      .catch(() => {});
   }, [tasks, isHydrated]);
 
   function resetDraft() {
@@ -91,7 +134,20 @@ export default function TasksScreen() {
     setDraftTime('');
     setDraftRepeat('none');
     setDraftWeeklyDays(new Set());
+    setDraftReminder('none');
     setIsAdding(false);
+  }
+
+  // Requests notification permission only at the moment the user actually
+  // picks a reminder — never on app launch or just by opening the form. If
+  // permission is denied, the selection simply doesn't change (stays at
+  // whatever it was), so no reminder gets saved.
+  async function selectDraftReminder(option: ReminderOption) {
+    if (option !== 'none') {
+      const granted = await ensureNotificationPermission();
+      if (!granted) return;
+    }
+    setDraftReminder(option);
   }
 
   function toggleWeeklyDay(day: number) {
@@ -120,8 +176,9 @@ export default function TasksScreen() {
       text,
       kind: draftKind,
       date: selectedDate,
-      time: draftKind === 'event' ? draftTime.trim() || undefined : undefined,
+      time: draftTime.trim() || undefined,
       repeat,
+      reminderMinutesBefore: reminderOptionToMinutes(draftReminder),
     });
     setTasks((prev) => [...prev, newTask]);
     resetDraft();
@@ -141,8 +198,12 @@ export default function TasksScreen() {
   }
 
   // Full delete — only ever used for one-time tasks and appointments, since
-  // neither has recurring history that needs protecting.
+  // neither has recurring history that needs protecting. Cancels any
+  // scheduled reminder first: once the record is filtered out,
+  // syncTaskNotifications has nothing left to reconcile it against.
   function handleDelete(id: string) {
+    const target = tasks.find((task) => task.id === id);
+    if (target) cancelTaskNotification(target).catch(() => {});
     setTasks((prev) => prev.filter((task) => task.id !== id));
   }
 
@@ -159,6 +220,33 @@ export default function TasksScreen() {
     setTasks((prev) => excludeDateFromTask(prev, id, selectedDate));
   }
 
+  // Updates the existing record in place (editTaskDetails/editAppointmentDetails
+  // only ever touch name/date/repeat or name/date/time) — completed,
+  // completedDates, repeatUntil, excludedDates, and important all carry
+  // through untouched, so editing can't disturb history or pet progress.
+  function handleSaveEdit(id: string, kind: TaskKind, values: TaskEditValues) {
+    if (kind === 'task') {
+      setTasks((prev) =>
+        editTaskDetails(prev, id, {
+          text: values.text,
+          date: values.date,
+          time: values.time,
+          repeat: values.repeat,
+          reminderMinutesBefore: values.reminderMinutesBefore,
+        })
+      );
+    } else {
+      setTasks((prev) =>
+        editAppointmentDetails(prev, id, {
+          text: values.text,
+          date: values.date,
+          time: values.time,
+          reminderMinutesBefore: values.reminderMinutesBefore,
+        })
+      );
+    }
+  }
+
   // Same three-dot menu component Home uses, so behavior is identical
   // rather than two separately-implemented look-alikes. A repeating task
   // gets both of the history-safe controls (Stop Repeating, Remove Just
@@ -169,10 +257,16 @@ export default function TasksScreen() {
       label: task.important ? '⭐ Remove Important' : '⭐ Mark as Important',
       onPress: () => toggleImportant(task.id),
     };
+    const editItem: TaskMenuItem = {
+      key: 'edit',
+      label: '✏️ Edit Task',
+      onPress: () => setEditingItem(task),
+    };
 
     if (task.repeat) {
       return [
         importantItem,
+        editItem,
         {
           key: 'stop-repeating',
           label: '⏹ Stop Repeating From Here',
@@ -190,6 +284,7 @@ export default function TasksScreen() {
 
     return [
       importantItem,
+      editItem,
       {
         key: 'delete',
         label: '🗑️ Delete Task',
@@ -204,8 +299,15 @@ export default function TasksScreen() {
   // or the same history-safe Stop Repeating / Remove Just This Day pair for
   // a repeating one.
   function buildAppointmentMenuItems(event: Task): TaskMenuItem[] {
+    const editItem: TaskMenuItem = {
+      key: 'edit',
+      label: '✏️ Edit Appointment',
+      onPress: () => setEditingItem(event),
+    };
+
     if (event.repeat) {
       return [
+        editItem,
         {
           key: 'stop-repeating',
           label: '⏹ Stop Repeating From Here',
@@ -222,6 +324,7 @@ export default function TasksScreen() {
     }
 
     return [
+      editItem,
       {
         key: 'delete',
         label: '🗑️ Delete Appointment',
@@ -232,7 +335,7 @@ export default function TasksScreen() {
   }
 
   const dayItems = getTasksForDate(tasks, selectedDate);
-  const dayTasks = dayItems.filter((task) => task.kind === 'task');
+  const dayTasks = sortByImportantFirst(dayItems.filter((task) => task.kind === 'task'));
   const dayEvents = dayItems.filter((task) => task.kind === 'event');
 
   const selectedDateLabel = formatFullDate(selectedDate);
@@ -291,20 +394,48 @@ export default function TasksScreen() {
             returnKeyType="done"
           />
 
-          {draftKind === 'event' ? (
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
-              ]}
-              placeholder="Time (optional, e.g. 3:00 PM)"
-              placeholderTextColor={theme.textSecondary}
-              value={draftTime}
-              onChangeText={setDraftTime}
-              onSubmitEditing={handleAdd}
-              returnKeyType="done"
-            />
-          ) : (
+          <TextInput
+            style={[
+              styles.input,
+              { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
+            ]}
+            placeholder="Time (optional, e.g. 3:00 PM)"
+            placeholderTextColor={theme.textSecondary}
+            value={draftTime}
+            onChangeText={setDraftTime}
+            onSubmitEditing={handleAdd}
+            returnKeyType="done"
+          />
+
+          {draftTime.trim() ? (
+            <View style={styles.repeatSection}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Reminder
+              </ThemedText>
+              <View style={styles.pillRow}>
+                {REMINDER_UI_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => selectDraftReminder(option)}
+                    style={({ pressed }) => pressed && styles.pressed}>
+                    <View
+                      style={[
+                        styles.pill,
+                        { backgroundColor: draftReminder === option ? theme.purple : theme.background },
+                      ]}>
+                      <ThemedText
+                        type="small"
+                        style={draftReminder === option ? styles.pillTextActive : undefined}>
+                        {reminderOptionLabel(option)}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {draftKind === 'task' ? (
             <View style={styles.repeatSection}>
               <ThemedText type="small" themeColor="textSecondary">
                 Repeat
@@ -354,7 +485,7 @@ export default function TasksScreen() {
                 </View>
               ) : null}
             </View>
-          )}
+          ) : null}
 
           <View style={styles.formButtonRow}>
             <Pressable onPress={handleAdd} style={({ pressed }) => pressed && styles.pressed}>
@@ -407,6 +538,7 @@ export default function TasksScreen() {
                     <ThemedText type="small" themeColor="textSecondary">
                       {task.category}
                       {task.repeat ? ` · ${task.repeat.kind === 'daily' ? 'Daily' : 'Weekly'}` : ''}
+                      {task.time ? ` · ${task.time}` : ''}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -474,6 +606,23 @@ export default function TasksScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {editingItem ? (
+        <TaskEditModal
+          key={editingItem.id}
+          kind={editingItem.kind}
+          initialText={editingItem.text}
+          initialDate={editingItem.date}
+          initialTime={editingItem.time}
+          initialRepeat={editingItem.repeat}
+          initialReminderMinutes={editingItem.reminderMinutesBefore}
+          onSave={(values) => {
+            handleSaveEdit(editingItem.id, editingItem.kind, values);
+            setEditingItem(null);
+          }}
+          onCancel={() => setEditingItem(null)}
+        />
+      ) : null}
     </ThemedView>
   );
 }

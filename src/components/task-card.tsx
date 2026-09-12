@@ -96,6 +96,7 @@ export function TaskCard({
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
                     {task.category}
+                    {task.time ? ` · ${task.time}` : ''}
                   </ThemedText>
                 </View>
 

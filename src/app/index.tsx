@@ -13,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
+import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { getPetStage } from '@/utils/pet-stage';
 import {
   excludeDateFromTask,
@@ -21,6 +22,7 @@ import {
   isOccurrenceCompleted,
   normalizeTask,
   occursOnDate,
+  sortByImportantFirst,
   stopRepeatingFrom,
   todayISO,
   toggleTaskOccurrence,
@@ -140,9 +142,18 @@ export default function HomeScreen() {
 
   // Save whenever tasks change, but only after the initial load above has
   // finished — otherwise the empty starting state would overwrite storage.
+  // Also reconciles reminder notifications against the current tasks (see
+  // syncTaskNotifications) — this only ever touches scheduling bookkeeping
+  // fields, never anything that drives history or pet progress. Skipping
+  // setTasks when nothing changed avoids re-triggering this same effect.
   useEffect(() => {
     if (!isHydrated) return;
     AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+    syncTaskNotifications(tasks)
+      .then((updated) => {
+        if (updated !== tasks) setTasks(updated);
+      })
+      .catch(() => {});
   }, [tasks, isHydrated]);
 
   function toggleTask(id: string) {
@@ -193,7 +204,11 @@ export default function HomeScreen() {
   // Full delete — only ever used for one-time tasks and appointments, since
   // neither has recurring history that needs protecting. A repeating item's
   // three-dot menu instead offers stopRepeating/removeTodayOccurrence below.
+  // Cancels any scheduled reminder first: once the record is filtered out,
+  // syncTaskNotifications has nothing left to reconcile it against.
   function deleteTask(id: string) {
+    const target = tasks.find((task) => task.id === id);
+    if (target) cancelTaskNotification(target).catch(() => {});
     setTasks((prev) => prev.filter((task) => task.id !== id));
   }
 
@@ -224,16 +239,19 @@ export default function HomeScreen() {
   // separately-rendered list: they never have a completed state and never
   // affect pet progress.
   const today = todayISO();
-  const todaysDisplayTasks: DisplayTask[] = tasks
-    .filter((task) => task.kind !== 'event' && occursOnDate(task, today))
-    .map((task) => ({
-      id: task.id,
-      text: task.text,
-      completed: isOccurrenceCompleted(task, today),
-      category: task.category,
-      important: task.important,
-      isRepeating: !!task.repeat,
-    }));
+  const todaysDisplayTasks: DisplayTask[] = sortByImportantFirst(
+    tasks
+      .filter((task) => task.kind !== 'event' && occursOnDate(task, today))
+      .map((task) => ({
+        id: task.id,
+        text: task.text,
+        completed: isOccurrenceCompleted(task, today),
+        category: task.category,
+        important: task.important,
+        isRepeating: !!task.repeat,
+        time: task.time,
+      }))
+  );
   const todaysDisplayAppointments: DisplayAppointment[] = tasks
     .filter((task) => task.kind === 'event' && occursOnDate(task, today))
     .map((task) => ({

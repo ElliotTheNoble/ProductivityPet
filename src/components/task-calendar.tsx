@@ -102,11 +102,21 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
           </ThemedText>
         </Pressable>
 
-        <Pressable onPress={goToNextMonth} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
-          <ThemedText type="smallBold" style={styles.navArrow}>
-            →
-          </ThemedText>
-        </Pressable>
+        <View style={styles.rightHeaderGroup}>
+          <Pressable onPress={goToNextMonth} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedText type="smallBold" style={styles.navArrow}>
+              →
+            </ThemedText>
+          </Pressable>
+
+          <Pressable onPress={goToToday} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedView type="accent" style={styles.todayButton}>
+              <ThemedText type="small" style={styles.todayButtonText}>
+                Today
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.weekRow}>
@@ -126,7 +136,15 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
 
             const isSelected = cell.iso === selectedDate;
             const isToday = cell.iso === today;
-            const hasItems = tasks.some((task) => occursOnDate(task, cell.iso));
+
+            // One dot per category present that day, not per item — a day
+            // with three important tasks still shows a single purple dot,
+            // matching "pink = appointment, purple = Important task, green
+            // = normal task" rather than one dot per task.
+            const dayTasks = tasks.filter((task) => occursOnDate(task, cell.iso));
+            const hasAppointment = dayTasks.some((task) => task.kind === 'event');
+            const hasImportantTask = dayTasks.some((task) => task.kind === 'task' && task.important);
+            const hasNormalTask = dayTasks.some((task) => task.kind === 'task' && !task.important);
 
             return (
               <View key={cellIndex} style={styles.dayCell}>
@@ -145,18 +163,38 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
                       {cell.date.getDate()}
                     </ThemedText>
                   </View>
-                  <View
-                    style={[
-                      styles.dot,
-                      { backgroundColor: hasItems ? theme.mint : 'transparent' },
-                    ]}
-                  />
+                  <View style={styles.dotsRow}>
+                    {hasAppointment ? <View style={[styles.dot, { backgroundColor: theme.accent }]} /> : null}
+                    {hasImportantTask ? <View style={[styles.dot, { backgroundColor: theme.purple }]} /> : null}
+                    {hasNormalTask ? <View style={[styles.dot, { backgroundColor: theme.mint }]} /> : null}
+                  </View>
                 </Pressable>
               </View>
             );
           })}
         </View>
       ))}
+
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.dot, { backgroundColor: theme.accent }]} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Appointment
+          </ThemedText>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.dot, { backgroundColor: theme.purple }]} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Important
+          </ThemedText>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.dot, { backgroundColor: theme.mint }]} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Task
+          </ThemedText>
+        </View>
+      </View>
     </ThemedView>
   );
 }
@@ -177,6 +215,19 @@ const styles = StyleSheet.create({
   navArrow: {
     fontSize: 18,
     paddingHorizontal: Spacing.two,
+  },
+  rightHeaderGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  todayButton: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 3,
+    borderRadius: Spacing.five,
+  },
+  todayButtonText: {
+    color: '#FFFFFF',
   },
   pressed: {
     opacity: 0.7,
@@ -203,10 +254,29 @@ const styles = StyleSheet.create({
   selectedDayText: {
     color: '#FFFFFF',
   },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 3,
+    height: 5,
+    marginTop: 2,
+  },
   dot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    marginTop: 2,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.three,
+    paddingTop: Spacing.one,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
   },
 });
