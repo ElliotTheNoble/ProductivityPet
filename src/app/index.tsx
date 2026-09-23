@@ -57,11 +57,6 @@ const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 // of showing the task card and living room side by side.
 const WIDE_LAYOUT_BREAKPOINT = 700;
 
-// The Home dashboard intentionally uses a much wider cap than the shared
-// MaxContentWidth (used by the header and other screens) so it can fill most
-// of the browser on wide/web screens instead of staying phone-width there.
-const HOME_MAX_WIDTH = 1400;
-
 export default function HomeScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -285,37 +280,61 @@ export default function HomeScreen() {
   );
 
   return (
+    // The living-room background now renders once in src/app/_layout.tsx
+    // (behind the header too, on Home), not here — this container stays
+    // transparent so that shows through instead of the usual opaque fill.
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          {isWideLayout ? (
-            <>
-              <View style={styles.dashboardRow}>
-                <View style={styles.leftColumn}>
-                  {taskCard}
-                  {appointmentsCard}
-                  <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
-                </View>
-                <View style={styles.rightColumn}>
-                  <PetRoom stage={petStage} message={displayedPetMessage} />
-                  <RoomsCard />
-                </View>
-              </View>
-              <PetProgress completedTaskCount={completedTaskCount} />
-            </>
-          ) : (
-            <>
+        {isWideLayout ? (
+          // Cards flank the open middle of the room: Tasks/Appointments/Mood
+          // on the left, Rooms/Pet Progress on the right, each in its own
+          // ScrollView. The pet sits in a separate, absolutely-positioned
+          // overlay in between — not inside either ScrollView, so it never
+          // moves when either side scrolls. It's rendered first so both
+          // card columns paint on top of it if they ever overlap it.
+          <View style={styles.splitRow}>
+            <View style={styles.petOverlayWide} pointerEvents="box-none">
+              <View style={styles.petOverlaySpacerTop} />
               <PetRoom stage={petStage} message={displayedPetMessage} />
+              <View style={styles.petOverlaySpacerBottom} />
+            </View>
+
+            <ScrollView
+              style={styles.leftScrollPane}
+              contentContainerStyle={styles.leftScrollContent}
+              showsVerticalScrollIndicator={false}>
+              {taskCard}
+              {appointmentsCard}
+              <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
+            </ScrollView>
+
+            <ScrollView
+              style={styles.rightScrollPane}
+              contentContainerStyle={styles.rightScrollContent}
+              showsVerticalScrollIndicator={false}>
+              <RoomsCard />
+              <PetProgress completedTaskCount={completedTaskCount} />
+            </ScrollView>
+          </View>
+        ) : (
+          // Same idea stacked vertically: the pet sits in a fixed strip at
+          // the top, and everything else scrolls independently beneath it.
+          <View style={styles.narrowStack}>
+            <View style={styles.fixedPetTop}>
+              <PetRoom stage={petStage} message={displayedPetMessage} />
+            </View>
+            <ScrollView
+              style={styles.scrollPane}
+              contentContainerStyle={styles.narrowScrollContent}
+              showsVerticalScrollIndicator={false}>
               <PetProgress completedTaskCount={completedTaskCount} />
               {taskCard}
               {appointmentsCard}
               <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
               <RoomsCard />
-            </>
-          )}
-        </ScrollView>
+            </ScrollView>
+          </View>
+        )}
       </SafeAreaView>
 
       {/* Full-screen, non-interactive celebration layer — sits above every
@@ -332,6 +351,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     flexDirection: 'row',
+    backgroundColor: 'transparent',
   },
   confettiOverlay: {
     ...StyleSheet.absoluteFill,
@@ -339,29 +359,67 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     width: '100%',
-    maxWidth: HOME_MAX_WIDTH,
   },
-  scrollContent: {
-    paddingHorizontal: Spacing.four,
+  scrollPane: {
+    flex: 1,
+  },
+  // Wide/desktop: cards flank the open middle of the room (Tasks/
+  // Appointments/Mood on the left, Rooms/Pet Progress on the right), each
+  // scrolling independently, with the middle left open for the pet.
+  splitRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.four,
+  },
+  leftScrollPane: {
+    width: '24%',
+    minWidth: 270,
+    maxWidth: 320,
+  },
+  leftScrollContent: {
     gap: Spacing.four,
+    paddingBottom: Spacing.four,
   },
-  dashboardRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.five,
+  rightScrollPane: {
+    width: '26%',
+    minWidth: 240,
+    maxWidth: 340,
   },
-  leftColumn: {
-    flexGrow: 2,
-    flexBasis: 0,
-    minWidth: 320,
+  rightScrollContent: {
     gap: Spacing.four,
+    paddingBottom: Spacing.four,
   },
-  rightColumn: {
-    flexGrow: 3,
-    flexBasis: 0,
-    minWidth: 380,
+  // Absolutely positioned so it never scrolls with either card column;
+  // rendered before them in the JSX so both columns paint over it if they
+  // ever overlap it. The top/bottom spacers bias the pet toward the lower
+  // portion of the room, roughly where the rug sits in the background art.
+  petOverlayWide: {
+    ...StyleSheet.absoluteFill,
+  },
+  petOverlaySpacerTop: {
+    flexGrow: 5,
+  },
+  petOverlaySpacerBottom: {
+    flexGrow: 1,
+  },
+  // Narrow/mobile: a non-scrolling column split into a fixed pet strip on
+  // top and a scrollable card stack below it.
+  narrowStack: {
+    flex: 1,
+  },
+  fixedPetTop: {
+    width: '100%',
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
+  },
+  narrowScrollContent: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.four,
     gap: Spacing.four,
   },
 });

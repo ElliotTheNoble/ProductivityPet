@@ -95,7 +95,7 @@ export function RoomsCard() {
   }
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.headerRow}>
         <ThemedText style={styles.title}>Rooms</ThemedText>
         <Pressable

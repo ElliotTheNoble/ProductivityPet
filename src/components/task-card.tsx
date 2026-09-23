@@ -38,7 +38,7 @@ export function TaskCard({
     tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100);
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.cardHeader}>
         <View>
           <ThemedText style={styles.cardTitle}>Today&apos;s Tasks</ThemedText>

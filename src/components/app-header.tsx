@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type NavItem = {
@@ -23,11 +23,16 @@ export function AppHeader() {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
+  // Home renders its own full-screen living-room background behind this
+  // header (see src/app/_layout.tsx) — transparent here lets it show
+  // through instead of the usual solid header fill. Every other route is
+  // unaffected.
+  const isHome = pathname === '/';
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, isHome && styles.transparentContainer]}>
       <View style={styles.inner}>
-        <View style={styles.brand}>
+        <View style={[styles.brand, isHome && styles.brandBackdrop]}>
           <View style={styles.brandTitleRow}>
             <ThemedText style={styles.pawIcon}>🐾</ThemedText>
             <ThemedText style={styles.title}>Productivity Pet</ThemedText>
@@ -67,14 +72,15 @@ export function AppHeader() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     paddingTop: Spacing.four,
     paddingBottom: Spacing.three,
   },
+  transparentContainer: {
+    backgroundColor: 'transparent',
+  },
   inner: {
     width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -83,6 +89,15 @@ const styles = StyleSheet.create({
   },
   brand: {
     gap: Spacing.half,
+  },
+  // Home only (see isHome above): a small, subtle translucent cream panel
+  // just behind the logo/tagline so they stay readable over the
+  // living-room background, without stretching across the whole header.
+  brandBackdrop: {
+    backgroundColor: 'rgba(252, 243, 233, 0.78)',
+    borderRadius: Spacing.three,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
   brandTitleRow: {
     flexDirection: 'row',

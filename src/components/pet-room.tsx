@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
 import { PetPlaceholder } from '@/components/pet-placeholder';
@@ -8,25 +7,22 @@ import type { PetStage } from '@/utils/pet-stage';
 type PetRoomProps = {
   stage: PetStage;
   message?: string | null;
+  // True on the wide/desktop two-column layout, where the pet gets a whole
+  // dedicated column instead of sharing space with other cards — gives it
+  // a tall, open area and anchors it near the bottom (the rug) rather than
+  // vertically centering it in a cramped space. Narrow/mobile layouts stay
+  // compact, same as before.
+  spacious?: boolean;
 };
 
-// Matches the pixel dimensions of assets/images/rooms/living-room.png (1536x1024)
-// so the image is never stretched or cropped.
-const ROOM_ASPECT_RATIO = 1536 / 1024;
-
-export function PetRoom({ stage, message }: PetRoomProps) {
+// The living-room background now lives once, fixed behind the whole Home
+// screen (see src/app/index.tsx), instead of inside its own framed box
+// here — this just places the pet (+ speech bubble) with some breathing
+// room so it reads as standing in that room rather than floating in a card.
+export function PetRoom({ stage, message, spacious = false }: PetRoomProps) {
   return (
-    <View style={styles.scene}>
-      <Image
-        source={require('@/assets/images/rooms/living-room.png')}
-        style={styles.image}
-        contentFit="contain"
-      />
-      <View style={styles.petOverlay} pointerEvents="box-none">
-        <View style={styles.topSpacer} />
-        <PetPlaceholder stage={stage} message={message} />
-        <View style={styles.bottomSpacer} />
-      </View>
+    <View style={[styles.scene, spacious && styles.sceneSpacious]}>
+      <PetPlaceholder stage={stage} message={message} />
     </View>
   );
 }
@@ -34,22 +30,12 @@ export function PetRoom({ stage, message }: PetRoomProps) {
 const styles = StyleSheet.create({
   scene: {
     width: '100%',
-    aspectRatio: ROOM_ASPECT_RATIO,
-    borderRadius: Spacing.four,
-    overflow: 'hidden',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  petOverlay: {
-    ...StyleSheet.absoluteFill,
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingVertical: Spacing.four,
   },
-  topSpacer: {
-    flexGrow: 7,
-  },
-  bottomSpacer: {
-    flexGrow: 3,
+  sceneSpacious: {
+    minHeight: 440,
+    paddingBottom: Spacing.five,
   },
 });

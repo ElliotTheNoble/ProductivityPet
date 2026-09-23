@@ -28,7 +28,7 @@ export function PetProgress({ completedTaskCount }: PetProgressProps) {
   const level = stageIndex + 1;
 
   return (
-    <ThemedView type="peach" style={styles.container}>
+    <ThemedView type="peachOverlay" style={styles.container}>
       <View style={styles.headerRow}>
         <ThemedText type="smallBold">Pet Progress</ThemedText>
         <ThemedText type="smallBold" themeColor="textSecondary">

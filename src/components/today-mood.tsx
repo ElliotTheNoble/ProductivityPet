@@ -17,7 +17,7 @@ export function TodayMood({ mood, message, onSelectMood }: TodayMoodProps) {
   const theme = useTheme();
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <ThemedText style={styles.title}>Today&apos;s Mood</ThemedText>
 
       <View style={styles.selectedRow}>

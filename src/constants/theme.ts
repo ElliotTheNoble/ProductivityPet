@@ -18,6 +18,11 @@ export const Colors = {
     mint: '#7FD9B6', // mint accent for progress + checkmarks
     peach: '#FBD9B8', // peach accent for the pet progress card
     purple: '#A78BDB', // purple accent for the active nav pill
+    // Translucent versions of backgroundElement/peach, used only by Home's
+    // panels once the living-room background sits behind them, so the room
+    // stays faintly visible through the card while text stays readable.
+    backgroundElementOverlay: 'rgba(251, 227, 236, 0.9)',
+    peachOverlay: 'rgba(251, 217, 184, 0.9)',
   },
   dark: {
     text: '#4A3B42',
@@ -29,6 +34,8 @@ export const Colors = {
     mint: '#7FD9B6',
     peach: '#FBD9B8',
     purple: '#A78BDB',
+    backgroundElementOverlay: 'rgba(251, 227, 236, 0.9)',
+    peachOverlay: 'rgba(251, 217, 184, 0.9)',
   },
 } as const;
 

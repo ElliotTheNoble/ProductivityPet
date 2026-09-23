@@ -30,7 +30,7 @@ export function AppointmentsCard({
   const theme = useTheme();
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.cardHeader}>
         <ThemedText style={styles.cardTitle}>Today&apos;s Appointments</ThemedText>
       </View>
