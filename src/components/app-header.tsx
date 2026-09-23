@@ -23,16 +23,16 @@ export function AppHeader() {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  // Home renders its own full-screen living-room background behind this
+  // Home and Tasks each render their own full-screen background behind this
   // header (see src/app/_layout.tsx) — transparent here lets it show
   // through instead of the usual solid header fill. Every other route is
   // unaffected.
-  const isHome = pathname === '/';
+  const isImmersiveRoute = pathname === '/' || pathname === '/tasks';
 
   return (
-    <ThemedView style={[styles.container, isHome && styles.transparentContainer]}>
+    <ThemedView style={[styles.container, isImmersiveRoute && styles.transparentContainer]}>
       <View style={styles.inner}>
-        <View style={[styles.brand, isHome && styles.brandBackdrop]}>
+        <View style={[styles.brand, isImmersiveRoute && styles.brandBackdrop]}>
           <View style={styles.brandTitleRow}>
             <ThemedText style={styles.pawIcon}>🐾</ThemedText>
             <ThemedText style={styles.title}>Productivity Pet</ThemedText>
@@ -72,7 +72,10 @@ export function AppHeader() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: Spacing.three,
+    // No left padding here — brand's own paddingLeft (below) provides the
+    // same visual inset on every route, but keeps the container's left edge
+    // itself at true x0 so the immersive backdrop can sit flush against it.
+    paddingRight: Spacing.three,
     paddingTop: Spacing.four,
     paddingBottom: Spacing.three,
   },
@@ -89,14 +92,18 @@ const styles = StyleSheet.create({
   },
   brand: {
     gap: Spacing.half,
+    paddingLeft: Spacing.three,
   },
-  // Home only (see isHome above): a small, subtle translucent cream panel
-  // just behind the logo/tagline so they stay readable over the
-  // living-room background, without stretching across the whole header.
+  // Home/Tasks only (see isImmersiveRoute above): a soft translucent cream
+  // shape behind the logo/tagline — flush against the true left screen
+  // edge (no left padding/radius, so it reads as continuing off-screen)
+  // with a rounded, cloud-like end on the right. Not centered, not a
+  // floating rounded rectangle.
   brandBackdrop: {
     backgroundColor: 'rgba(252, 243, 233, 0.78)',
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.two,
+    borderTopRightRadius: Spacing.four,
+    borderBottomRightRadius: Spacing.four,
+    paddingRight: Spacing.four,
     paddingVertical: Spacing.one,
   },
   brandTitleRow: {

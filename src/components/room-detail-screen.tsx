@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useBirthdayMode } from '@/hooks/use-birthday-mode';
+import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import type { RoomInfo } from '@/utils/rooms';
 
 type RoomDetailScreenProps = {
@@ -24,6 +26,14 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const isCompactLandscape = width > height && height < COMPACT_LANDSCAPE_MAX_HEIGHT;
+  // Re-checks whenever the displayed room changes.
+  const hasBirthdayToday = useBirthdayMode(room.slug);
+  // Same ordered priority list pattern as Home/Tasks — see
+  // src/utils/room-backgrounds.ts for how to add another event later.
+  const activeEvents: SpecialEvent[] = [
+    { id: 'birthday', isActive: hasBirthdayToday, backgrounds: BIRTHDAY_BACKGROUNDS },
+  ];
+  const backgroundSource = resolveRoomBackground(room.slug, room.image, activeEvents);
 
   const backButton = (
     <Pressable
@@ -51,7 +61,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
                 styles.artWrapLandscape,
                 { aspectRatio: room.aspectRatio },
               ]}>
-              <Image source={room.image} style={styles.art} contentFit="contain" />
+              <Image source={backgroundSource} style={styles.art} contentFit="contain" />
             </View>
 
             <ScrollView
@@ -82,7 +92,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
               room background on Home (see PetRoom) — so it reads as the
               main, prominent focus of the page rather than a small thumbnail. */}
           <View style={[styles.artWrap, { aspectRatio: room.aspectRatio }]}>
-            <Image source={room.image} style={styles.art} contentFit="contain" />
+            <Image source={backgroundSource} style={styles.art} contentFit="contain" />
           </View>
 
           <ThemedText type="subtitle" style={styles.roomName}>

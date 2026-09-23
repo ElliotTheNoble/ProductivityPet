@@ -11,11 +11,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getHolidayForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
 import {
   createTask,
-  editAppointmentDetails,
-  editTaskDetails,
+  editItemDetails,
   excludeDateFromTask,
   formatFullDate,
   getTasksForDate,
@@ -47,9 +47,20 @@ const WEEKDAY_TOGGLE_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 type RepeatOption = 'none' | 'daily' | 'weekly';
 
-type ReminderOption = 'none' | 'at-time' | '10-before' | '30-before' | '60-before';
+type ReminderOption =
+  | 'none'
+  | 'at-time'
+  | '10-before'
+  | '30-before'
+  | '60-before'
+  | '1-day-before'
+  | '1-week-before';
 
 const REMINDER_UI_OPTIONS: ReminderOption[] = ['none', 'at-time', '10-before', '30-before', '60-before'];
+
+// Birthdays get two extra, longer-lead-time options on top of the usual
+// four — Task/Appointment only ever see REMINDER_UI_OPTIONS.
+const BIRTHDAY_REMINDER_UI_OPTIONS: ReminderOption[] = [...REMINDER_UI_OPTIONS, '1-day-before', '1-week-before'];
 
 function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes | undefined {
   switch (option) {
@@ -61,6 +72,10 @@ function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes 
       return 30;
     case '60-before':
       return 60;
+    case '1-day-before':
+      return 1440;
+    case '1-week-before':
+      return 10080;
     default:
       return undefined;
   }
@@ -69,6 +84,19 @@ function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes 
 function reminderOptionLabel(option: ReminderOption): string {
   if (option === 'none') return 'None';
   return reminderOffsetLabel(reminderOptionToMinutes(option) as ReminderOffsetMinutes);
+}
+
+const KIND_OPTIONS: TaskKind[] = ['task', 'event', 'birthday'];
+
+function kindLabel(kind: TaskKind): string {
+  switch (kind) {
+    case 'task':
+      return 'Task';
+    case 'event':
+      return 'Appointment';
+    case 'birthday':
+      return 'Birthday';
+  }
 }
 
 export default function TasksScreen() {
@@ -220,31 +248,23 @@ export default function TasksScreen() {
     setTasks((prev) => excludeDateFromTask(prev, id, selectedDate));
   }
 
-  // Updates the existing record in place (editTaskDetails/editAppointmentDetails
-  // only ever touch name/date/repeat or name/date/time) — completed,
-  // completedDates, repeatUntil, excludedDates, and important all carry
-  // through untouched, so editing can't disturb history or pet progress.
-  function handleSaveEdit(id: string, kind: TaskKind, values: TaskEditValues) {
-    if (kind === 'task') {
-      setTasks((prev) =>
-        editTaskDetails(prev, id, {
-          text: values.text,
-          date: values.date,
-          time: values.time,
-          repeat: values.repeat,
-          reminderMinutesBefore: values.reminderMinutesBefore,
-        })
-      );
-    } else {
-      setTasks((prev) =>
-        editAppointmentDetails(prev, id, {
-          text: values.text,
-          date: values.date,
-          time: values.time,
-          reminderMinutesBefore: values.reminderMinutesBefore,
-        })
-      );
-    }
+  // Updates the existing record in place (editItemDetails only ever touches
+  // name/kind/date/time/repeat/reminder) — completed, completedDates,
+  // repeatUntil, excludedDates, and important all carry through untouched,
+  // so editing (including changing its type, e.g. Task -> Appointment)
+  // can't disturb history or pet progress. Birthday's yearly repeat is
+  // enforced by editItemDetails itself, not here.
+  function handleSaveEdit(id: string, values: TaskEditValues) {
+    setTasks((prev) =>
+      editItemDetails(prev, id, {
+        text: values.text,
+        kind: values.kind,
+        date: values.date,
+        time: values.time,
+        repeat: values.repeat,
+        reminderMinutesBefore: values.reminderMinutesBefore,
+      })
+    );
   }
 
   // Same three-dot menu component Home uses, so behavior is identical
@@ -294,30 +314,32 @@ export default function TasksScreen() {
     ];
   }
 
-  // Same menu shape as Home's AppointmentsCard: no Important toggle
-  // (appointments don't have one), just Delete for a one-time appointment,
-  // or the same history-safe Stop Repeating / Remove Just This Day pair for
-  // a repeating one.
-  function buildAppointmentMenuItems(event: Task): TaskMenuItem[] {
+  // Shared menu shape for both appointments and birthdays: no Important
+  // toggle (only tasks have one). A birthday always has repeat set (forced
+  // to yearly), so it always gets the same history-safe Stop Repeating /
+  // Remove Just This Day pair an appointment gets if it happens to repeat;
+  // a one-time appointment just gets Delete.
+  function buildNonTaskMenuItems(item: Task): TaskMenuItem[] {
+    const label = kindLabel(item.kind);
     const editItem: TaskMenuItem = {
       key: 'edit',
-      label: '✏️ Edit Appointment',
-      onPress: () => setEditingItem(event),
+      label: `✏️ Edit ${label}`,
+      onPress: () => setEditingItem(item),
     };
 
-    if (event.repeat) {
+    if (item.repeat) {
       return [
         editItem,
         {
           key: 'stop-repeating',
           label: '⏹ Stop Repeating From Here',
-          onPress: () => handleStopRepeating(event.id),
+          onPress: () => handleStopRepeating(item.id),
           destructive: true,
         },
         {
           key: 'remove-day',
           label: '🗑️ Remove Just This Day',
-          onPress: () => handleRemoveThisDay(event.id),
+          onPress: () => handleRemoveThisDay(item.id),
           destructive: true,
         },
       ];
@@ -327,8 +349,8 @@ export default function TasksScreen() {
       editItem,
       {
         key: 'delete',
-        label: '🗑️ Delete Appointment',
-        onPress: () => handleDelete(event.id),
+        label: `🗑️ Delete ${label}`,
+        onPress: () => handleDelete(item.id),
         destructive: true,
       },
     ];
@@ -337,6 +359,10 @@ export default function TasksScreen() {
   const dayItems = getTasksForDate(tasks, selectedDate);
   const dayTasks = sortByImportantFirst(dayItems.filter((task) => task.kind === 'task'));
   const dayEvents = dayItems.filter((task) => task.kind === 'event');
+  const dayBirthdays = dayItems.filter((task) => task.kind === 'birthday');
+  // Read-only system data — entirely separate from the user's saved tasks;
+  // never created, edited, or deleted through this screen's task editor.
+  const dayHoliday = getHolidayForDate(selectedDate);
 
   const selectedDateLabel = formatFullDate(selectedDate);
 
@@ -345,7 +371,7 @@ export default function TasksScreen() {
   );
 
   const dayPanel = (
-    <ThemedView type="backgroundElement" style={styles.dayCard}>
+    <ThemedView type="backgroundElementOverlay" style={styles.dayCard}>
       <View style={styles.dayHeaderRow}>
         <ThemedText style={styles.dayTitle}>{selectedDateLabel}</ThemedText>
         <Pressable
@@ -359,10 +385,18 @@ export default function TasksScreen() {
         </Pressable>
       </View>
 
+      {dayHoliday ? (
+        <View style={[styles.holidayBanner, { backgroundColor: theme.sky }]}>
+          <ThemedText type="smallBold" style={styles.holidayText}>
+            🎉 {dayHoliday.name}
+          </ThemedText>
+        </View>
+      ) : null}
+
       {isAdding ? (
         <View style={styles.form}>
           <View style={styles.pillRow}>
-            {(['task', 'event'] as TaskKind[]).map((kind) => (
+            {KIND_OPTIONS.map((kind) => (
               <Pressable
                 key={kind}
                 onPress={() => setDraftKind(kind)}
@@ -373,7 +407,7 @@ export default function TasksScreen() {
                     { backgroundColor: draftKind === kind ? theme.purple : theme.background },
                   ]}>
                   <ThemedText type="smallBold" style={draftKind === kind ? styles.pillTextActive : undefined}>
-                    {kind === 'task' ? 'Task' : 'Appointment'}
+                    {kindLabel(kind)}
                   </ThemedText>
                 </View>
               </Pressable>
@@ -386,7 +420,13 @@ export default function TasksScreen() {
               styles.input,
               { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
             ]}
-            placeholder={draftKind === 'task' ? 'What do you need to do?' : 'What is the appointment?'}
+            placeholder={
+              draftKind === 'task'
+                ? 'What do you need to do?'
+                : draftKind === 'event'
+                  ? 'What is the appointment?'
+                  : 'Whose birthday is it?'
+            }
             placeholderTextColor={theme.textSecondary}
             value={draftText}
             onChangeText={setDraftText}
@@ -413,7 +453,7 @@ export default function TasksScreen() {
                 Reminder
               </ThemedText>
               <View style={styles.pillRow}>
-                {REMINDER_UI_OPTIONS.map((option) => (
+                {(draftKind === 'birthday' ? BIRTHDAY_REMINDER_UI_OPTIONS : REMINDER_UI_OPTIONS).map((option) => (
                   <Pressable
                     key={option}
                     onPress={() => selectDraftReminder(option)}
@@ -433,6 +473,12 @@ export default function TasksScreen() {
                 ))}
               </View>
             </View>
+          ) : null}
+
+          {draftKind === 'birthday' ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              🎂 Repeats every year on this date
+            </ThemedText>
           ) : null}
 
           {draftKind === 'task' ? (
@@ -574,7 +620,35 @@ export default function TasksScreen() {
                   ) : null}
                 </View>
               </View>
-              <TaskMenu items={buildAppointmentMenuItems(event)} />
+              <TaskMenu items={buildNonTaskMenuItems(event)} />
+            </View>
+          ))
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          Birthdays
+        </ThemedText>
+        {dayBirthdays.length === 0 ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+            No birthdays for this day.
+          </ThemedText>
+        ) : (
+          dayBirthdays.map((birthday) => (
+            <View key={birthday.id} style={styles.row}>
+              <View style={styles.rowMain}>
+                <ThemedText style={styles.cakeIcon}>🎂</ThemedText>
+                <View style={styles.rowTextGroup}>
+                  <ThemedText>{birthday.text}</ThemedText>
+                  {birthday.time ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {birthday.time}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              </View>
+              <TaskMenu items={buildNonTaskMenuItems(birthday)} />
             </View>
           ))
         )}
@@ -588,10 +662,12 @@ export default function TasksScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
-            Pick a date to see, add, or check off tasks and appointments — including repeating
-            tasks that land on that day. 🗓️
-          </ThemedText>
+          <View style={styles.introBackdrop}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
+              Pick a date to see, add, or check off tasks and appointments — including repeating
+              tasks that land on that day. 🗓️
+            </ThemedText>
+          </View>
 
           {isWideLayout ? (
             <View style={styles.wideRow}>
@@ -617,7 +693,7 @@ export default function TasksScreen() {
           initialRepeat={editingItem.repeat}
           initialReminderMinutes={editingItem.reminderMinutesBefore}
           onSave={(values) => {
-            handleSaveEdit(editingItem.id, editingItem.kind, values);
+            handleSaveEdit(editingItem.id, values);
             setEditingItem(null);
           }}
           onCancel={() => setEditingItem(null)}
@@ -628,9 +704,13 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The Task_Background.png image renders once in src/app/_layout.tsx
+  // (behind the header too, on this route), not here — this container stays
+  // transparent so that shows through instead of the usual opaque fill.
   container: {
     flex: 1,
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   safeArea: {
     flex: 1,
@@ -641,6 +721,16 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     paddingBottom: Spacing.five,
     gap: Spacing.three,
+  },
+  // Small, subtle translucent cream backdrop — same idea as the header's
+  // logo bubble — just large enough to fit the sentence, not a full card.
+  introBackdrop: {
+    alignSelf: 'center',
+    maxWidth: '92%',
+    backgroundColor: 'rgba(252, 243, 233, 0.78)',
+    borderRadius: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   intro: {
     textAlign: 'center',
@@ -674,6 +764,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  // Read-only, system-generated — styled as a solid pastel banner (rather
+  // than the translucent card style used elsewhere) so it visually stands
+  // apart from the user's own Tasks/Appointments/Birthdays below.
+  holidayBanner: {
+    alignSelf: 'flex-start',
+    borderRadius: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  holidayText: {
+    color: '#2E4A57',
   },
   dayTitle: {
     fontSize: 18,
@@ -781,5 +883,10 @@ const styles = StyleSheet.create({
   },
   importantStar: {
     fontSize: 15,
+  },
+  cakeIcon: {
+    fontSize: 22,
+    width: 28,
+    textAlign: 'center',
   },
 });

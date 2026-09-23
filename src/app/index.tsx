@@ -174,8 +174,10 @@ export default function HomeScreen() {
     // Only celebrate when *this* action is what just finished the last of
     // TODAY's tasks — never from hydrating already-complete data on load,
     // never repeatedly while sitting at 100%, and never from deleting the
-    // last open task.
-    const todaysTasks = updatedTasks.filter((task) => task.kind !== 'event' && occursOnDate(task, today));
+    // last open task. Appointments and birthdays are never completable, so
+    // they must never count toward "everything" here (a birthday landing
+    // today would otherwise permanently block the celebration).
+    const todaysTasks = updatedTasks.filter((task) => task.kind === 'task' && occursOnDate(task, today));
     const justFinishedEverything =
       completed &&
       todaysTasks.length > 0 &&
@@ -236,7 +238,7 @@ export default function HomeScreen() {
   const today = todayISO();
   const todaysDisplayTasks: DisplayTask[] = sortByImportantFirst(
     tasks
-      .filter((task) => task.kind !== 'event' && occursOnDate(task, today))
+      .filter((task) => task.kind === 'task' && occursOnDate(task, today))
       .map((task) => ({
         id: task.id,
         text: task.text,
@@ -247,12 +249,15 @@ export default function HomeScreen() {
         time: task.time,
       }))
   );
+  // Appointments and birthdays share this card — neither is completable or
+  // counts toward pet progress; DisplayAppointment.kind picks the icon.
   const todaysDisplayAppointments: DisplayAppointment[] = tasks
-    .filter((task) => task.kind === 'event' && occursOnDate(task, today))
+    .filter((task) => (task.kind === 'event' || task.kind === 'birthday') && occursOnDate(task, today))
     .map((task) => ({
       id: task.id,
       text: task.text,
       category: task.category,
+      kind: task.kind as 'event' | 'birthday',
       time: task.time,
       isRepeating: !!task.repeat,
     }));

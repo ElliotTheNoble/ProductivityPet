@@ -51,7 +51,11 @@ export function AppointmentsCard({
                   borderBottomColor: theme.backgroundSelected,
                 },
               ]}>
-              <TaskIcon category={appointment.category} />
+              {appointment.kind === 'birthday' ? (
+                <ThemedText style={styles.cakeIcon}>🎂</ThemedText>
+              ) : (
+                <TaskIcon category={appointment.category} />
+              )}
 
               <View style={styles.textGroup}>
                 <ThemedText>{appointment.text}</ThemedText>
@@ -82,6 +86,8 @@ function buildAppointmentMenuItems(
   onStopRepeating: (id: string) => void,
   onRemoveToday: (id: string) => void
 ): TaskMenuItem[] {
+  const label = appointment.kind === 'birthday' ? 'Birthday' : 'Appointment';
+
   if (appointment.isRepeating) {
     return [
       {
@@ -102,7 +108,7 @@ function buildAppointmentMenuItems(
   return [
     {
       key: 'delete',
-      label: '🗑️ Delete Appointment',
+      label: `🗑️ Delete ${label}`,
       onPress: () => onDeleteAppointment(appointment.id),
       destructive: true,
     },
@@ -142,5 +148,10 @@ const styles = StyleSheet.create({
   textGroup: {
     flex: 1,
     gap: 2,
+  },
+  cakeIcon: {
+    fontSize: 22,
+    width: 28,
+    textAlign: 'center',
   },
 });

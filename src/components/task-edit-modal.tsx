@@ -14,12 +14,27 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 type RepeatOption = 'none' | 'daily' | 'weekly';
 
 function repeatToOption(repeat: RepeatRule | undefined): RepeatOption {
-  return repeat?.kind ?? 'none';
+  // 'yearly' (birthdays) never appears in this picker — it's auto-forced
+  // and hidden, not one of the choices — so it has no RepeatOption to map
+  // to and just falls back to 'none' like having no repeat at all.
+  if (repeat?.kind === 'daily' || repeat?.kind === 'weekly') return repeat.kind;
+  return 'none';
 }
 
-type ReminderOption = 'none' | 'at-time' | '10-before' | '30-before' | '60-before';
+type ReminderOption =
+  | 'none'
+  | 'at-time'
+  | '10-before'
+  | '30-before'
+  | '60-before'
+  | '1-day-before'
+  | '1-week-before';
 
 const REMINDER_UI_OPTIONS: ReminderOption[] = ['none', 'at-time', '10-before', '30-before', '60-before'];
+
+// Birthdays get two extra, longer-lead-time options on top of the usual
+// four — everything else (Task/Appointment) only ever sees REMINDER_UI_OPTIONS.
+const BIRTHDAY_REMINDER_UI_OPTIONS: ReminderOption[] = [...REMINDER_UI_OPTIONS, '1-day-before', '1-week-before'];
 
 function reminderMinutesToOption(minutes: ReminderOffsetMinutes | undefined): ReminderOption {
   switch (minutes) {
@@ -31,6 +46,10 @@ function reminderMinutesToOption(minutes: ReminderOffsetMinutes | undefined): Re
       return '30-before';
     case 60:
       return '60-before';
+    case 1440:
+      return '1-day-before';
+    case 10080:
+      return '1-week-before';
     default:
       return 'none';
   }
@@ -46,6 +65,10 @@ function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes 
       return 30;
     case '60-before':
       return 60;
+    case '1-day-before':
+      return 1440;
+    case '1-week-before':
+      return 10080;
     default:
       return undefined;
   }
@@ -56,8 +79,22 @@ function reminderOptionLabel(option: ReminderOption): string {
   return reminderOffsetLabel(reminderOptionToMinutes(option) as ReminderOffsetMinutes);
 }
 
+const KIND_OPTIONS: TaskKind[] = ['task', 'event', 'birthday'];
+
+function kindLabel(kind: TaskKind): string {
+  switch (kind) {
+    case 'task':
+      return 'Task';
+    case 'event':
+      return 'Appointment';
+    case 'birthday':
+      return 'Birthday';
+  }
+}
+
 export type TaskEditValues = {
   text: string;
+  kind: TaskKind;
   date: string;
   time?: string;
   repeat?: RepeatRule;
@@ -75,9 +112,9 @@ type TaskEditModalProps = {
   onCancel: () => void;
 };
 
-// Shared edit form for both tasks and appointments. The caller mounts this
-// keyed by the item's id, so opening a different item gets fresh initial
-// state for free instead of needing manual reset-on-open logic.
+// Shared edit form for tasks, appointments, and birthdays. The caller mounts
+// this keyed by the item's id, so opening a different item gets fresh
+// initial state for free instead of needing manual reset-on-open logic.
 export function TaskEditModal({
   kind,
   initialText,
@@ -89,6 +126,7 @@ export function TaskEditModal({
   onCancel,
 }: TaskEditModalProps) {
   const theme = useTheme();
+  const [selectedKind, setSelectedKind] = useState<TaskKind>(kind);
   const [text, setText] = useState(initialText);
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(initialTime ?? '');
@@ -129,8 +167,11 @@ export function TaskEditModal({
       !Number.isNaN(new Date(`${trimmedDate}T00:00:00`).getTime());
     const finalDate = isValidDate ? trimmedDate : initialDate;
 
+    // Birthdays always repeat yearly — src/utils/tasks.ts's editItemDetails
+    // forces this regardless of what's passed here, so there's nothing to
+    // compute for that case.
     let repeat: RepeatRule | undefined;
-    if (kind === 'task') {
+    if (selectedKind === 'task') {
       if (repeatOption === 'daily') {
         repeat = { kind: 'daily' };
       } else if (repeatOption === 'weekly' && weeklyDays.size > 0) {
@@ -140,6 +181,7 @@ export function TaskEditModal({
 
     onSave({
       text: trimmedText,
+      kind: selectedKind,
       date: finalDate,
       time: time.trim() || undefined,
       repeat,
@@ -153,8 +195,34 @@ export function TaskEditModal({
         <Pressable onPress={(event) => event.stopPropagation()}>
           <ThemedView type="background" style={[styles.modalBox, { borderColor: theme.backgroundSelected }]}>
             <ThemedText type="smallBold" style={styles.title}>
-              {kind === 'task' ? 'Edit Task' : 'Edit Appointment'}
+              Edit {kindLabel(selectedKind)}
             </ThemedText>
+
+            <View style={styles.fieldGroup}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Type
+              </ThemedText>
+              <View style={styles.pillRow}>
+                {KIND_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setSelectedKind(option)}
+                    style={({ pressed }) => pressed && styles.pressed}>
+                    <View
+                      style={[
+                        styles.pill,
+                        { backgroundColor: selectedKind === option ? theme.purple : theme.background },
+                      ]}>
+                      <ThemedText
+                        type="small"
+                        style={selectedKind === option ? styles.pillTextActive : undefined}>
+                        {kindLabel(option)}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
             <View style={styles.fieldGroup}>
               <ThemedText type="small" themeColor="textSecondary">
@@ -166,7 +234,13 @@ export function TaskEditModal({
                   styles.input,
                   { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
                 ]}
-                placeholder={kind === 'task' ? 'What do you need to do?' : 'What is the appointment?'}
+                placeholder={
+                  selectedKind === 'task'
+                    ? 'What do you need to do?'
+                    : selectedKind === 'event'
+                      ? 'What is the appointment?'
+                      : "Whose birthday is it?"
+                }
                 placeholderTextColor={theme.textSecondary}
                 value={text}
                 onChangeText={setText}
@@ -211,7 +285,7 @@ export function TaskEditModal({
                   Reminder
                 </ThemedText>
                 <View style={styles.pillRow}>
-                  {REMINDER_UI_OPTIONS.map((option) => (
+                  {(selectedKind === 'birthday' ? BIRTHDAY_REMINDER_UI_OPTIONS : REMINDER_UI_OPTIONS).map((option) => (
                     <Pressable
                       key={option}
                       onPress={() => selectReminderOption(option)}
@@ -233,7 +307,13 @@ export function TaskEditModal({
               </View>
             ) : null}
 
-            {kind === 'task' ? (
+            {selectedKind === 'birthday' ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                🎂 Repeats every year on this date
+              </ThemedText>
+            ) : null}
+
+            {selectedKind === 'task' ? (
               <View style={styles.fieldGroup}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Repeat

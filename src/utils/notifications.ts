@@ -180,7 +180,12 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
       try {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: task.kind === 'event' ? 'Appointment reminder' : 'Task reminder',
+            title:
+              task.kind === 'event'
+                ? 'Appointment reminder'
+                : task.kind === 'birthday'
+                  ? 'Birthday reminder'
+                  : 'Task reminder',
             body: task.text,
           },
           trigger: {

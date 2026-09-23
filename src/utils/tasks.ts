@@ -1,14 +1,15 @@
 import { categorizeTask, type TaskCategory } from '@/utils/categorize-task';
 
-export type RepeatRule = { kind: 'daily' } | { kind: 'weekly'; days: number[] };
+export type RepeatRule = { kind: 'daily' } | { kind: 'weekly'; days: number[] } | { kind: 'yearly' };
 
-export type TaskKind = 'task' | 'event';
+export type TaskKind = 'task' | 'event' | 'birthday';
 
 // Minutes before the item's time a reminder notification should fire; 0
-// means "at the scheduled time".
-export type ReminderOffsetMinutes = 0 | 10 | 30 | 60;
+// means "at the scheduled time". 1440/10080 (1 day / 1 week) exist mainly
+// for birthdays, but are valid for any kind.
+export type ReminderOffsetMinutes = 0 | 10 | 30 | 60 | 1440 | 10080;
 
-export const REMINDER_OFFSETS: ReminderOffsetMinutes[] = [0, 10, 30, 60];
+export const REMINDER_OFFSETS: ReminderOffsetMinutes[] = [0, 10, 30, 60, 1440, 10080];
 
 export function reminderOffsetLabel(minutes: ReminderOffsetMinutes): string {
   switch (minutes) {
@@ -20,7 +21,18 @@ export function reminderOffsetLabel(minutes: ReminderOffsetMinutes): string {
       return '30 min before';
     case 60:
       return '1 hour before';
+    case 1440:
+      return '1 day before';
+    case 10080:
+      return '1 week before';
   }
+}
+
+// Birthdays always repeat yearly on their date — the user never picks
+// "Yearly" manually, so both creating and editing a birthday force this
+// regardless of whatever repeat value (if any) was otherwise supplied.
+function repeatForKind(kind: TaskKind, repeat: RepeatRule | undefined): RepeatRule | undefined {
+  return kind === 'birthday' ? { kind: 'yearly' } : repeat;
 }
 
 // The full persisted shape. `date`/`kind`/`repeat` were added for the
@@ -76,12 +88,14 @@ export type DisplayTask = {
   time?: string;
 };
 
-// A read-only appointment row for a single date — appointments never have a
-// completion state and never affect pet progress.
+// A read-only appointment/birthday row for a single date — neither has a
+// completion state and neither affects pet progress. `kind` lets the UI
+// show a cake icon for birthdays instead of the usual category icon.
 export type DisplayAppointment = {
   id: string;
   text: string;
   category: TaskCategory;
+  kind: 'event' | 'birthday';
   time?: string;
   isRepeating: boolean;
 };
@@ -125,7 +139,7 @@ export function normalizeTask(raw: any, fallbackDate: string): Task {
     text: raw.text,
     category: raw.category,
     important: !!raw.important,
-    kind: raw.kind === 'event' ? 'event' : 'task',
+    kind: raw.kind === 'event' ? 'event' : raw.kind === 'birthday' ? 'birthday' : 'task',
     date: typeof raw.date === 'string' ? raw.date : fallbackDate,
     time: typeof raw.time === 'string' ? raw.time : undefined,
     repeat: raw.repeat,
@@ -143,7 +157,7 @@ export function normalizeTask(raw: any, fallbackDate: string): Task {
   };
 }
 
-// Whether a task (one-time, daily-repeating, or weekly-repeating) occurs on
+// Whether a task (one-time, daily-, weekly-, or yearly-repeating) occurs on
 // a given calendar date. ISO 'YYYY-MM-DD' strings compare correctly with
 // plain string comparison, so no Date parsing is needed for the range check.
 export function occursOnDate(task: Task, dateISO: string): boolean {
@@ -152,6 +166,11 @@ export function occursOnDate(task: Task, dateISO: string): boolean {
   if (dateISO < task.date) return false;
   if (task.repeatUntil && dateISO > task.repeatUntil) return false;
   if (task.repeat.kind === 'daily') return true;
+  if (task.repeat.kind === 'yearly') {
+    // Same month-and-day every year (e.g. a Feb 29 birthday simply has no
+    // match in non-leap years, same as most calendar apps).
+    return dateISO.slice(5) === task.date.slice(5);
+  }
   const weekday = new Date(`${dateISO}T00:00:00`).getDay();
   return task.repeat.days.includes(weekday);
 }
@@ -174,13 +193,14 @@ export function sortByImportantFirst<T extends { important: boolean }>(items: T[
   return [...items].sort((a, b) => Number(b.important) - Number(a.important));
 }
 
-// Lifetime completed-occurrence count that drives pet progress. Events never
-// count. For pre-existing saved data (no repeat, no events) this reduces to
-// exactly the old `tasks.filter(t => t.completed).length`, so progress can
-// only grow, never shrink, when this feature is introduced.
+// Lifetime completed-occurrence count that drives pet progress. Only actual
+// tasks count — appointments and birthdays never do. For pre-existing saved
+// data (no repeat, no events) this reduces to exactly the old
+// `tasks.filter(t => t.completed).length`, so progress can only grow, never
+// shrink, when this feature is introduced.
 export function getCompletedTaskCount(tasks: Task[]): number {
   return tasks.reduce((count, task) => {
-    if (task.kind === 'event') return count;
+    if (task.kind !== 'task') return count;
     if (task.repeat) return count + (task.completedDates?.length ?? 0);
     return count + (task.completed ? 1 : 0);
   }, 0);
@@ -225,18 +245,22 @@ export function excludeDateFromTask(tasks: Task[], id: string, dateISO: string):
   });
 }
 
-// Updates a task's editable fields (name/date/time/repeat/reminder) in
-// place. Everything else on the record — id, kind, important, completed,
-// completedDates, repeatUntil, excludedDates — is spread through untouched,
-// so editing can never disturb completion history, pet progress, Important
-// status, or an existing Stop Repeating / Remove Just This Day state.
-// scheduledNotificationId/scheduledNotificationFor are also left as-is here;
-// syncTaskNotifications() reconciles them separately after this runs.
-export function editTaskDetails(
+// Updates an item's editable fields — name/kind/date/time/repeat/reminder —
+// in place, including changing its type (e.g. Task -> Appointment) without
+// deleting and recreating it. Everything else on the record — id, important,
+// completed, completedDates, repeatUntil, excludedDates — is spread through
+// untouched, so editing can never disturb completion history, pet progress,
+// Important status, or an existing Stop Repeating / Remove Just This Day
+// state, no matter what kind the item ends up as. Changing to Birthday
+// always forces yearly repeat (see repeatForKind), so the caller never has
+// to. scheduledNotificationId/scheduledNotificationFor are also left as-is
+// here; syncTaskNotifications() reconciles them separately after this runs.
+export function editItemDetails(
   tasks: Task[],
   id: string,
   changes: {
     text: string;
+    kind: TaskKind;
     date: string;
     time?: string;
     repeat?: RepeatRule;
@@ -249,28 +273,10 @@ export function editTaskDetails(
       ...task,
       text: changes.text,
       category: categorizeTask(changes.text),
+      kind: changes.kind,
       date: changes.date,
       time: changes.time,
-      repeat: changes.repeat,
-      reminderMinutesBefore: changes.reminderMinutesBefore,
-    };
-  });
-}
-
-// Same guarantee as editTaskDetails, for an appointment's name/date/time/reminder.
-export function editAppointmentDetails(
-  tasks: Task[],
-  id: string,
-  changes: { text: string; date: string; time?: string; reminderMinutesBefore?: ReminderOffsetMinutes }
-): Task[] {
-  return tasks.map((task) => {
-    if (task.id !== id) return task;
-    return {
-      ...task,
-      text: changes.text,
-      category: categorizeTask(changes.text),
-      date: changes.date,
-      time: changes.time,
+      repeat: repeatForKind(changes.kind, changes.repeat),
       reminderMinutesBefore: changes.reminderMinutesBefore,
     };
   });
@@ -284,6 +290,7 @@ export function createTask(input: {
   repeat?: RepeatRule;
   reminderMinutesBefore?: ReminderOffsetMinutes;
 }): Task {
+  const repeat = repeatForKind(input.kind, input.repeat);
   return {
     id: Date.now().toString(),
     text: input.text,
@@ -292,9 +299,9 @@ export function createTask(input: {
     kind: input.kind,
     date: input.date,
     time: input.time,
-    repeat: input.repeat,
+    repeat,
     reminderMinutesBefore: input.reminderMinutesBefore,
     completed: false,
-    completedDates: input.repeat ? [] : undefined,
+    completedDates: repeat ? [] : undefined,
   };
 }

@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getHolidayForDate } from '@/utils/holidays';
 import { dateToISO, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
 type TaskCalendarProps = {
@@ -88,7 +89,7 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
   }
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
+    <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.headerRow}>
         <Pressable onPress={goToPreviousMonth} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
           <ThemedText type="smallBold" style={styles.navArrow}>
@@ -143,8 +144,12 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
             // = normal task" rather than one dot per task.
             const dayTasks = tasks.filter((task) => occursOnDate(task, cell.iso));
             const hasAppointment = dayTasks.some((task) => task.kind === 'event');
+            const hasBirthday = dayTasks.some((task) => task.kind === 'birthday');
             const hasImportantTask = dayTasks.some((task) => task.kind === 'task' && task.important);
             const hasNormalTask = dayTasks.some((task) => task.kind === 'task' && !task.important);
+            // Read-only system data, entirely separate from the user's
+            // saved tasks — see src/utils/holidays.ts.
+            const hasHoliday = !!getHolidayForDate(cell.iso);
 
             return (
               <View key={cellIndex} style={styles.dayCell}>
@@ -164,7 +169,9 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
                     </ThemedText>
                   </View>
                   <View style={styles.dotsRow}>
+                    {hasHoliday ? <View style={[styles.dot, { backgroundColor: theme.sky }]} /> : null}
                     {hasAppointment ? <View style={[styles.dot, { backgroundColor: theme.accent }]} /> : null}
+                    {hasBirthday ? <View style={[styles.dot, { backgroundColor: theme.peach }]} /> : null}
                     {hasImportantTask ? <View style={[styles.dot, { backgroundColor: theme.purple }]} /> : null}
                     {hasNormalTask ? <View style={[styles.dot, { backgroundColor: theme.mint }]} /> : null}
                   </View>
@@ -177,9 +184,21 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
 
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
+          <View style={[styles.dot, { backgroundColor: theme.sky }]} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Holiday
+          </ThemedText>
+        </View>
+        <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.accent }]} />
           <ThemedText type="small" themeColor="textSecondary">
             Appointment
+          </ThemedText>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.dot, { backgroundColor: theme.peach }]} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Birthday
           </ThemedText>
         </View>
         <View style={styles.legendItem}>
