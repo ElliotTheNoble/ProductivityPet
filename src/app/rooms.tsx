@@ -1,5 +1,5 @@
-import { ComingSoonScreen } from '@/components/coming-soon-screen';
+import { RoomHubScreen } from '@/components/room-hub-screen';
 
 export default function RoomsScreen() {
-  return <ComingSoonScreen title="Rooms" />;
+  return <RoomHubScreen />;
 }

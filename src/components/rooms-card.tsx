@@ -9,7 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { RoomSlug } from '@/utils/rooms';
 
-type RoomPreview = {
+export type RoomPreview = {
   name: string;
   // null means "not a /rooms/[room] detail page" — Living Room instead
   // navigates straight back to Home, which already is the living room.
@@ -28,7 +28,7 @@ type RoomPreview = {
 // This preview art is intentionally kept separate from src/utils/rooms.ts's
 // room data (used by the 5 functional room detail pages) — those use full-
 // size backgrounds, not these small square preview cards.
-const ROOMS: RoomPreview[] = [
+export const ROOMS: RoomPreview[] = [
   {
     name: 'Living Room',
     slug: null,
