@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -10,9 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { normalizeTask, occursOnDate, todayISO, type Task } from '@/utils/tasks';
-
-const TASKS_STORAGE_KEY = '@ProductivityPet:tasks';
+import { getCachedTasks } from '@/utils/task-storage';
+import { occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
 // On desktop the grid's own max width is allowed to grow quite wide (see
 // useDesktopTileSize below, which actually drives card size there); this
@@ -151,21 +149,16 @@ export function RoomHubScreen() {
   // single room card, if any, currently has the mouse over it.
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
 
-  // Read-only, same storage key/hydration pattern as useBirthdayMode — this
-  // screen never writes, so it can't disturb the real saved task data.
+  // Read-only, same shared in-memory cache as useBirthdayMode (see
+  // @/utils/task-storage) — this screen never writes, so it can't disturb
+  // the real saved task data either way.
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(TASKS_STORAGE_KEY)
-      .then((stored) => {
-        if (cancelled || !stored) return;
-        try {
-          const today = todayISO();
-          const parsed = JSON.parse(stored) as unknown[];
-          const tasks = parsed.map((raw) => normalizeTask(raw, today));
-          setTodaysTasks(tasks.filter((task) => task.kind === 'task' && occursOnDate(task, today)));
-        } catch {
-          // Malformed storage: badges just fall back to their 0 default.
-        }
+    getCachedTasks()
+      .then((tasks) => {
+        if (cancelled) return;
+        const today = todayISO();
+        setTodaysTasks(tasks.filter((task) => task.kind === 'task' && occursOnDate(task, today)));
       })
       .catch(() => {});
     return () => {
@@ -207,7 +200,12 @@ export function RoomHubScreen() {
           type="backgroundElementOverlay"
           style={[styles.card, isHovered && [styles.cardHovered, { borderColor: theme.accent }]]}>
           <View style={styles.imageWrap}>
-            <Image source={room.source} style={styles.image} contentFit="contain" />
+            <Image
+              source={room.source}
+              style={styles.image}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+            />
             {isHovered ? (
               <View style={styles.hoverOverlay} pointerEvents="none">
                 <ThemedView type="accent" style={styles.enterPill}>

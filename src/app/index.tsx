@@ -15,12 +15,12 @@ import { Spacing } from '@/constants/theme';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { getPetStage } from '@/utils/pet-stage';
+import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   excludeDateFromTask,
   formatFullDate,
   getCompletedTaskCount,
   isOccurrenceCompleted,
-  normalizeTask,
   occursOnDate,
   sortByImportantFirst,
   stopRepeatingFrom,
@@ -50,7 +50,10 @@ const MOOD_MESSAGE_REFRESH_INTERVAL_MS = 60000;
 const DEFAULT_MOOD: Mood = 'Happy';
 
 // Local persistence only (AsyncStorage — works on native and web, no backend).
-const TASKS_STORAGE_KEY = '@ProductivityPet:tasks';
+// Tasks storage (read/write) goes through @/utils/task-storage, which caches
+// the parsed list in memory so Home, Tasks, birthday detection, and the
+// Rooms hub don't each do their own independent AsyncStorage read on every
+// navigation — see that file for details.
 const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 
 // Below this window width, the dashboard stacks into a single column instead
@@ -77,6 +80,12 @@ export default function HomeScreen() {
       if (temporaryMessageTimeoutRef.current) clearTimeout(temporaryMessageTimeoutRef.current);
     };
   }, []);
+
+  // Set right before hydration finishes so the save/sync effect below can
+  // tell "tasks just got set FROM storage" apart from "tasks changed for a
+  // real reason" — both look identical as a [tasks, isHydrated] dependency
+  // change, but only the latter should trigger a save + notification sync.
+  const skipNextSyncRef = useRef(false);
 
   // Load any previously saved mood once on mount.
   useEffect(() => {
@@ -110,25 +119,30 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [mood]);
 
-  // Load any previously saved tasks once on mount. normalizeTask() gives any
-  // task saved before the planner/calendar feature existed a concrete date
-  // (today) and default kind, so it still shows up rather than disappearing
-  // from a now date-filtered list — see src/utils/tasks.ts.
+  // Load previously saved tasks once on mount, via the shared in-memory
+  // cache (see @/utils/task-storage) instead of a fresh AsyncStorage read —
+  // only the very first call this session actually hits AsyncStorage;
+  // navigating back to Home afterward resolves from memory. normalizeTask()
+  // (applied inside getCachedTasks) gives any task saved before the
+  // planner/calendar feature existed a concrete date (today) and default
+  // kind, so it still shows up rather than disappearing from a now
+  // date-filtered list — see src/utils/tasks.ts.
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(TASKS_STORAGE_KEY)
-      .then((stored) => {
-        if (cancelled || !stored) return;
-        try {
-          const parsed = JSON.parse(stored) as unknown[];
-          const today = todayISO();
-          setTasks(parsed.map((raw) => normalizeTask(raw, today)));
-        } catch {
-          // Ignore corrupted/unreadable data and keep the default empty list.
-        }
+    getCachedTasks()
+      .then((cached) => {
+        if (cancelled) return;
+        setTasks(cached);
       })
       .finally(() => {
-        if (!cancelled) setIsHydrated(true);
+        if (!cancelled) {
+          // The save/sync effect below is about to run once purely because
+          // isHydrated just flipped true, with the exact tasks that were
+          // just read from storage — not a real change, so it shouldn't
+          // re-save or re-sync notifications.
+          skipNextSyncRef.current = true;
+          setIsHydrated(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -137,13 +151,22 @@ export default function HomeScreen() {
 
   // Save whenever tasks change, but only after the initial load above has
   // finished — otherwise the empty starting state would overwrite storage.
-  // Also reconciles reminder notifications against the current tasks (see
-  // syncTaskNotifications) — this only ever touches scheduling bookkeeping
-  // fields, never anything that drives history or pet progress. Skipping
-  // setTasks when nothing changed avoids re-triggering this same effect.
+  // persistCachedTasks writes to AsyncStorage exactly as before and keeps
+  // the shared cache in sync in the same step. Also reconciles reminder
+  // notifications against the current tasks (see syncTaskNotifications) —
+  // this only ever touches scheduling bookkeeping fields, never anything
+  // that drives history or pet progress. Skipping setTasks when nothing
+  // changed avoids re-triggering this same effect. skipNextSyncRef
+  // additionally skips the one run that fires just from hydration
+  // completing (see above) — every other change to tasks (adding, editing,
+  // toggling, etc.) still saves and syncs normally.
   useEffect(() => {
     if (!isHydrated) return;
-    AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    persistCachedTasks(tasks);
     syncTaskNotifications(tasks)
       .then((updated) => {
         if (updated !== tasks) setTasks(updated);

@@ -61,7 +61,16 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
                 styles.artWrapLandscape,
                 { aspectRatio: room.aspectRatio },
               ]}>
-              <Image source={backgroundSource} style={styles.art} contentFit="contain" />
+              <Image
+                source={backgroundSource}
+                style={styles.art}
+                contentFit="contain"
+                // Keeps the decoded bitmap in memory across mount/unmount —
+                // this component remounts fresh every time a room page is
+                // visited, so without this it was re-decoding the same
+                // background from scratch on every visit.
+                cachePolicy="memory-disk"
+              />
             </View>
 
             <ScrollView
@@ -92,7 +101,12 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
               room background on Home (see PetRoom) — so it reads as the
               main, prominent focus of the page rather than a small thumbnail. */}
           <View style={[styles.artWrap, { aspectRatio: room.aspectRatio }]}>
-            <Image source={backgroundSource} style={styles.art} contentFit="contain" />
+            <Image
+              source={backgroundSource}
+              style={styles.art}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+            />
           </View>
 
           <ThemedText type="subtitle" style={styles.roomName}>

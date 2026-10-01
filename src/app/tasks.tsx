@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +12,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getHolidayForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
+import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   createTask,
   editItemDetails,
@@ -20,7 +20,6 @@ import {
   formatFullDate,
   getTasksForDate,
   isOccurrenceCompleted,
-  normalizeTask,
   reminderOffsetLabel,
   sortByImportantFirst,
   stopRepeatingFrom,
@@ -32,11 +31,12 @@ import {
   type TaskKind,
 } from '@/utils/tasks';
 
-// Same key Home reads/writes — both screens hydrate independently from
-// AsyncStorage (there's no shared app-wide store), and since Expo Router
-// unmounts the previous screen on navigation, only one of them is ever
-// mounted at a time, so this never causes a conflicting write.
-const TASKS_STORAGE_KEY = '@ProductivityPet:tasks';
+// Tasks storage (read/write) goes through @/utils/task-storage, which caches
+// the parsed list in memory — both screens still hydrate independently on
+// mount, but only the first read this session actually hits AsyncStorage.
+// Since Expo Router unmounts the previous screen on navigation, only one of
+// Home/Tasks is ever mounted at a time, so this never causes a conflicting
+// write.
 
 // Below this width, the calendar and the selected day's list stack instead
 // of sitting side by side.
@@ -118,37 +118,57 @@ export default function TasksScreen() {
 
   const [editingItem, setEditingItem] = useState<Task | null>(null);
 
-  // Loads the same tasks Home saves, applying the same legacy-data repair
-  // (normalizeTask) so a task added before this feature existed still shows
-  // up under today rather than vanishing.
+  // Set right before hydration finishes so the save/sync effect below can
+  // tell "tasks just got set FROM storage" apart from "tasks changed for a
+  // real reason" — both look identical as a [tasks, isHydrated] dependency
+  // change, but only the latter should trigger a save + notification sync.
+  const skipNextSyncRef = useRef(false);
+
+  // Loads the same tasks Home saves, via the shared in-memory cache (see
+  // @/utils/task-storage) instead of a fresh AsyncStorage read — only the
+  // very first call this session actually hits AsyncStorage; navigating
+  // back to Tasks afterward resolves from memory. Applies the same
+  // legacy-data repair (normalizeTask, inside getCachedTasks) so a task
+  // added before this feature existed still shows up under today rather
+  // than vanishing.
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(TASKS_STORAGE_KEY)
-      .then((stored) => {
-        if (cancelled || !stored) return;
-        try {
-          const parsed = JSON.parse(stored) as unknown[];
-          const today = todayISO();
-          setTasks(parsed.map((raw) => normalizeTask(raw, today)));
-        } catch {
-          // Ignore corrupted/unreadable data and keep the default empty list.
-        }
+    getCachedTasks()
+      .then((cached) => {
+        if (cancelled) return;
+        setTasks(cached);
       })
       .finally(() => {
-        if (!cancelled) setIsHydrated(true);
+        if (!cancelled) {
+          // The save/sync effect below is about to run once purely because
+          // isHydrated just flipped true, with the exact tasks that were
+          // just read from storage — not a real change, so it shouldn't
+          // re-save or re-sync notifications.
+          skipNextSyncRef.current = true;
+          setIsHydrated(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Also reconciles reminder notifications against the current tasks (see
-  // syncTaskNotifications) — this only ever touches scheduling bookkeeping
-  // fields, never anything that drives history or pet progress. Skipping
-  // setTasks when nothing changed avoids re-triggering this same effect.
+  // persistCachedTasks writes to AsyncStorage exactly as before and keeps
+  // the shared cache in sync in the same step. Also reconciles reminder
+  // notifications against the current tasks (see syncTaskNotifications) —
+  // this only ever touches scheduling bookkeeping fields, never anything
+  // that drives history or pet progress. Skipping setTasks when nothing
+  // changed avoids re-triggering this same effect. skipNextSyncRef
+  // additionally skips the one run that fires just from hydration
+  // completing (see above) — every other change to tasks (adding, editing,
+  // toggling, etc.) still saves and syncs normally.
   useEffect(() => {
     if (!isHydrated) return;
-    AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    persistCachedTasks(tasks);
     syncTaskNotifications(tasks)
       .then((updated) => {
         if (updated !== tasks) setTasks(updated);

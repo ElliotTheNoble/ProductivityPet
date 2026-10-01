@@ -121,7 +121,12 @@ export function RoomsCard() {
                   { borderColor: theme.backgroundElement },
                   isHighlighted && { borderColor: theme.accent },
                 ]}>
-                <Image source={room.source} style={styles.previewImage} contentFit="contain" />
+                <Image
+                  source={room.source}
+                  style={styles.previewImage}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                />
               </View>
             </Pressable>
           );
