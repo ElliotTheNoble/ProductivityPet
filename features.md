@@ -276,3 +276,19 @@ Track planned and in-progress features here. Copy the template for each new feat
   - `src/app/rooms/[room].tsx` needed no changes — the existing dynamic route + `isRoomSlug` fallback (`ComingSoonScreen title="Room not found"`) already handles this correctly: a stray `/rooms/living-room` URL (nothing links to it anymore) now falls through to that fallback rather than showing a redundant Living Room detail page, since `'living-room'` is no longer a valid slug.
   - Reused existing structure throughout, per instructions: no new route files, no duplicate screen components — only `src/utils/rooms.ts` (data), `src/components/rooms-card.tsx` (which destination), and `src/components/room-detail-screen.tsx` (art sizing) changed.
   - Task list, progress tracking, Today's Mood, Pet Progress, the living room/pet growth, header, and the Rooms preview cards' own visual design were all left completely unchanged, as instructed.
+
+### [FEATURE-032] Functional Stats page: Pet Progress, Lifetime Stats, and Completed by Category
+
+- **Status:** Done
+- **Description:** The Stats tab is now a real, data-driven page instead of a placeholder. It shows the user's actual pet growth progress, lifetime task totals, and a breakdown by category, styled with custom pastel cloud artwork.
+- **Notes:**
+  - Full-screen pastel purple cloud background (`assets/images/stats/stats_background.png`) behind the whole page, extending behind the header/navigation the same way Home and Tasks already do.
+  - Pet Progress is connected to the real pet progression system — the same completed-task count and stage formula used everywhere else in the app, not a separate tracker.
+  - The pet artwork shown (Egg, Hatchling, Baby, Young, Adult) automatically matches the user's real completed-task progress, using new Stats-specific art (`assets/images/pets/stats_egg.png` and the matching Hatchling/Baby/Young/Adult files) separate from the pet art shown in the living room.
+  - Level, the progress bar, completed-task progress ("X / 10 tasks"), and the "X more tasks to reach [next stage]!" message are all real and update automatically as tasks are completed.
+  - The inside of the Pet Progress card uses a custom cloud background image (`assets/images/stats/stats_pet_background.png`) instead of hand-drawn shapes.
+  - Lifetime Stats shows the real total number of completed tasks and completed Important tasks.
+  - Completed by Category shows real counts for Study, Exercise, Clean, Health, and Personal, calculated from the same task data as the rest of the app.
+  - Category icons and the Lifetime Stats icons (clipboard, star) use new custom Stats-specific artwork (`assets/images/task_icons/stats_Icons.png`) instead of generic icons.
+  - Small decorative marks use a custom set of pastel 3-line accent marks (`assets/images/stats/accent_marks.png`, a different color per category/stat) instead of generic sparkle/star emoji.
+  - The "Your Progress" banner at the top is now simple text only, with no emoji decorations.

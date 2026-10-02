@@ -25,6 +25,11 @@ export const Colors = {
     // stays faintly visible through the card while text stays readable.
     backgroundElementOverlay: 'rgba(251, 227, 236, 0.9)',
     peachOverlay: 'rgba(251, 217, 184, 0.9)',
+    // A light, airy wash of `sky`, for the Stats page's Pet Progress card —
+    // the solid `sky` color is used for the more saturated cloud shapes
+    // inside that same card, so this lighter version keeps the card
+    // background from blending into them.
+    skyOverlay: 'rgba(169, 214, 232, 0.45)',
   },
   dark: {
     text: '#4A3B42',
@@ -40,6 +45,7 @@ export const Colors = {
     apricot: '#F6C99A',
     backgroundElementOverlay: 'rgba(251, 227, 236, 0.9)',
     peachOverlay: 'rgba(251, 217, 184, 0.9)',
+    skyOverlay: 'rgba(169, 214, 232, 0.45)',
   },
 } as const;
 

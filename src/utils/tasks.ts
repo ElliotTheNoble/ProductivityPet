@@ -193,17 +193,25 @@ export function sortByImportantFirst<T extends { important: boolean }>(items: T[
   return [...items].sort((a, b) => Number(b.important) - Number(a.important));
 }
 
+// How many completed occurrences a single task contributes. Shared by
+// getCompletedTaskCount below (lifetime total, drives pet progress) and the
+// Stats page's per-category/per-importance breakdowns (see
+// src/utils/stats.ts), so all of those can never drift out of sync with
+// each other or with pet progress. Only kind: 'task' items ever count —
+// appointments and birthdays are never completable.
+export function countCompletedOccurrences(task: Task): number {
+  if (task.kind !== 'task') return 0;
+  if (task.repeat) return task.completedDates?.length ?? 0;
+  return task.completed ? 1 : 0;
+}
+
 // Lifetime completed-occurrence count that drives pet progress. Only actual
 // tasks count — appointments and birthdays never do. For pre-existing saved
 // data (no repeat, no events) this reduces to exactly the old
 // `tasks.filter(t => t.completed).length`, so progress can only grow, never
 // shrink, when this feature is introduced.
 export function getCompletedTaskCount(tasks: Task[]): number {
-  return tasks.reduce((count, task) => {
-    if (task.kind !== 'task') return count;
-    if (task.repeat) return count + (task.completedDates?.length ?? 0);
-    return count + (task.completed ? 1 : 0);
-  }, 0);
+  return tasks.reduce((count, task) => count + countCompletedOccurrences(task), 0);
 }
 
 export function toggleTaskOccurrence(tasks: Task[], id: string, dateISO: string): Task[] {

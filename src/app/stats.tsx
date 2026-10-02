@@ -1,5 +1,5 @@
-import { ComingSoonScreen } from '@/components/coming-soon-screen';
+import { StatsHubScreen } from '@/components/stats-screen';
 
 export default function StatsScreen() {
-  return <ComingSoonScreen title="Stats" />;
+  return <StatsHubScreen />;
 }

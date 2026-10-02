@@ -20,6 +20,22 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-02]
+
+### Added
+- Built a real, functional Stats page (`src/components/stats-screen.tsx`), replacing the "Coming soon" placeholder.
+- Pet Progress section showing the user's real pet growth stage, level, progress bar, and completed-task progress, using the same pet progression data as the rest of the app.
+- Dynamic pet growth-stage artwork (Egg, Hatchling, Baby, Young, Adult) that automatically updates to match the user's real progress.
+- Lifetime Stats showing the real total number of completed tasks and completed Important tasks.
+- Completed by Category statistics showing real completed-task counts for Study, Exercise, Clean, Health, and Personal.
+- New full-screen pastel purple cloud background for the Stats page (`assets/images/stats/stats_background.png`), extending behind the header/navigation the same way Home and Tasks already do.
+- New custom cloud background inside the Pet Progress card (`assets/images/stats/stats_pet_background.png`).
+- New Stats-specific icon artwork (`assets/images/task_icons/stats_Icons.png`) for the category and Lifetime Stats icons, replacing generic icons.
+- New custom pastel 3-line accent marks (`assets/images/stats/accent_marks.png`), replacing the generic sparkle/star decorations on Lifetime Stats and Completed by Category.
+- Cleaned up the "Your Progress" banner by removing the generic emoji decorations around it, keeping it as simple text.
+
+---
+
 ## [2026-09-08]
 
 ### Added

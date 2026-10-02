@@ -13,6 +13,7 @@ SplashScreen.preventAutoHideAsync();
 
 const LIVING_ROOM_NORMAL = require('@/assets/images/rooms/living-room.png');
 const TASKS_NORMAL = require('@/assets/images/rooms/backgrounds/Task_Background.png');
+const STATS_BACKGROUND = require('@/assets/images/stats/stats_background.png');
 
 // Mounted once, for the lifetime of the app (RootLayout itself never
 // remounts on navigation — only the routed screen inside <Slot/> swaps), so
@@ -49,6 +50,7 @@ export default function RootLayout() {
   const pathname = usePathname();
   const isHome = pathname === '/';
   const isTasks = pathname === '/tasks';
+  const isStats = pathname === '/stats';
   // Re-checks whenever the route changes (RootLayout itself persists across
   // navigation, unlike the screens it wraps), so adding/removing a birthday
   // and then (re)visiting a screen reflects it without a full app restart.
@@ -64,11 +66,14 @@ export default function RootLayout() {
 
   // Every full-screen background — normal or special-event — is full-bleed
   // and extends behind the header (which is already transparent on these
-  // routes; see app-header.tsx's isImmersiveRoute). Both Home and Tasks
-  // always use plain "cover" (crop-to-fill, aspect ratio preserved, no
-  // stretching) with no exceptions, for either their normal or birthday
-  // background — this guarantees zero gaps at every window size, which a
-  // conditional "contain" (tried and reverted) could not.
+  // routes; see app-header.tsx's isImmersiveRoute). Home and Tasks always
+  // use plain "cover" (crop-to-fill, aspect ratio preserved, no stretching)
+  // with no exceptions, for either their normal or birthday background —
+  // this guarantees zero gaps at every window size, which a conditional
+  // "contain" (tried and reverted) could not. Stats' own background
+  // (stats_background.png) isn't part of the birthday/room-background
+  // system — it's a single static image — but uses the same full-bleed
+  // "cover" treatment for the same reason.
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
@@ -102,6 +107,9 @@ export default function RootLayout() {
           contentFit="cover"
           cachePolicy="memory-disk"
         />
+      ) : null}
+      {isStats ? (
+        <Image source={STATS_BACKGROUND} style={styles.homeBackground} contentFit="cover" cachePolicy="memory-disk" />
       ) : null}
       <AppHeader />
       <Slot />
