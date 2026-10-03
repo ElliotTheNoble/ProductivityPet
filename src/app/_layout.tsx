@@ -1,12 +1,14 @@
 import { Image } from 'expo-image';
 import { DarkTheme, DefaultTheme, Slot, ThemeProvider, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import { StyleSheet, View, useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppHeader } from '@/components/app-header';
 import { ROOMS as ROOM_PREVIEWS } from '@/components/rooms-card';
 import { useBirthdayMode } from '@/hooks/use-birthday-mode';
+import { getPetProfile } from '@/utils/pet-profile';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 
 SplashScreen.preventAutoHideAsync();
@@ -55,6 +57,19 @@ export default function RootLayout() {
   // navigation, unlike the screens it wraps), so adding/removing a birthday
   // and then (re)visiting a screen reflects it without a full app restart.
   const hasBirthdayToday = useBirthdayMode(pathname);
+
+  // Starts the virtual pet-care profile the moment the app launches —
+  // RootLayout mounts exactly once for the app's lifetime, so this fires
+  // once per app session, not per navigation. getPetProfile() (see
+  // src/utils/pet-profile.ts) creates and persists a default profile the
+  // very first time it's ever called for this device, or loads/caches the
+  // existing one on every later launch — it already handles all of that
+  // itself, including never touching an existing adoptionDate. Nothing here
+  // reads or renders the result; this step only ensures the profile exists
+  // in storage. No UI, decay, bedtime, sickness, poop, or token logic yet.
+  useEffect(() => {
+    getPetProfile().catch(() => {});
+  }, []);
 
   // Ordered priority list of currently-active special events — to add
   // another one later (Christmas, Halloween, ...), compute its own "is it

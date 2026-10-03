@@ -292,3 +292,16 @@ Track planned and in-progress features here. Copy the template for each new feat
   - Category icons and the Lifetime Stats icons (clipboard, star) use new custom Stats-specific artwork (`assets/images/task_icons/stats_Icons.png`) instead of generic icons.
   - Small decorative marks use a custom set of pastel 3-line accent marks (`assets/images/stats/accent_marks.png`, a different color per category/stat) instead of generic sparkle/star emoji.
   - The "Your Progress" banner at the top is now simple text only, with no emoji decorations.
+
+### [FEATURE-033] Persistent Pet Profile foundation (virtual pet-care system)
+
+- **Status:** In Progress
+- **Description:** First step of the new virtual pet-care system — a persistent Pet Profile is now stored using AsyncStorage, created automatically the first time the app runs and loaded (not recreated) on every later launch. This step is the data foundation only; no pet-care behavior or UI is built on top of it yet.
+- **Notes:**
+  - The profile stores Hunger, Cleanliness, Happiness, Energy, Paw Tokens, adoption date, last-updated time, sleeping state, sick state, and a poop-event state.
+  - Hunger, Cleanliness, Happiness, and Energy are constrained to 0–100.
+  - If no profile exists yet, a new one is created automatically with Hunger/Cleanliness/Happiness/Energy at 100 and Paw Tokens at 0.
+  - If a profile already exists, it's loaded as-is instead of being recreated.
+  - The adoption date is set once, the first time the profile is created, and is preserved on every later load — it does not reset when the app is reopened.
+  - Tested by reloading the app and confirming the same profile, including the same adoption date, was still there afterward.
+  - Not part of this step yet: need decay over time, the bedtime/sleep schedule, sickness behavior, poop generation, Paw Token earning, and any Pet Care UI. Those are planned as separate, later steps.

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing, type ThemeColor } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskCategory } from '@/utils/categorize-task';
 import { TASKS_PER_STAGE, getStageProgress, type PetStage } from '@/utils/pet-stage';
@@ -169,15 +169,17 @@ const CATEGORY_CARD_WIDTH_PERCENT: Record<1 | 2 | 3, `${number}%`> = {
   3: '31%',
 };
 
-// A distinct soft pastel per category (blue/green/yellow/pink/purple), all
-// pulled from the existing palette — nothing new, same "one token per item"
-// pattern already used for the Rooms hub's task-count badges.
-const CATEGORY_CARD_COLOR: Record<TaskCategory, ThemeColor> = {
-  Study: 'sky',
-  Exercise: 'mint',
-  Clean: 'apricot',
-  Health: 'backgroundElement', // blush pink
-  Personal: 'backgroundSelected', // lavender
+// Very light, creamy pastel tint per category — deliberately much lighter
+// than the existing sky/mint/apricot/backgroundElement/backgroundSelected
+// theme tokens (which read as solid/saturated next to this card's soft
+// style), so these are their own local hex values rather than reusing a
+// theme token.
+const CATEGORY_CARD_BACKGROUND: Record<TaskCategory, string> = {
+  Study: '#E8F4FB', // very light baby blue
+  Exercise: '#E6F7EF', // very light mint green
+  Clean: '#FBF3DC', // very light creamy yellow
+  Health: '#FCEEF1', // very light blush pink
+  Personal: '#EFE9FA', // very light lavender
 };
 
 // Faint decorative glyphs scattered across the whole page — purely
@@ -348,9 +350,7 @@ export function StatsHubScreen() {
                       Tasks Completed
                     </ThemedText>
                   </View>
-                  <View style={styles.statPanelAccent}>
-                    <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={18} />
-                  </View>
+                  <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={32} />
                 </View>
 
                 <View style={styles.statPanel}>
@@ -363,9 +363,7 @@ export function StatsHubScreen() {
                       Important Tasks Completed
                     </ThemedText>
                   </View>
-                  <View style={styles.statPanelAccent}>
-                    <AccentMarkIcon crop={PINK_ACCENT_CROP} size={18} />
-                  </View>
+                  <AccentMarkIcon crop={PINK_ACCENT_CROP} size={32} />
                 </View>
               </ThemedView>
             </View>
@@ -382,26 +380,25 @@ export function StatsHubScreen() {
 
             <View style={styles.categoryGrid}>
               {ALL_CATEGORIES.map((category) => (
-                <ThemedView
+                <View
                   key={category}
-                  type={CATEGORY_CARD_COLOR[category]}
                   style={[
                     styles.categoryCard,
                     styles.shadow,
-                    { width: CATEGORY_CARD_WIDTH_PERCENT[columns] },
+                    { width: CATEGORY_CARD_WIDTH_PERCENT[columns], backgroundColor: CATEGORY_CARD_BACKGROUND[category] },
                   ]}>
-                  <View style={styles.categorySparkle}>
-                    <AccentMarkIcon crop={CATEGORY_ACCENT_CROP[category]} size={18} />
-                  </View>
                   <StatsIcon crop={CATEGORY_ICON_CROP[category]} size={64} />
                   <ThemedText type="smallBold" style={styles.categoryName}>
                     {category}
                   </ThemedText>
-                  <ThemedText style={styles.categoryNumber}>{categoryCounts[category]}</ThemedText>
+                  <View style={styles.categoryNumberRow}>
+                    <ThemedText style={styles.categoryNumber}>{categoryCounts[category]}</ThemedText>
+                    <AccentMarkIcon crop={CATEGORY_ACCENT_CROP[category]} size={26} />
+                  </View>
                   <ThemedText type="small" themeColor="textSecondary">
                     completed tasks
                   </ThemedText>
-                </ThemedView>
+                </View>
               ))}
             </View>
           </View>
@@ -643,12 +640,6 @@ const styles = StyleSheet.create({
     lineHeight: 50,
     fontWeight: '800',
   },
-  statPanelAccent: {
-    position: 'absolute',
-    top: Spacing.two,
-    right: Spacing.two,
-    opacity: 0.85,
-  },
   categoryPanel: {
     width: '100%',
     borderRadius: Spacing.five,
@@ -683,15 +674,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
   },
-  categorySparkle: {
-    position: 'absolute',
-    top: Spacing.two,
-    right: Spacing.two,
-    opacity: 0.85,
-  },
   categoryName: {
     fontSize: 17,
     lineHeight: 22,
+  },
+  // Groups the big number with its accent mark so the mark sits directly
+  // beside the stat instead of floating in the card's corner.
+  categoryNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
   },
   categoryNumber: {
     fontSize: 38,

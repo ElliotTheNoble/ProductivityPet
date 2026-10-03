@@ -33,6 +33,10 @@ Track notable changes to the project here. Newest entries at the top.
 - New Stats-specific icon artwork (`assets/images/task_icons/stats_Icons.png`) for the category and Lifetime Stats icons, replacing generic icons.
 - New custom pastel 3-line accent marks (`assets/images/stats/accent_marks.png`), replacing the generic sparkle/star decorations on Lifetime Stats and Completed by Category.
 - Cleaned up the "Your Progress" banner by removing the generic emoji decorations around it, keeping it as simple text.
+- Created the persistent Pet Profile foundation (`src/utils/pet-profile.ts`) using AsyncStorage — the foundation for the future virtual pet-care system. Stores Hunger, Cleanliness, Happiness, Energy, Paw Tokens, adoption date, last-updated time, sleeping state, sick state, and a poop-event state.
+- A new Pet Profile is created automatically the first time the app runs; an existing one is loaded instead of recreated on every later launch, and the original adoption date is preserved across app launches.
+- Connected Pet Profile loading to app startup (`src/app/_layout.tsx`), so a profile now exists in storage from the very first launch. No pet-care UI or behavior yet — this is the data foundation only.
+- Tested persistence by reloading the app and confirming the same profile, including the same adoption date, was still there afterward.
 
 ---
 
