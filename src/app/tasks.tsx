@@ -627,22 +627,39 @@ export default function TasksScreen() {
             No appointments for this day.
           </ThemedText>
         ) : (
-          dayEvents.map((event) => (
-            <View key={event.id} style={styles.row}>
-              <View style={styles.rowMain}>
-                <TaskIcon category={event.category} />
-                <View style={styles.rowTextGroup}>
-                  <ThemedText>{event.text}</ThemedText>
-                  {event.time ? (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {event.time}
+          dayEvents.map((event) => {
+            const completed = isOccurrenceCompleted(event, selectedDate);
+            return (
+              <View key={event.id} style={styles.row}>
+                <Pressable
+                  onPress={() => handleToggle(event.id)}
+                  style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      { borderColor: theme.backgroundSelected },
+                      completed && { backgroundColor: theme.mint, borderColor: theme.mint },
+                    ]}>
+                    {completed ? <ThemedText style={styles.checkmark}>✓</ThemedText> : null}
+                  </View>
+                  <TaskIcon category={event.category} />
+                  <View style={styles.rowTextGroup}>
+                    <ThemedText
+                      style={completed ? styles.completedText : undefined}
+                      themeColor={completed ? 'textSecondary' : 'text'}>
+                      {event.text}
                     </ThemedText>
-                  ) : null}
-                </View>
+                    {event.time ? (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {event.time}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                </Pressable>
+                <TaskMenu items={buildNonTaskMenuItems(event)} />
               </View>
-              <TaskMenu items={buildNonTaskMenuItems(event)} />
-            </View>
-          ))
+            );
+          })
         )}
       </View>
 

@@ -8,7 +8,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppHeader } from '@/components/app-header';
 import { ROOMS as ROOM_PREVIEWS } from '@/components/rooms-card';
 import { useBirthdayMode } from '@/hooks/use-birthday-mode';
-import { getPetProfile } from '@/utils/pet-profile';
+import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 
 SplashScreen.preventAutoHideAsync();
@@ -60,15 +60,16 @@ export default function RootLayout() {
 
   // Starts the virtual pet-care profile the moment the app launches —
   // RootLayout mounts exactly once for the app's lifetime, so this fires
-  // once per app session, not per navigation. getPetProfile() (see
-  // src/utils/pet-profile.ts) creates and persists a default profile the
-  // very first time it's ever called for this device, or loads/caches the
-  // existing one on every later launch — it already handles all of that
-  // itself, including never touching an existing adoptionDate. Nothing here
-  // reads or renders the result; this step only ensures the profile exists
-  // in storage. No UI, decay, bedtime, sickness, poop, or token logic yet.
+  // once per app session, not per navigation. loadPetProfileWithNeedsUpdate
+  // (see src/utils/pet-needs.ts) loads the existing profile (creating a
+  // default one on the very first-ever launch, same as before), brings
+  // Hunger up to date with real elapsed time since lastUpdatedAt, and saves
+  // the result only if anything actually changed — adoptionDate is never
+  // touched. Nothing here reads or renders the result; this step only
+  // ensures the stored profile reflects real elapsed time. No UI, feeding,
+  // bedtime, sickness, poop, token, or other-need logic yet.
   useEffect(() => {
-    getPetProfile().catch(() => {});
+    loadPetProfileWithNeedsUpdate().catch(() => {});
   }, []);
 
   // Ordered priority list of currently-active special events — to add

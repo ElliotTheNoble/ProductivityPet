@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
 import { normalizeTask, todayISO, type Task } from '@/utils/tasks';
 
 // Single source of truth for the storage key — Home, Tasks, birthday
@@ -51,8 +52,12 @@ export async function getCachedTasks(): Promise<Task[]> {
 // list) whenever they persist a change — writes through to AsyncStorage
 // exactly as before, and updates the shared in-memory cache in the same
 // step so every other reader immediately sees the latest data without a
-// storage round-trip of their own.
+// storage round-trip of their own. Also reconciles Paw Token earning (see
+// @/utils/paw-tokens.ts) against the same tasks — this is a read-only,
+// additive side effect from Paw Tokens' own perspective; it never changes
+// what gets written here or what callers receive back.
 export function persistCachedTasks(tasks: Task[]): void {
   cachedTasks = tasks;
   AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+  reconcilePawTokenEarnings(tasks).catch(() => {});
 }

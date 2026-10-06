@@ -88,9 +88,14 @@ export type DisplayTask = {
   time?: string;
 };
 
-// A read-only appointment/birthday row for a single date — neither has a
-// completion state and neither affects pet progress. `kind` lets the UI
-// show a cake icon for birthdays instead of the usual category icon.
+// A read/complete-only appointment/birthday row for a single date. `kind`
+// lets the UI show a cake icon for birthdays instead of the usual category
+// icon. `completed` is meaningful only for an appointment (kind: 'event')
+// — it reads the same underlying completed/completedDates fields a task
+// does (see isOccurrenceCompleted), so completing an appointment uses the
+// exact same persistence and Paw Token earning path a task does. A
+// birthday is never completable, so this is always false for one;
+// nothing in the UI reads it for that kind.
 export type DisplayAppointment = {
   id: string;
   text: string;
@@ -98,6 +103,7 @@ export type DisplayAppointment = {
   kind: 'event' | 'birthday';
   time?: string;
   isRepeating: boolean;
+  completed: boolean;
 };
 
 export function dateToISO(date: Date): string {

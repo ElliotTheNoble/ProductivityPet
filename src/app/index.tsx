@@ -14,6 +14,12 @@ import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
+import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
+import { bathePet } from '@/utils/pet-bathing';
+import { feedPet } from '@/utils/pet-feeding';
+import { playWithPet } from '@/utils/pet-playing';
+import { restPet } from '@/utils/pet-resting';
+import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
 import { getPetStage } from '@/utils/pet-stage';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
@@ -69,6 +75,18 @@ export default function HomeScreen() {
   const [mood, setMood] = useState<Mood>(DEFAULT_MOOD);
   const [isMoodHydrated, setIsMoodHydrated] = useState(false);
   const [moodMessage, setMoodMessage] = useState(() => getRandomMoodMessage(DEFAULT_MOOD));
+  // Local copy of the Pet Profile, used only by the Feed button below for
+  // now. Seeded from getPetProfile() on mount — not
+  // loadPetProfileWithNeedsUpdate() — because src/app/_layout.tsx already
+  // runs the real decay/bedtime catch-up exactly once per app session on
+  // launch (see that file); getPetProfile() just resolves that same
+  // already-current profile from its shared in-memory cache instead of
+  // re-running (and potentially re-saving) that catch-up a second time.
+  const [petProfile, setPetProfile] = useState<PetProfile | null>(null);
+  const [isFeeding, setIsFeeding] = useState(false);
+  const [isBathing, setIsBathing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isResting, setIsResting] = useState(false);
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useWindowDimensions();
@@ -108,6 +126,72 @@ export default function HomeScreen() {
     AsyncStorage.setItem(MOOD_STORAGE_KEY, mood).catch(() => {});
   }, [mood, isMoodHydrated]);
 
+  // Seed the local Pet Profile state once on mount (see the petProfile
+  // declaration above for why this uses getPetProfile() rather than
+  // re-running the needs/bedtime catch-up here).
+  useEffect(() => {
+    let cancelled = false;
+    getPetProfile()
+      .then((profile) => {
+        if (!cancelled) setPetProfile(profile);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Feed button handler — calls the existing persistent feedPet() action
+  // (see @/utils/pet-feeding.ts) and updates local state with whatever it
+  // actually saved; no feeding math lives here. The isFeeding guard (also
+  // passed down as the button's `disabled` prop) blocks a second feed from
+  // starting while one is still in flight, rather than letting rapid taps
+  // queue up multiple overlapping calls.
+  function handleFeed() {
+    if (isFeeding) return;
+    setIsFeeding(true);
+    feedPet()
+      .then((updated) => setPetProfile(updated))
+      .catch(() => {})
+      .finally(() => setIsFeeding(false));
+  }
+
+  // Same shape as handleFeed, calling the existing persistent bathePet()
+  // action (see @/utils/pet-bathing.ts) — no Cleanliness math lives here.
+  function handleBathe() {
+    if (isBathing) return;
+    setIsBathing(true);
+    bathePet()
+      .then((updated) => setPetProfile(updated))
+      .catch(() => {})
+      .finally(() => setIsBathing(false));
+  }
+
+  // Same shape as handleFeed/handleBathe, calling the existing persistent
+  // playWithPet() action (see @/utils/pet-playing.ts) — no Happiness math
+  // lives here.
+  function handlePlay() {
+    if (isPlaying) return;
+    setIsPlaying(true);
+    playWithPet()
+      .then((updated) => setPetProfile(updated))
+      .catch(() => {})
+      .finally(() => setIsPlaying(false));
+  }
+
+  // Same shape as the other three handlers, calling the existing
+  // persistent restPet() action (see @/utils/pet-resting.ts) — no Energy
+  // math lives here. restPet() never sets isSleeping; the automatic 8 PM-
+  // 8 AM bedtime system stays entirely separate and untouched by this.
+  function handleRest() {
+    if (isResting) return;
+    setIsResting(true);
+    restPet()
+      .then((updated) => setPetProfile(updated))
+      .catch(() => {})
+      .finally(() => setIsResting(false));
+  }
+
   // Pick a fresh random message whenever the mood changes (including once
   // hydration loads a saved mood), then occasionally re-roll a different
   // message from the same pool while idle — not constantly or rapidly.
@@ -133,6 +217,12 @@ export default function HomeScreen() {
       .then((cached) => {
         if (cancelled) return;
         setTasks(cached);
+        // Seeds the Paw Token "already awarded" record from whatever is
+        // already completed, using this very first load this session —
+        // before any real edit can happen — so tasks completed before
+        // this feature existed are recorded as already-accounted-for
+        // rather than suddenly paying out. See @/utils/paw-tokens.ts.
+        reconcilePawTokenEarnings(cached).catch(() => {});
       })
       .finally(() => {
         if (!cancelled) {
@@ -215,6 +305,17 @@ export default function HomeScreen() {
     }
   }
 
+  // Marks an appointment done/not-done — deliberately separate from
+  // toggleTask above rather than reused: it uses the exact same underlying
+  // toggleTaskOccurrence (so completion is stored and persisted exactly
+  // like a task's, which is what lets it flow through to Paw Token
+  // earning via persistCachedTasks -> reconcilePawTokenEarnings), but
+  // skips the task-specific speech-bubble message and "all done"
+  // celebration check, which were built for Today's Tasks specifically.
+  function toggleAppointment(id: string) {
+    setTasks((prev) => toggleTaskOccurrence(prev, id, todayISO()));
+  }
+
   function toggleImportant(id: string) {
     setTasks((prev) =>
       prev.map((task) => (task.id === id ? { ...task, important: !task.important } : task))
@@ -283,6 +384,7 @@ export default function HomeScreen() {
       kind: task.kind as 'event' | 'birthday',
       time: task.time,
       isRepeating: !!task.repeat,
+      completed: isOccurrenceCompleted(task, today),
     }));
 
   const taskCard = (
@@ -301,6 +403,7 @@ export default function HomeScreen() {
   const appointmentsCard = (
     <AppointmentsCard
       appointments={todaysDisplayAppointments}
+      onToggleAppointment={toggleAppointment}
       onDeleteAppointment={deleteTask}
       onStopRepeating={stopRepeating}
       onRemoveToday={removeTodayOccurrence}
@@ -323,7 +426,22 @@ export default function HomeScreen() {
           <View style={styles.splitRow}>
             <View style={styles.petOverlayWide} pointerEvents="box-none">
               <View style={styles.petOverlaySpacerTop} />
-              <PetRoom stage={petStage} message={displayedPetMessage} />
+              <PetRoom
+                stage={petStage}
+                message={displayedPetMessage}
+                hunger={petProfile?.hunger}
+                cleanliness={petProfile?.cleanliness}
+                happiness={petProfile?.happiness}
+                energy={petProfile?.energy}
+                onFeed={handleFeed}
+                isFeeding={isFeeding}
+                onBathe={handleBathe}
+                isBathing={isBathing}
+                onPlay={handlePlay}
+                isPlaying={isPlaying}
+                onRest={handleRest}
+                isResting={isResting}
+              />
               <View style={styles.petOverlaySpacerBottom} />
             </View>
 
@@ -349,7 +467,22 @@ export default function HomeScreen() {
           // the top, and everything else scrolls independently beneath it.
           <View style={styles.narrowStack}>
             <View style={styles.fixedPetTop}>
-              <PetRoom stage={petStage} message={displayedPetMessage} />
+              <PetRoom
+                stage={petStage}
+                message={displayedPetMessage}
+                hunger={petProfile?.hunger}
+                cleanliness={petProfile?.cleanliness}
+                happiness={petProfile?.happiness}
+                energy={petProfile?.energy}
+                onFeed={handleFeed}
+                isFeeding={isFeeding}
+                onBathe={handleBathe}
+                isBathing={isBathing}
+                onPlay={handlePlay}
+                isPlaying={isPlaying}
+                onRest={handleRest}
+                isResting={isResting}
+              />
             </View>
             <ScrollView
               style={styles.scrollPane}

@@ -153,4 +153,26 @@ export function savePetProfile(profile: PetProfile): void {
   const updated: PetProfile = { ...profile, lastUpdatedAt: new Date().toISOString() };
   cachedProfile = updated;
   AsyncStorage.setItem(PET_PROFILE_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+  notifyPetProfileListeners(updated);
+}
+
+// Lets a UI component (e.g. the header's Paw Token balance) stay in sync
+// with the profile without polling or re-reading storage itself — it's
+// notified synchronously every time ANY save happens, regardless of which
+// screen or action (Feed/Bath/Play/Rest, Paw Token earning, etc.)
+// triggered it. Returns an unsubscribe function; callers should call it on
+// unmount. Deliberately minimal (a plain Set of callbacks) rather than a
+// full pub/sub library — this is the only place in the app that currently
+// needs cross-component reactivity for the Pet Profile.
+const petProfileListeners = new Set<(profile: PetProfile) => void>();
+
+export function subscribeToPetProfile(listener: (profile: PetProfile) => void): () => void {
+  petProfileListeners.add(listener);
+  return () => {
+    petProfileListeners.delete(listener);
+  };
+}
+
+function notifyPetProfileListeners(profile: PetProfile): void {
+  petProfileListeners.forEach((listener) => listener(profile));
 }

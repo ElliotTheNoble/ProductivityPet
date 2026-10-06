@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { TaskIcon } from '@/components/task-icon';
 import { TaskMenu, type TaskMenuItem } from '@/components/task-menu';
@@ -10,19 +10,21 @@ import type { DisplayAppointment } from '@/utils/tasks';
 
 type AppointmentsCardProps = {
   appointments: DisplayAppointment[];
+  onToggleAppointment: (id: string) => void;
   onDeleteAppointment: (id: string) => void;
   onStopRepeating: (id: string) => void;
   onRemoveToday: (id: string) => void;
 };
 
-// Appointments are read/manage-only here, same as TaskCard — they're added
-// from the Tasks tab. No checkboxes: appointments never complete and never
-// affect pet progress, which is why this stays a fully separate card from
-// TaskCard instead of a checkbox-less row style inside it. The three-dot
-// menu reuses the same TaskMenu component (and the same history-safe
-// stop/remove pattern) TaskCard uses, for a repeating appointment.
+// Appointments are added from the Tasks tab, same as before. An
+// appointment (kind: 'event') now gets the same checkbox TaskCard uses —
+// tapping it calls onToggleAppointment, which uses the exact same
+// completion storage a task does, so it earns Paw Tokens the same way
+// (see @/utils/paw-tokens.ts). A birthday is still never completable —
+// its row stays exactly as it was, with no checkbox and not pressable.
 export function AppointmentsCard({
   appointments,
+  onToggleAppointment,
   onDeleteAppointment,
   onStopRepeating,
   onRemoveToday,
@@ -52,17 +54,40 @@ export function AppointmentsCard({
                 },
               ]}>
               {appointment.kind === 'birthday' ? (
-                <ThemedText style={styles.cakeIcon}>🎂</ThemedText>
+                <>
+                  <ThemedText style={styles.cakeIcon}>🎂</ThemedText>
+                  <View style={styles.textGroup}>
+                    <ThemedText>{appointment.text}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {appointment.time ? appointment.time : appointment.category}
+                    </ThemedText>
+                  </View>
+                </>
               ) : (
-                <TaskIcon category={appointment.category} />
+                <Pressable
+                  onPress={() => onToggleAppointment(appointment.id)}
+                  style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      { borderColor: theme.backgroundSelected },
+                      appointment.completed && { backgroundColor: theme.mint, borderColor: theme.mint },
+                    ]}>
+                    {appointment.completed ? <ThemedText style={styles.checkmark}>✓</ThemedText> : null}
+                  </View>
+                  <TaskIcon category={appointment.category} />
+                  <View style={styles.textGroup}>
+                    <ThemedText
+                      style={appointment.completed && styles.completedText}
+                      themeColor={appointment.completed ? 'textSecondary' : 'text'}>
+                      {appointment.text}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {appointment.time ? appointment.time : appointment.category}
+                    </ThemedText>
+                  </View>
+                </Pressable>
               )}
-
-              <View style={styles.textGroup}>
-                <ThemedText>{appointment.text}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {appointment.time ? appointment.time : appointment.category}
-                </ThemedText>
-              </View>
 
               <TaskMenu
                 items={buildAppointmentMenuItems(
@@ -153,5 +178,30 @@ const styles = StyleSheet.create({
     fontSize: 22,
     width: 28,
     textAlign: 'center',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  rowMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flex: 1,
+  },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
   },
 });

@@ -13,16 +13,70 @@ type PetRoomProps = {
   // vertically centering it in a cramped space. Narrow/mobile layouts stay
   // compact, same as before.
   spacious?: boolean;
+  // The real Hunger value, passed straight through to PetPlaceholder —
+  // see that component. Optional so the room-detail screens keep working
+  // unchanged without it.
+  hunger?: number;
+  // Same as hunger, for Cleanliness.
+  cleanliness?: number;
+  // Same as hunger, for Happiness.
+  happiness?: number;
+  // Same as hunger, for Energy.
+  energy?: number;
+  // Passed straight through to PetPlaceholder, which renders the
+  // Feed/Bath/Play/Rest buttons only when their own handler is provided —
+  // see that component. Optional so the room-detail screens (which also
+  // render PetRoom, but shouldn't get these buttons) keep working
+  // unchanged.
+  onFeed?: () => void;
+  isFeeding?: boolean;
+  onBathe?: () => void;
+  isBathing?: boolean;
+  onPlay?: () => void;
+  isPlaying?: boolean;
+  onRest?: () => void;
+  isResting?: boolean;
 };
 
 // The living-room background now lives once, fixed behind the whole Home
 // screen (see src/app/index.tsx), instead of inside its own framed box
 // here — this just places the pet (+ speech bubble) with some breathing
 // room so it reads as standing in that room rather than floating in a card.
-export function PetRoom({ stage, message, spacious = false }: PetRoomProps) {
+export function PetRoom({
+  stage,
+  message,
+  spacious = false,
+  hunger,
+  cleanliness,
+  happiness,
+  energy,
+  onFeed,
+  isFeeding,
+  onBathe,
+  isBathing,
+  onPlay,
+  isPlaying,
+  onRest,
+  isResting,
+}: PetRoomProps) {
   return (
     <View style={[styles.scene, spacious && styles.sceneSpacious]}>
-      <PetPlaceholder stage={stage} message={message} />
+      <PetPlaceholder
+        stage={stage}
+        message={message}
+        hunger={hunger}
+        cleanliness={cleanliness}
+        happiness={happiness}
+        energy={energy}
+        onFeed={onFeed}
+        isFeeding={isFeeding}
+        onBathe={onBathe}
+        isBathing={isBathing}
+        onPlay={onPlay}
+        isPlaying={isPlaying}
+        onRest={onRest}
+        isResting={isResting}
+      />
     </View>
   );
 }

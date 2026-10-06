@@ -1,5 +1,5 @@
-import { ComingSoonScreen } from '@/components/coming-soon-screen';
+import { ShopScreen } from '@/components/shop-screen';
 
-export default function ShopScreen() {
-  return <ComingSoonScreen title="Shop" />;
+export default function ShopPage() {
+  return <ShopScreen />;
 }

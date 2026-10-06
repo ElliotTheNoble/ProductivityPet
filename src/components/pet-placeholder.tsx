@@ -1,14 +1,38 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import type { PetStage } from '@/utils/pet-stage';
 
 type PetPlaceholderProps = {
   stage: PetStage;
   message?: string | null;
+  // The real Hunger value from the persistent Pet Profile (see
+  // @/utils/pet-profile.ts), passed down from Home — optional so this
+  // component never has to invent a fake value before the profile has
+  // loaded; the bar simply doesn't render until a real number arrives.
+  hunger?: number;
+  // Same as hunger, for Cleanliness — real petProfile.cleanliness value,
+  // passed down from Home.
+  cleanliness?: number;
+  // Same as hunger, for Happiness.
+  happiness?: number;
+  // Same as hunger, for Energy.
+  energy?: number;
+  // All optional so every existing caller (e.g. the Rooms hub's pet
+  // preview, if any) keeps working unchanged without passing these — each
+  // button only renders when its own handler is actually provided.
+  onFeed?: () => void;
+  isFeeding?: boolean;
+  onBathe?: () => void;
+  isBathing?: boolean;
+  onPlay?: () => void;
+  isPlaying?: boolean;
+  onRest?: () => void;
+  isResting?: boolean;
 };
 
 // Egg and Hatchling each have their own dedicated full illustration.
@@ -32,8 +56,30 @@ function getStageImage(stage: PetStage) {
   }
 }
 
-export function PetPlaceholder({ stage, message }: PetPlaceholderProps) {
+export function PetPlaceholder({
+  stage,
+  message,
+  hunger,
+  cleanliness,
+  happiness,
+  energy,
+  onFeed,
+  isFeeding = false,
+  onBathe,
+  isBathing = false,
+  onPlay,
+  isPlaying = false,
+  onRest,
+  isResting = false,
+}: PetPlaceholderProps) {
+  const theme = useTheme();
   const { source, aspectRatio } = getStageImage(stage);
+  // Rounded for display only — the real, unrounded value is what's stored
+  // and what Feed's +20 math (see @/utils/pet-feeding.ts) operates on.
+  const hungerPercent = hunger !== undefined ? Math.round(hunger) : null;
+  const cleanlinessPercent = cleanliness !== undefined ? Math.round(cleanliness) : null;
+  const happinessPercent = happiness !== undefined ? Math.round(happiness) : null;
+  const energyPercent = energy !== undefined ? Math.round(energy) : null;
 
   return (
     <View style={styles.wrapper}>
@@ -46,6 +92,154 @@ export function PetPlaceholder({ stage, message }: PetPlaceholderProps) {
       <View style={[styles.petWrap, { aspectRatio }]}>
         <Image source={source} style={styles.petImage} contentFit="contain" />
       </View>
+
+      {/* Hunger status bar — reads the real petProfile.hunger value passed
+          down from Home, no separate/fake value. Only renders once a real
+          number has loaded, and re-renders immediately whenever Home's
+          petProfile state updates (e.g. right after Feed). */}
+      {hungerPercent !== null ? (
+        <View style={styles.needBar}>
+          <View style={styles.needLabelRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Hunger
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {hungerPercent}%
+            </ThemedText>
+          </View>
+          <View style={[styles.needTrack, { backgroundColor: theme.backgroundElement }]}>
+            <View style={{ flex: hungerPercent, backgroundColor: theme.accent }} />
+            <View style={{ flex: 100 - hungerPercent }} />
+          </View>
+        </View>
+      ) : null}
+
+      {/* Cleanliness status bar — same shape as the Hunger bar above, reads
+          the real petProfile.cleanliness value, no separate/fake value.
+          Uses sky (the same pastel blue as the Bath button) to stay
+          visually distinct from Hunger's pink. */}
+      {cleanlinessPercent !== null ? (
+        <View style={styles.needBar}>
+          <View style={styles.needLabelRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Cleanliness
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {cleanlinessPercent}%
+            </ThemedText>
+          </View>
+          <View style={[styles.needTrack, { backgroundColor: theme.backgroundElement }]}>
+            <View style={{ flex: cleanlinessPercent, backgroundColor: theme.sky }} />
+            <View style={{ flex: 100 - cleanlinessPercent }} />
+          </View>
+        </View>
+      ) : null}
+
+      {/* Happiness status bar — same shape as the bars above, reads the
+          real petProfile.happiness value, no separate/fake value. Uses
+          mint (the same pastel green as the Play button) to stay visually
+          distinct from Hunger's pink and Cleanliness's blue. */}
+      {happinessPercent !== null ? (
+        <View style={styles.needBar}>
+          <View style={styles.needLabelRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Happiness
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {happinessPercent}%
+            </ThemedText>
+          </View>
+          <View style={[styles.needTrack, { backgroundColor: theme.backgroundElement }]}>
+            <View style={{ flex: happinessPercent, backgroundColor: theme.mint }} />
+            <View style={{ flex: 100 - happinessPercent }} />
+          </View>
+        </View>
+      ) : null}
+
+      {/* Energy status bar — same shape as the bars above, reads the real
+          petProfile.energy value, no separate/fake value. Uses purple (a
+          soft lavender already used elsewhere in the app, e.g. the active
+          nav pill) rather than backgroundSelected — that was too close in
+          lightness to the track color below to read clearly against it,
+          unlike accent/sky/mint's stronger contrast on the other three
+          bars. */}
+      {energyPercent !== null ? (
+        <View style={styles.needBar}>
+          <View style={styles.needLabelRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Energy
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {energyPercent}%
+            </ThemedText>
+          </View>
+          <View style={[styles.needTrack, { backgroundColor: theme.backgroundElement }]}>
+            <View style={{ flex: energyPercent, backgroundColor: theme.purple }} />
+            <View style={{ flex: 100 - energyPercent }} />
+          </View>
+        </View>
+      ) : null}
+
+      {/* Basic Feed/Bath/Play/Rest interactions — call the persistent
+          feedPet()/bathePet()/playWithPet()/restPet() actions (see
+          @/utils/pet-feeding.ts, @/utils/pet-bathing.ts,
+          @/utils/pet-playing.ts, and @/utils/pet-resting.ts) via the
+          callbacks passed down from Home; this component doesn't know or
+          duplicate any of those calculations. disabled (while
+          isFeeding/isBathing/isPlaying/isResting) both greys each button
+          out and makes React Native itself ignore extra taps, so an
+          action already in flight can't be triggered again.
+          Temporary/basic — just enough to manually test the persistent
+          actions. Rest is a manual Energy top-up only — it never touches
+          isSleeping, which stays entirely owned by the automatic 8 PM-8 AM
+          bedtime system (see restPet itself, and resolvePetNeedsAcrossBedtime
+          in pet-needs.ts). */}
+      {onFeed || onBathe || onPlay || onRest ? (
+        <View style={styles.actionsRow}>
+          {onFeed ? (
+            <Pressable
+              onPress={onFeed}
+              disabled={isFeeding}
+              style={({ pressed }) => [pressed && styles.pressed, isFeeding && styles.actionButtonDisabled]}>
+              <ThemedView type="accent" style={styles.actionButton}>
+                <ThemedText type="smallBold" style={styles.feedButtonText}>
+                  {isFeeding ? 'Feeding…' : 'Feed'}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+          ) : null}
+          {onBathe ? (
+            <Pressable
+              onPress={onBathe}
+              disabled={isBathing}
+              style={({ pressed }) => [pressed && styles.pressed, isBathing && styles.actionButtonDisabled]}>
+              <ThemedView type="sky" style={styles.actionButton}>
+                <ThemedText type="smallBold">{isBathing ? 'Bathing…' : 'Bath'}</ThemedText>
+              </ThemedView>
+            </Pressable>
+          ) : null}
+          {onPlay ? (
+            <Pressable
+              onPress={onPlay}
+              disabled={isPlaying}
+              style={({ pressed }) => [pressed && styles.pressed, isPlaying && styles.actionButtonDisabled]}>
+              <ThemedView type="mint" style={styles.actionButton}>
+                <ThemedText type="smallBold">{isPlaying ? 'Playing…' : 'Play'}</ThemedText>
+              </ThemedView>
+            </Pressable>
+          ) : null}
+          {onRest ? (
+            <Pressable
+              onPress={onRest}
+              disabled={isResting}
+              style={({ pressed }) => [pressed && styles.pressed, isResting && styles.actionButtonDisabled]}>
+              <ThemedView type="backgroundSelected" style={styles.actionButton}>
+                <ThemedText type="smallBold">{isResting ? 'Resting…' : 'Rest'}</ThemedText>
+              </ThemedView>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -69,5 +263,41 @@ const styles = StyleSheet.create({
   petImage: {
     width: '100%',
     height: '100%',
+  },
+  needBar: {
+    width: '70%',
+    minWidth: 150,
+    maxWidth: 240,
+    marginTop: Spacing.two,
+    gap: Spacing.half,
+  },
+  needLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  needTrack: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+  },
+  actionButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.five,
+  },
+  feedButtonText: {
+    color: '#FFFFFF',
+  },
+  actionButtonDisabled: {
+    opacity: 0.6,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
