@@ -13,8 +13,17 @@ type SpriteCropProps = {
   cropY: number;
   cropWidth: number;
   cropHeight: number;
-  // The square box this renders within.
-  size: number;
+  // The square box this renders within — every existing caller (Shop
+  // cards, Kitty Catch's falling objects/kitty) uses this, and its
+  // behavior is completely unchanged by the two props below.
+  size?: number;
+  // For a non-square box instead (e.g. Memory Match's portrait playing
+  // cards) — pass BOTH width and height instead of size. Takes precedence
+  // over size when provided; if only one of width/height is given it
+  // falls back to size for the other, same "contain, don't stretch"
+  // scaling either way.
+  width?: number;
+  height?: number;
 };
 
 // Generic reusable crop: reveals one rectangular region of a larger sprite
@@ -40,13 +49,17 @@ export function SpriteCrop({
   cropWidth,
   cropHeight,
   size,
+  width,
+  height,
 }: SpriteCropProps) {
-  const scale = Math.min(size / cropWidth, size / cropHeight);
+  const boxWidth = width ?? size ?? 0;
+  const boxHeight = height ?? size ?? 0;
+  const scale = Math.min(boxWidth / cropWidth, boxHeight / cropHeight);
   const windowWidth = cropWidth * scale;
   const windowHeight = cropHeight * scale;
 
   return (
-    <View style={[styles.outer, { width: size, height: size }]}>
+    <View style={[styles.outer, { width: boxWidth, height: boxHeight }]}>
       <View style={[styles.inner, { width: windowWidth, height: windowHeight }]}>
         <Image
           source={source}

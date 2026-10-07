@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppointmentsCard } from '@/components/appointments-card';
@@ -9,18 +10,20 @@ import { PetProgress } from '@/components/pet-progress';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
 import { TaskCard } from '@/components/task-card';
+import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
+import { DEV_ENABLE_TEST_PAW_TOKEN_GRANT, DEV_TEST_PAW_TOKEN_GRANT_AMOUNT } from '@/utils/dev-flags';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
 import { bathePet } from '@/utils/pet-bathing';
+import { getEquippedAccessoryId } from '@/utils/pet-equipment';
 import { feedPet } from '@/utils/pet-feeding';
-import { playWithPet } from '@/utils/pet-playing';
+import { getGrowthEligibility, getRenderedStageIndex, getRenderedStage, growPet } from '@/utils/pet-growth';
 import { restPet } from '@/utils/pet-resting';
-import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
-import { getPetStage } from '@/utils/pet-stage';
+import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   excludeDateFromTask,
@@ -67,6 +70,7 @@ const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 const WIDE_LAYOUT_BREAKPOINT = 700;
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [temporaryMessage, setTemporaryMessage] = useState<string | null>(null);
@@ -83,10 +87,19 @@ export default function HomeScreen() {
   // already-current profile from its shared in-memory cache instead of
   // re-running (and potentially re-saving) that catch-up a second time.
   const [petProfile, setPetProfile] = useState<PetProfile | null>(null);
+  // The id of whatever Pet Accessory is currently equipped (see
+  // @/utils/pet-equipment.ts), loaded fresh on every mount — Home is
+  // unmounted/remounted on navigation (same as every routed screen here),
+  // so this naturally picks up a change made on the Shop page as soon as
+  // the user navigates back, without needing a cross-page subscription.
+  const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
   const [isFeeding, setIsFeeding] = useState(false);
   const [isBathing, setIsBathing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isResting, setIsResting] = useState(false);
+  // TEMPORARY — supports the test-only Grow control in handleGrow below.
+  const [isGrowing, setIsGrowing] = useState(false);
+  const [growResultMessage, setGrowResultMessage] = useState<string | null>(null);
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useWindowDimensions();
@@ -141,6 +154,20 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Seed the equipped accessory id the same way — see the state
+  // declaration above for why a plain mount-time read is sufficient here.
+  useEffect(() => {
+    let cancelled = false;
+    getEquippedAccessoryId()
+      .then((id) => {
+        if (!cancelled) setEquippedAccessoryId(id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Feed button handler — calls the existing persistent feedPet() action
   // (see @/utils/pet-feeding.ts) and updates local state with whatever it
   // actually saved; no feeding math lives here. The isFeeding guard (also
@@ -167,16 +194,17 @@ export default function HomeScreen() {
       .finally(() => setIsBathing(false));
   }
 
-  // Same shape as handleFeed/handleBathe, calling the existing persistent
-  // playWithPet() action (see @/utils/pet-playing.ts) — no Happiness math
-  // lives here.
+  // Play no longer directly increases Happiness here — pressing it now
+  // opens the Mini-Games page (see @/components/mini-games/mini-games-screen.tsx);
+  // finishing a round there is what now fulfills the pet's Play/Happiness
+  // interaction (see @/utils/kitty-catch-rewards.ts). playWithPet() /
+  // pet-playing.ts itself is intentionally left untouched and unused by
+  // this button — preserved exactly as it was, in case it's wanted again
+  // for a different trigger later. isPlaying is kept (always false) only
+  // so PetPlaceholder's existing onPlay/isPlaying prop contract doesn't
+  // need to change.
   function handlePlay() {
-    if (isPlaying) return;
-    setIsPlaying(true);
-    playWithPet()
-      .then((updated) => setPetProfile(updated))
-      .catch(() => {})
-      .finally(() => setIsPlaying(false));
+    router.push('/mini-games');
   }
 
   // Same shape as the other three handlers, calling the existing
@@ -190,6 +218,43 @@ export default function HomeScreen() {
       .then((updated) => setPetProfile(updated))
       .catch(() => {})
       .finally(() => setIsResting(false));
+  }
+
+  // TEMPORARY test control for the new paid Baby->Young/Young->Adult
+  // growth system (see @/utils/pet-growth.ts) — a real "grow pet" UI isn't
+  // built yet, this just exercises growPet() so the underlying logic can
+  // be verified. Re-derives eligibility fresh (not trusted from stale UI
+  // state) and growPet() itself re-validates everything again server-side
+  // against the real saved profile before spending anything.
+  function handleGrow() {
+    if (isGrowing) return;
+    setIsGrowing(true);
+    growPet(completedTaskCount)
+      .then((result) => {
+        if (result.success) setPetProfile(result.profile);
+        setGrowResultMessage(
+          result.success
+            ? `Grew to ${result.newStage}!`
+            : result.reason === 'insufficient-funds'
+              ? 'Not enough Paw Tokens.'
+              : 'Not eligible to grow yet.'
+        );
+      })
+      .catch(() => setGrowResultMessage('Something went wrong.'))
+      .finally(() => setIsGrowing(false));
+  }
+
+  // TEMPORARY, test-only — adds DEV_TEST_PAW_TOKEN_GRANT_AMOUNT Paw Tokens
+  // directly to the real saved Pet Profile (see @/utils/dev-flags.ts for
+  // exactly what this does and doesn't affect), purely so the 500/1,000
+  // token growth costs can be tested without earning that many tokens for
+  // real first. Only reachable via the button below, which only renders at
+  // all while DEV_ENABLE_TEST_PAW_TOKEN_GRANT is true.
+  function handleDevAddTestTokens() {
+    if (!petProfile) return;
+    const updated = { ...petProfile, pawTokens: petProfile.pawTokens + DEV_TEST_PAW_TOKEN_GRANT_AMOUNT };
+    savePetProfile(updated);
+    setPetProfile(updated);
   }
 
   // Pick a fresh random message whenever the mood changes (including once
@@ -349,7 +414,13 @@ export default function HomeScreen() {
   }
 
   const completedTaskCount = getCompletedTaskCount(tasks);
-  const petStage = getPetStage(completedTaskCount);
+  // The pet's ACTUAL rendered stage — Egg/Hatchling/Baby still advance
+  // automatically for free purely from completedTaskCount (unchanged);
+  // Young/Adult only ever show once paid for via growPet() (see
+  // @/utils/pet-growth.ts), regardless of completedTaskCount. Falls back
+  // to paidStageIndex 0 (no paid upgrade yet) before petProfile has
+  // loaded, same "not loaded yet" convention as petProfile?.hunger below.
+  const petStage = getRenderedStage(completedTaskCount, petProfile?.paidStageIndex ?? 0);
   // Reactive task messages take priority while active; otherwise the pet's
   // bubble shows the ambient mood message.
   const displayedPetMessage = temporaryMessage ?? moodMessage;
@@ -410,6 +481,45 @@ export default function HomeScreen() {
     />
   );
 
+  // TEMPORARY test control for the new paid growth system — see
+  // handleGrow above. Only shown once the pet is actually eligible for a
+  // paid upgrade (or while a grow attempt is in flight/just finished), so
+  // it stays out of the way for Egg/Hatchling/Baby and for an
+  // already-maxed Adult pet.
+  const renderedStageIndex = getRenderedStageIndex(completedTaskCount, petProfile?.paidStageIndex ?? 0);
+  const growthEligibility = getGrowthEligibility(renderedStageIndex, completedTaskCount);
+  const growTestControl =
+    growthEligibility.canGrow || growResultMessage || DEV_ENABLE_TEST_PAW_TOKEN_GRANT ? (
+      <ThemedView type="peachOverlay" style={styles.growTestCard}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Temporary test control — paid growth system
+        </ThemedText>
+        {DEV_ENABLE_TEST_PAW_TOKEN_GRANT ? (
+          <Pressable onPress={handleDevAddTestTokens}>
+            <ThemedView type="sky" style={styles.growTestButton}>
+              <ThemedText type="smallBold">{`Dev: +${DEV_TEST_PAW_TOKEN_GRANT_AMOUNT} Paw Tokens`}</ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
+        {growthEligibility.canGrow ? (
+          <Pressable onPress={handleGrow} disabled={isGrowing}>
+            <ThemedView type="accent" style={styles.growTestButton}>
+              <ThemedText type="smallBold" style={styles.growTestButtonText}>
+                {isGrowing
+                  ? 'Growing…'
+                  : `Grow to ${growthEligibility.nextStage} (${growthEligibility.cost} 🐾)`}
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
+        {growResultMessage ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {growResultMessage}
+          </ThemedText>
+        ) : null}
+      </ThemedView>
+    ) : null;
+
   return (
     // The living-room background now renders once in src/app/_layout.tsx
     // (behind the header too, on Home), not here — this container stays
@@ -429,6 +539,7 @@ export default function HomeScreen() {
               <PetRoom
                 stage={petStage}
                 message={displayedPetMessage}
+                equippedAccessoryId={equippedAccessoryId}
                 hunger={petProfile?.hunger}
                 cleanliness={petProfile?.cleanliness}
                 happiness={petProfile?.happiness}
@@ -460,6 +571,7 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}>
               <RoomsCard />
               <PetProgress completedTaskCount={completedTaskCount} />
+              {growTestControl}
             </ScrollView>
           </View>
         ) : (
@@ -470,6 +582,7 @@ export default function HomeScreen() {
               <PetRoom
                 stage={petStage}
                 message={displayedPetMessage}
+                equippedAccessoryId={equippedAccessoryId}
                 hunger={petProfile?.hunger}
                 cleanliness={petProfile?.cleanliness}
                 happiness={petProfile?.happiness}
@@ -489,6 +602,7 @@ export default function HomeScreen() {
               contentContainerStyle={styles.narrowScrollContent}
               showsVerticalScrollIndicator={false}>
               <PetProgress completedTaskCount={completedTaskCount} />
+              {growTestControl}
               {taskCard}
               {appointmentsCard}
               <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
@@ -513,6 +627,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     backgroundColor: 'transparent',
+  },
+  // TEMPORARY — styles for the test-only Grow control (see
+  // growTestControl/handleGrow above).
+  growTestCard: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  growTestButton: {
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.five,
+    alignItems: 'center',
+  },
+  growTestButtonText: {
+    color: '#FFFFFF',
   },
   confettiOverlay: {
     ...StyleSheet.absoluteFill,

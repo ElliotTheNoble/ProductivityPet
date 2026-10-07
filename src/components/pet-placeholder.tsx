@@ -5,11 +5,22 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP, DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT } from '@/utils/dev-flags';
+import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
+import { getAccessoryPlacement } from '@/utils/pet-accessory-placement';
 import type { PetStage } from '@/utils/pet-stage';
 
 type PetPlaceholderProps = {
   stage: PetStage;
   message?: string | null;
+  // The id of the currently-equipped Pet Accessory (see
+  // @/utils/pet-equipment.ts), passed down from Home — null/undefined
+  // means nothing is equipped, so the pet renders exactly as it always
+  // has. Only ids present in PET_ACCESSORY_ART actually render anything;
+  // this intentionally stays silent (not an error) for any other id, so
+  // an item that's equippable-but-not-yet-wired-up-visually just doesn't
+  // show rather than breaking the pet's rendering.
+  equippedAccessoryId?: string | null;
   // The real Hunger value from the persistent Pet Profile (see
   // @/utils/pet-profile.ts), passed down from Home — optional so this
   // component never has to invent a fake value before the profile has
@@ -59,6 +70,7 @@ function getStageImage(stage: PetStage) {
 export function PetPlaceholder({
   stage,
   message,
+  equippedAccessoryId,
   hunger,
   cleanliness,
   happiness,
@@ -74,6 +86,40 @@ export function PetPlaceholder({
 }: PetPlaceholderProps) {
   const theme = useTheme();
   const { source, aspectRatio } = getStageImage(stage);
+  const accessoryArt = equippedAccessoryId ? PET_ACCESSORY_ART[equippedAccessoryId] : undefined;
+  // Stage-aware — see @/utils/pet-accessory-placement.ts. 'home' is passed
+  // explicitly (not a default) because this component is specifically the
+  // Home-screen pet renderer — Stats renders its own, visually different
+  // pet art through its own component, and will need its own 'stats'
+  // placements looked up from there once that work starts; the two are
+  // never meant to share these numbers.
+  //
+  // A per-item override (accessoryArt.placementOverrides — see
+  // @/utils/pet-accessories.ts) always takes precedence when present.
+  // Without one: only 'neckCollar' falls back to the shared slot
+  // placement below — every bow is similar enough in shape that one
+  // placement works well for all 26. Hats and bandanas vary far more in
+  // shape (confirmed by the Rainbow Party Hat needing very different
+  // numbers from the White Cat-Ear Beanie), so 'headHat'/'neckBandana'
+  // items with no override of their own normally render nothing, rather
+  // than guessing with another item's placement — they equip and persist
+  // normally, they just stay invisible on the pet until tuned.
+  //
+  // The one exception: while DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP is true
+  // (see @/utils/dev-flags.ts), an un-overridden 'headHat' item instead
+  // gets a testing-only fallback placement, so it's actually visible to
+  // tune rather than invisible. This is purely a render-time fallback —
+  // it's never written to PET_ACCESSORY_ART, never becomes a real
+  // placementOverride, and disappears (back to rendering nothing) the
+  // moment that flag goes back to false.
+  const accessoryPlacement = accessoryArt
+    ? (accessoryArt.placementOverrides?.home?.[stage] ??
+        (accessoryArt.slot === 'neckCollar'
+          ? getAccessoryPlacement('home', accessoryArt.slot, stage)
+          : DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP && accessoryArt.slot === 'headHat'
+            ? DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT
+            : undefined))
+    : undefined;
   // Rounded for display only — the real, unrounded value is what's stored
   // and what Feed's +20 math (see @/utils/pet-feeding.ts) operates on.
   const hungerPercent = hunger !== undefined ? Math.round(hunger) : null;
@@ -91,6 +137,47 @@ export function PetPlaceholder({
 
       <View style={[styles.petWrap, { aspectRatio }]}>
         <Image source={source} style={styles.petImage} contentFit="contain" />
+
+        {/* The equipped accessory, layered on top of the pet art itself
+            (not a separate Shop-card-style image) — positioned/scaled as
+            a percentage of the pet's own box so it tracks the pet's
+            responsive size at any stage, using the exact same crop data
+            (@/utils/pet-accessories.ts) the Shop card for this item reads.
+            Purely decorative, so it never intercepts touches. */}
+        {accessoryArt && accessoryPlacement ? (
+          <View style={styles.accessoryOverlay} pointerEvents="none">
+            <View
+              style={[
+                styles.accessoryFrame,
+                {
+                  width: accessoryPlacement.width,
+                  marginTop: accessoryPlacement.marginTop,
+                  marginLeft: accessoryPlacement.marginLeft,
+                  aspectRatio: accessoryArt.cropWidth / accessoryArt.cropHeight,
+                  // scaleX (if any) listed before rotate so the horizontal
+                  // stretch happens in the accessory's own original axes,
+                  // then rotate tilts the already-stretched shape — see
+                  // AccessoryPlacement.scaleX in pet-accessory-placement.ts.
+                  transform: [
+                    ...(accessoryPlacement.scaleX !== undefined ? [{ scaleX: accessoryPlacement.scaleX }] : []),
+                    ...(accessoryPlacement.rotate ? [{ rotate: accessoryPlacement.rotate }] : []),
+                  ],
+                },
+              ]}>
+              <Image
+                source={accessoryArt.source}
+                contentFit="fill"
+                style={{
+                  position: 'absolute',
+                  width: `${(accessoryArt.sheetWidth / accessoryArt.cropWidth) * 100}%`,
+                  height: `${(accessoryArt.sheetHeight / accessoryArt.cropHeight) * 100}%`,
+                  left: `${-(accessoryArt.cropX / accessoryArt.cropWidth) * 100}%`,
+                  top: `${-(accessoryArt.cropY / accessoryArt.cropHeight) * 100}%`,
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
       </View>
 
       {/* Hunger status bar — reads the real petProfile.hunger value passed
@@ -263,6 +350,22 @@ const styles = StyleSheet.create({
   petImage: {
     width: '100%',
     height: '100%',
+  },
+  // Fills the same petWrap box the pet image itself sits in, so a
+  // percentage-sized accessory frame inside it scales correctly off the
+  // pet's own responsive size — no fixed pixel size needed (unlike
+  // SpriteCrop, which the Shop's cards use, this is positioned/sized
+  // entirely in percentages since this box's own pixel size varies).
+  accessoryOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+  },
+  // width/marginTop (and marginLeft, when a stage needs one) come from
+  // getAccessoryPlacement (@/utils/pet-accessory-placement.ts) per the
+  // pet's current stage and the accessory's own slot (e.g. bows are worn
+  // at the neck/collar) — this base style only owns the clipping.
+  accessoryFrame: {
+    overflow: 'hidden',
   },
   needBar: {
     width: '70%',

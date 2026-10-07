@@ -43,14 +43,15 @@ export function AppHeader() {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  // Home, Tasks, and Stats each render their own full-screen background
-  // behind this header (see src/app/_layout.tsx) — transparent here lets it
-  // show through instead of the usual solid header fill. Every other route
-  // is unaffected. The logo/tagline keep their own translucent backdrop
-  // (brandBackdrop below) and the nav pills already have their own opaque
-  // fill regardless of this flag, so both stay readable over any
-  // background.
-  const isImmersiveRoute = pathname === '/' || pathname === '/tasks' || pathname === '/stats';
+  // Home, Tasks, Stats, and Mini-Games each render their own full-screen
+  // background behind this header (see src/app/_layout.tsx) — transparent
+  // here lets it show through instead of the usual solid header fill.
+  // Every other route is unaffected. The logo/tagline keep their own
+  // translucent backdrop (brandBackdrop below) and the nav pills already
+  // have their own opaque fill regardless of this flag, so both stay
+  // readable over any background.
+  const isImmersiveRoute =
+    pathname === '/' || pathname === '/tasks' || pathname === '/stats' || pathname === '/mini-games';
 
   // The real pawTokens value from the persistent Pet Profile (see
   // @/utils/pet-profile.ts) — null until the first load resolves, so the

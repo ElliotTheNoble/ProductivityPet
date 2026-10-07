@@ -13,6 +13,10 @@ type PetRoomProps = {
   // vertically centering it in a cramped space. Narrow/mobile layouts stay
   // compact, same as before.
   spacious?: boolean;
+  // The id of the currently-equipped Pet Accessory, passed straight
+  // through to PetPlaceholder — see that component and
+  // @/utils/pet-equipment.ts.
+  equippedAccessoryId?: string | null;
   // The real Hunger value, passed straight through to PetPlaceholder —
   // see that component. Optional so the room-detail screens keep working
   // unchanged without it.
@@ -46,6 +50,7 @@ export function PetRoom({
   stage,
   message,
   spacious = false,
+  equippedAccessoryId,
   hunger,
   cleanliness,
   happiness,
@@ -64,6 +69,7 @@ export function PetRoom({
       <PetPlaceholder
         stage={stage}
         message={message}
+        equippedAccessoryId={equippedAccessoryId}
         hunger={hunger}
         cleanliness={cleanliness}
         happiness={happiness}

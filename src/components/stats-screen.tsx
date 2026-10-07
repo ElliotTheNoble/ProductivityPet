@@ -8,6 +8,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskCategory } from '@/utils/categorize-task';
+import { getRenderedStage } from '@/utils/pet-growth';
+import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
 import { TASKS_PER_STAGE, getStageProgress, type PetStage } from '@/utils/pet-stage';
 import { ALL_CATEGORIES, getCategoryCompletionCounts, getImportantCompletedCount } from '@/utils/stats';
 import { getCachedTasks } from '@/utils/task-storage';
@@ -197,6 +199,7 @@ export function StatsHubScreen() {
   const isWide = width >= DESKTOP_MIN_WIDTH;
   const columns = useCategoryColumnCount();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [petProfile, setPetProfile] = useState<PetProfile | null>(null);
 
   // Read-only, via the same shared in-memory task cache as useBirthdayMode
   // and the Rooms hub's task-count badges (see @/utils/task-storage) — this
@@ -207,6 +210,23 @@ export function StatsHubScreen() {
     getCachedTasks()
       .then((cached) => {
         if (!cancelled) setTasks(cached);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Read-only, via the shared in-memory Pet Profile cache (see
+  // @/utils/pet-profile.ts) — only used here to know paidStageIndex, so
+  // the pet art below reflects an actual paid Young/Adult growth upgrade
+  // (see @/utils/pet-growth.ts) instead of jumping ahead based on task
+  // count alone.
+  useEffect(() => {
+    let cancelled = false;
+    getPetProfile()
+      .then((profile) => {
+        if (!cancelled) setPetProfile(profile);
       })
       .catch(() => {});
     return () => {
@@ -225,6 +245,13 @@ export function StatsHubScreen() {
   const importantCompletedCount = getImportantCompletedCount(tasks);
   const categoryCounts = getCategoryCompletionCounts(tasks);
   const stageProgress = getStageProgress(completedTaskCount);
+  // The pet's ACTUAL rendered stage (art + stage label below) — stays in
+  // sync with Home's own petStage: Egg/Hatchling/Baby still derive live
+  // from completedTaskCount, but Young/Adult only show once paid for via
+  // growPet() (see @/utils/pet-growth.ts), never from task count alone.
+  // stageProgress above is left untouched for the level/progress-bar/
+  // "X more tasks" message, which still reflect raw task-based progress.
+  const renderedStage = getRenderedStage(completedTaskCount, petProfile?.paidStageIndex ?? 0);
 
   // Explicit line break (rather than relying on text wrap) so the bubble
   // always reads as two centered lines — "3 more tasks" / "to reach
@@ -283,10 +310,10 @@ export function StatsHubScreen() {
                       style={[
                         styles.petArtForeground,
                         isWide && styles.petArtForegroundWide,
-                        { aspectRatio: STATS_PET_IMAGES[stageProgress.stage].aspectRatio },
+                        { aspectRatio: STATS_PET_IMAGES[renderedStage].aspectRatio },
                       ]}>
                       <Image
-                        source={STATS_PET_IMAGES[stageProgress.stage].source}
+                        source={STATS_PET_IMAGES[renderedStage].source}
                         style={styles.petArtImage}
                         contentFit="contain"
                       />
@@ -295,7 +322,7 @@ export function StatsHubScreen() {
                     <View style={[styles.petInfo, isWide && styles.petInfoWide]}>
                       <ThemedView type="purple" style={styles.stagePill}>
                         <ThemedText type="smallBold" style={styles.stagePillText}>
-                          {stageProgress.stage}
+                          {renderedStage}
                         </ThemedText>
                       </ThemedView>
                       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.levelText}>

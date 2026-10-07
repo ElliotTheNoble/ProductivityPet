@@ -8,12 +8,41 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP } from '@/utils/dev-flags';
+import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
+import type { AccessorySlot } from '@/utils/pet-accessory-placement';
+import { equipAccessory, getEquippedAccessoryId, unequipAccessory } from '@/utils/pet-equipment';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
 import { getOwnedShopItemIds, purchaseShopItem } from '@/utils/shop-inventory';
 
 // How long the "Not enough Paw Tokens!" message stays visible on a card
 // before clearing itself — same idea as Home's TEMPORARY_MESSAGE_DURATION_MS.
 const INSUFFICIENT_FUNDS_MESSAGE_DURATION_MS = 2500;
+
+// Lighter/brighter versions of each action button's own base color,
+// shown only while that specific button (not just its card) is hovered —
+// on top of the shared scale/lift + shadow every hoverable card already
+// gets (styles.cardHovered), this makes the button itself visibly
+// highlight, while keeping each one's color identity recognizable: Buy
+// stays pink, Equip stays blue, ✓ Equipped stays purple.
+// Buy and ✓ Equipped both use white text (buyButtonText/categoryLabelActive),
+// so their hover colors are only modestly lightened — too close to white
+// and the white text itself would lose contrast. Equip (unselected) uses
+// the normal dark text color instead, so it can go lighter safely — and
+// needs to, since theme.sky is already very pale: a small shift off of it
+// is nearly invisible, unlike accent/purple which have more room to
+// lighten from before going pale themselves.
+const BUY_BUTTON_HOVER_COLOR = '#F6A8C3';
+const EQUIP_BUTTON_HOVER_COLOR = '#D6EFF8';
+const EQUIPPED_BUTTON_HOVER_COLOR = '#B299DF';
+// Equip's hover border/glow specifically — NOT theme.sky. Buy/Equipped's
+// hover borders already use their fully-saturated base color
+// (theme.accent/theme.purple), which stands out against their lightened
+// fill; theme.sky is itself already pale, so reusing it as the border
+// gave almost no contrast against the (also pale) fill above. This is a
+// more saturated blue, playing the same role Buy/Equipped's border colors
+// already do.
+const EQUIP_BUTTON_HOVER_BORDER = '#4FB3DB';
 
 // Wider than the app's usual MaxContentWidth (800) — the 4-column item
 // grid and the wide hero banner both need more breathing room than a
@@ -28,104 +57,12 @@ const CARD_WIDTH = 246;
 // width, aspectRatio 1).
 const ART_AREA_SIZE = CARD_WIDTH - Spacing.two * 2;
 
-// assets/images/shop/accessories/bows_1.png — an 8-bow sprite sheet (4x2),
-// each already measured via an alpha-channel bounding-box scan (never
-// guessed) before this file was touched. Crop coordinates are in the
-// sheet's own pixel space.
-const BOWS_1_SOURCE = require('@/assets/images/shop/accessories/bows_1.png');
-const BOWS_1_SHEET_WIDTH = 1810;
-const BOWS_1_SHEET_HEIGHT = 869;
-
-function bowArt(cropX: number, cropY: number, cropWidth: number, cropHeight: number): SpriteArt {
-  return {
-    source: BOWS_1_SOURCE,
-    sheetWidth: BOWS_1_SHEET_WIDTH,
-    sheetHeight: BOWS_1_SHEET_HEIGHT,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-  };
-}
-
-// assets/images/shop/accessories/bows_2.png — the replacement 18-bow
-// sprite sheet (5x4, last row centered with 3), also already measured via
-// an alpha-channel bounding-box scan after the file was replaced with a
-// transparent, well-separated version.
-const BOWS_2_SOURCE = require('@/assets/images/shop/accessories/bows_2.png');
-const BOWS_2_SHEET_WIDTH = 1448;
-const BOWS_2_SHEET_HEIGHT = 1086;
-
-function bow2Art(cropX: number, cropY: number, cropWidth: number, cropHeight: number): SpriteArt {
-  return {
-    source: BOWS_2_SOURCE,
-    sheetWidth: BOWS_2_SHEET_WIDTH,
-    sheetHeight: BOWS_2_SHEET_HEIGHT,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-  };
-}
-
-// assets/images/shop/accessories/hats_1.png — a 12-hat sprite sheet
-// (4x3), also already measured via an alpha-channel bounding-box scan
-// before this file was touched.
-const HATS_1_SOURCE = require('@/assets/images/shop/accessories/hats_1.png');
-const HATS_1_SHEET_WIDTH = 1448;
-const HATS_1_SHEET_HEIGHT = 1086;
-
-function hatArt(cropX: number, cropY: number, cropWidth: number, cropHeight: number): SpriteArt {
-  return {
-    source: HATS_1_SOURCE,
-    sheetWidth: HATS_1_SHEET_WIDTH,
-    sheetHeight: HATS_1_SHEET_HEIGHT,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-  };
-}
-
-// assets/images/shop/accessories/hats_2.png — the REPLACEMENT 13-hat
-// sprite sheet (4x3, plus a 4th row with just the Unicorn Hat), measured
-// fresh after the file was replaced with a version spaced farther apart
-// so every hat (including the four that used to overlap) now crops
-// cleanly. These are the new crop bounds, not the original ones.
-const HATS_2_SOURCE = require('@/assets/images/shop/accessories/hats_2.png');
-const HATS_2_SHEET_WIDTH = 1448;
-const HATS_2_SHEET_HEIGHT = 1086;
-
-function hat2Art(cropX: number, cropY: number, cropWidth: number, cropHeight: number): SpriteArt {
-  return {
-    source: HATS_2_SOURCE,
-    sheetWidth: HATS_2_SHEET_WIDTH,
-    sheetHeight: HATS_2_SHEET_HEIGHT,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-  };
-}
-
-// assets/images/shop/accessories/bandanas_1.png — a 12-bandana sprite
-// sheet (4x3), also already measured via an alpha-channel bounding-box
-// scan before this file was touched.
-const BANDANAS_1_SOURCE = require('@/assets/images/shop/accessories/bandanas_1.png');
-const BANDANAS_1_SHEET_WIDTH = 1448;
-const BANDANAS_1_SHEET_HEIGHT = 1086;
-
-function bandanaArt(cropX: number, cropY: number, cropWidth: number, cropHeight: number): SpriteArt {
-  return {
-    source: BANDANAS_1_SOURCE,
-    sheetWidth: BANDANAS_1_SHEET_WIDTH,
-    sheetHeight: BANDANAS_1_SHEET_HEIGHT,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-  };
-}
+// All Pet Accessories crop data (bows, hats, bandanas) now lives in
+// @/utils/pet-accessories.ts (PET_ACCESSORY_ART) now that every one of
+// them is equippable — every entry below reads its `art` from there
+// instead of a local per-sheet helper, so the Shop card and the on-pet
+// overlay never risk drifting out of sync with two independently-
+// maintained copies of the same crop numbers.
 
 type ShopCategory = 'Pet Accessories' | 'Room Decor' | 'Backgrounds';
 
@@ -146,9 +83,14 @@ const SHOP_CATEGORIES: { name: ShopCategory; icon: string; color: ThemeColor }[]
 // explicitly out of scope for this step. Exactly 8 per category so the
 // 4-column grid shows two full rows with nothing left dangling.
 //
-// Pet Accessories is the first category with real artwork (the 8 bows
-// from bows_1.png, via `art`) — Room Decor and Backgrounds still use the
-// emoji placeholders (`emoji`) until their own real art arrives.
+// Pet Accessories is the first category with real artwork and the first
+// with real purchasing/equipping wired up. Every bow, hat, and bandana
+// now reuses its `art` directly from PET_ACCESSORY_ART (see
+// @/utils/pet-accessories.ts) instead of a local per-sheet helper, so the
+// Shop card and the on-pet overlay always read the exact same crop data,
+// never two independently-maintained copies of the same numbers. Room
+// Decor and Backgrounds still use emoji placeholders until each of those
+// gets the same treatment later.
 type SpriteArt = {
   source: number;
   sheetWidth: number;
@@ -157,6 +99,13 @@ type SpriteArt = {
   cropY: number;
   cropWidth: number;
   cropHeight: number;
+  // Optional — every real PET_ACCESSORY_ART entry already has this at
+  // runtime (it's an AccessoryArt under the hood), just not previously
+  // surfaced here since the Shop didn't need it. Only used right now to
+  // identify hats for the temporary dev test-equip button below (see
+  // @/utils/dev-flags.ts); remove if that's removed and nothing else
+  // ends up needing it.
+  slot?: AccessorySlot;
 };
 
 type SampleShopItem = {
@@ -165,84 +114,289 @@ type SampleShopItem = {
   price: number;
   emoji?: string;
   art?: SpriteArt;
-  // True only for the one test item currently wired up to the real
-  // purchase system (see @/utils/shop-inventory.ts) — every other item
-  // still just displays, with no Buy control, until purchasing is rolled
-  // out to the rest of the Shop in a later step.
+  // True for every item wired up to the real purchase system (see
+  // @/utils/shop-inventory.ts) — currently every Pet Accessory (all bows,
+  // hats, and bandanas); Room Decor and Backgrounds items still just
+  // display, with no Buy control.
   purchasable?: boolean;
+  // True for every item wired up to the real equip system (see
+  // @/utils/pet-equipment.ts) — currently every Pet Accessory. The equip
+  // system itself only ever tracks one equipped id at a time, so
+  // equipping any item here automatically unequips whichever one (if any)
+  // was equipped before — no extra bookkeeping needed for that. Whether
+  // the equipped item actually renders anything on the pet depends on
+  // whether it has a tuned placement yet (see pet-placeholder.tsx) — this
+  // flag only controls whether the Shop shows an Equip control.
+  equippable?: boolean;
 };
 
 const SAMPLE_ITEMS: Record<ShopCategory, SampleShopItem[]> = {
   'Pet Accessories': [
-    { id: 'bow-1', name: 'Pink Bow', price: 40, art: bowArt(56, 126, 394, 309), purchasable: true },
-    { id: 'bow-2', name: 'Purple Bow', price: 40, art: bowArt(506, 129, 378, 300), purchasable: true },
-    { id: 'bow-3', name: 'Blue Striped Bow', price: 45, art: bowArt(913, 126, 412, 311), purchasable: true },
-    { id: 'bow-4', name: 'Red Bow', price: 40, art: bowArt(1358, 121, 395, 310), purchasable: true },
-    { id: 'bow-5', name: 'Cherry Blossom Bow', price: 55, art: bowArt(55, 477, 395, 304), purchasable: true },
-    { id: 'bow-6', name: 'Black Cat-Ear Bow', price: 50, art: bowArt(510, 472, 365, 299), purchasable: true },
-    { id: 'bow-7', name: 'Holographic Rainbow Bow', price: 70, art: bowArt(914, 482, 403, 305), purchasable: true },
-    { id: 'bow-8', name: 'Blue Gingham Lace Bow', price: 50, art: bowArt(1360, 475, 394, 313), purchasable: true },
-    { id: 'bow2-1', name: 'Mint Bow', price: 40, art: bow2Art(31, 58, 255, 193), purchasable: true },
-    { id: 'bow2-2', name: 'Yellow Bow', price: 40, art: bow2Art(318, 56, 258, 196), purchasable: true },
-    { id: 'bow2-3', name: 'Coral Bow', price: 40, art: bow2Art(600, 58, 255, 193), purchasable: true },
+    {
+      id: 'bow-1',
+      name: 'Pink Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow-1'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-2',
+      name: 'Purple Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow-2'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-3',
+      name: 'Blue Striped Bow',
+      price: 45,
+      art: PET_ACCESSORY_ART['bow-3'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-4',
+      name: 'Red Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow-4'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-5',
+      name: 'Cherry Blossom Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow-5'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-6',
+      name: 'Black Cat-Ear Bow',
+      price: 50,
+      art: PET_ACCESSORY_ART['bow-6'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-7',
+      name: 'Holographic Rainbow Bow',
+      price: 70,
+      art: PET_ACCESSORY_ART['bow-7'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow-8',
+      name: 'Blue Gingham Lace Bow',
+      price: 50,
+      art: PET_ACCESSORY_ART['bow-8'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-1',
+      name: 'Mint Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow2-1'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-2',
+      name: 'Yellow Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow2-2'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-3',
+      name: 'Coral Bow',
+      price: 40,
+      art: PET_ACCESSORY_ART['bow2-3'],
+      purchasable: true,
+      equippable: true,
+    },
     // Named "Sakura Pink Bow" here (rather than repeating "Cherry Blossom
     // Bow" from bow-5 above) for the same reason as "Pastel Holographic
     // Bow" below — avoids two identically-named cards in the same grid.
-    { id: 'bow2-4', name: 'Sakura Pink Bow', price: 55, art: bow2Art(881, 57, 257, 193), purchasable: true },
-    { id: 'bow2-5', name: 'Starry Lavender Bow', price: 50, art: bow2Art(1160, 55, 263, 196), purchasable: true },
-    { id: 'bow2-6', name: 'Navy Starlight Bow', price: 55, art: bow2Art(27, 284, 261, 199), purchasable: true },
-    { id: 'bow2-7', name: 'White Bow', price: 35, art: bow2Art(317, 284, 259, 199), purchasable: true },
-    { id: 'bow2-8', name: 'Brown Gingham Bow', price: 45, art: bow2Art(599, 287, 258, 196), purchasable: true },
-    { id: 'bow2-9', name: 'Brown Fur-Trim Bow', price: 60, art: bow2Art(875, 283, 266, 200), purchasable: true },
-    { id: 'bow2-10', name: 'Pink Lace Bow', price: 55, art: bow2Art(1157, 281, 270, 201), purchasable: true },
-    { id: 'bow2-11', name: 'Blue Heart Bow', price: 45, art: bow2Art(29, 529, 259, 204), purchasable: true },
-    { id: 'bow2-12', name: 'Green Daisy Bow', price: 45, art: bow2Art(318, 527, 258, 204), purchasable: true },
-    { id: 'bow2-13', name: 'Red Fur-Trim Bow', price: 60, art: bow2Art(595, 525, 265, 210), purchasable: true },
-    { id: 'bow2-14', name: 'Green & Red Striped Bow', price: 50, art: bow2Art(880, 528, 258, 205), purchasable: true },
-    { id: 'bow2-15', name: 'Snowflake Bow', price: 55, art: bow2Art(1162, 529, 259, 202), purchasable: true },
-    { id: 'bow2-16', name: 'Black & Pink Heart Bow', price: 50, art: bow2Art(235, 788, 282, 211), purchasable: true },
+    {
+      id: 'bow2-4',
+      name: 'Sakura Pink Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow2-4'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-5',
+      name: 'Starry Lavender Bow',
+      price: 50,
+      art: PET_ACCESSORY_ART['bow2-5'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-6',
+      name: 'Navy Starlight Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow2-6'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-7',
+      name: 'White Bow',
+      price: 35,
+      art: PET_ACCESSORY_ART['bow2-7'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-8',
+      name: 'Brown Gingham Bow',
+      price: 45,
+      art: PET_ACCESSORY_ART['bow2-8'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-9',
+      name: 'Brown Fur-Trim Bow',
+      price: 60,
+      art: PET_ACCESSORY_ART['bow2-9'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-10',
+      name: 'Pink Lace Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow2-10'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-11',
+      name: 'Blue Heart Bow',
+      price: 45,
+      art: PET_ACCESSORY_ART['bow2-11'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-12',
+      name: 'Green Daisy Bow',
+      price: 45,
+      art: PET_ACCESSORY_ART['bow2-12'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-13',
+      name: 'Red Fur-Trim Bow',
+      price: 60,
+      art: PET_ACCESSORY_ART['bow2-13'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-14',
+      name: 'Green & Red Striped Bow',
+      price: 50,
+      art: PET_ACCESSORY_ART['bow2-14'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-15',
+      name: 'Snowflake Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow2-15'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-16',
+      name: 'Black & Pink Heart Bow',
+      price: 50,
+      art: PET_ACCESSORY_ART['bow2-16'],
+      purchasable: true,
+      equippable: true,
+    },
     // Named "Pastel Holographic Bow" here (rather than repeating "Holographic
     // Rainbow Bow" from bow-7 above) so the two don't show up as identically-
     // named cards side by side — same bow family as bow-7, different sheet.
-    { id: 'bow2-17', name: 'Pastel Holographic Bow', price: 70, art: bow2Art(589, 790, 275, 209), purchasable: true },
-    { id: 'bow2-18', name: 'Purple Lace Gingham Bow', price: 55, art: bow2Art(926, 790, 300, 214), purchasable: true },
-    { id: 'hat-1', name: 'White Cat-Ear Beanie', price: 45, art: hatArt(26, 64, 307, 249), purchasable: true },
-    { id: 'hat-2', name: 'Black Cat-Ear Beanie', price: 45, art: hatArt(390, 66, 302, 246), purchasable: true },
-    { id: 'hat-3', name: 'Bunny-Ear Hat', price: 50, art: hatArt(721, 73, 370, 242), purchasable: true },
-    { id: 'hat-4', name: 'Bear-Ear Hat', price: 50, art: hatArt(1115, 81, 314, 232), purchasable: true },
-    { id: 'hat-5', name: 'Frog Hat', price: 40, art: hatArt(25, 418, 313, 235), purchasable: true },
-    { id: 'hat-6', name: 'Duck Hat', price: 40, art: hatArt(392, 401, 298, 249), purchasable: true },
-    { id: 'hat-7', name: 'Strawberry Hat', price: 45, art: hatArt(751, 407, 309, 240), purchasable: true },
-    { id: 'hat-8', name: 'Bee Hat', price: 45, art: hatArt(1121, 392, 297, 258), purchasable: true },
-    { id: 'hat-9', name: 'Mushroom Hat', price: 50, art: hatArt(16, 750, 331, 220), purchasable: true },
-    { id: 'hat-10', name: 'Witch Hat', price: 55, art: hatArt(371, 740, 331, 226), purchasable: true },
-    { id: 'hat-11', name: 'Wizard Hat', price: 60, art: hatArt(732, 739, 344, 246), purchasable: true },
-    { id: 'hat-12', name: 'Rainbow Party Hat', price: 65, art: hatArt(1139, 717, 260, 271), purchasable: true },
-    { id: 'hat2-1', name: 'Pumpkin Hat', price: 45, art: hat2Art(25, 25, 330, 244), purchasable: true },
-    { id: 'hat2-2', name: 'Reindeer Antler Headband', price: 55, art: hat2Art(412, 34, 328, 227), purchasable: true },
-    { id: 'hat2-3', name: 'Santa Hat', price: 55, art: hat2Art(773, 46, 333, 217), purchasable: true },
-    { id: 'hat2-4', name: 'Christmas Bell Hat', price: 55, art: hat2Art(1137, 43, 294, 216), purchasable: true },
-    { id: 'hat2-5', name: 'Pink Heart Beret', price: 40, art: hat2Art(25, 336, 305, 188), purchasable: true },
-    { id: 'hat2-6', name: 'Cream Paw Beret', price: 40, art: hat2Art(380, 324, 310, 199), purchasable: true },
-    { id: 'hat2-7', name: 'Brown Plaid Beret', price: 45, art: hat2Art(731, 339, 316, 188), purchasable: true },
-    { id: 'hat2-8', name: 'Yellow Sun Hat', price: 45, art: hat2Art(1077, 340, 354, 189), purchasable: true },
-    { id: 'hat2-9', name: 'Winter Beanie', price: 50, art: hat2Art(47, 568, 266, 241), purchasable: true },
-    { id: 'hat2-10', name: 'Shark Hat', price: 60, art: hat2Art(383, 581, 302, 236), purchasable: true },
-    { id: 'hat2-11', name: 'Cow Hat', price: 50, art: hat2Art(734, 595, 317, 214), purchasable: true },
-    { id: 'hat2-12', name: 'Dino Hat', price: 55, art: hat2Art(1127, 581, 280, 230), purchasable: true },
-    { id: 'hat2-13', name: 'Unicorn Hat', price: 65, art: hat2Art(571, 824, 282, 231), purchasable: true },
-    { id: 'bandana-1', name: 'Pink Heart Bandana', price: 40, art: bandanaArt(25, 113, 346, 211), purchasable: true },
-    { id: 'bandana-2', name: 'Blue Gingham Cat Bandana', price: 45, art: bandanaArt(394, 125, 316, 197), purchasable: true },
-    { id: 'bandana-3', name: 'Strawberry Bandana', price: 45, art: bandanaArt(735, 111, 328, 216), purchasable: true },
-    { id: 'bandana-4', name: 'Daisy Bandana', price: 40, art: bandanaArt(1090, 119, 334, 216), purchasable: true },
-    { id: 'bandana-5', name: 'Red Polka Dot Bell Bandana', price: 50, art: bandanaArt(25, 397, 345, 216), purchasable: true },
-    { id: 'bandana-6', name: 'Green Sprout Bandana', price: 35, art: bandanaArt(392, 391, 322, 220), purchasable: true },
-    { id: 'bandana-7', name: 'Purple Moon & Star Bandana', price: 55, art: bandanaArt(738, 403, 333, 207), purchasable: true },
-    { id: 'bandana-8', name: 'Pink Gingham Lace Heart Bandana', price: 50, art: bandanaArt(1087, 397, 335, 219), purchasable: true },
-    { id: 'bandana-9', name: 'Cow Print Bandana', price: 45, art: bandanaArt(21, 695, 346, 216), purchasable: true },
-    { id: 'bandana-10', name: 'Blue Snowflake Bandana', price: 50, art: bandanaArt(387, 681, 328, 229), purchasable: true },
-    { id: 'bandana-11', name: 'Black Paw Bandana', price: 45, art: bandanaArt(729, 693, 342, 218), purchasable: true },
-    { id: 'bandana-12', name: 'Orange Gingham Pumpkin Bandana', price: 50, art: bandanaArt(1086, 686, 344, 225), purchasable: true },
+    {
+      id: 'bow2-17',
+      name: 'Pastel Holographic Bow',
+      price: 70,
+      art: PET_ACCESSORY_ART['bow2-17'],
+      purchasable: true,
+      equippable: true,
+    },
+    {
+      id: 'bow2-18',
+      name: 'Purple Lace Gingham Bow',
+      price: 55,
+      art: PET_ACCESSORY_ART['bow2-18'],
+      purchasable: true,
+      equippable: true,
+    },
+    // Every hat and bandana below now reuses its `art` directly from
+    // PET_ACCESSORY_ART (see @/utils/pet-accessories.ts), same reasoning
+    // as the bows above: the Shop card and the on-pet overlay always read
+    // the exact same crop data, never two independently-maintained
+    // copies. All are purchasable and equippable now; an item without its
+    // own tuned placement yet just renders invisibly on the pet once
+    // equipped (see pet-placeholder.tsx) rather than guessing.
+    { id: 'hat-1', name: 'White Cat-Ear Beanie', price: 45, art: PET_ACCESSORY_ART['hat-1'], purchasable: true, equippable: true },
+    { id: 'hat-2', name: 'Black Cat-Ear Beanie', price: 45, art: PET_ACCESSORY_ART['hat-2'], purchasable: true, equippable: true },
+    { id: 'hat-3', name: 'Bunny Hat', price: 50, art: PET_ACCESSORY_ART['hat-3'], purchasable: true, equippable: true },
+    { id: 'hat-4', name: 'Bear Hat', price: 50, art: PET_ACCESSORY_ART['hat-4'], purchasable: true, equippable: true },
+    { id: 'hat-5', name: 'Frog Hat', price: 40, art: PET_ACCESSORY_ART['hat-5'], purchasable: true, equippable: true },
+    { id: 'hat-6', name: 'Duck Hat', price: 40, art: PET_ACCESSORY_ART['hat-6'], purchasable: true, equippable: true },
+    { id: 'hat-7', name: 'Strawberry Hat', price: 45, art: PET_ACCESSORY_ART['hat-7'], purchasable: true, equippable: true },
+    { id: 'hat-8', name: 'Bee Hat', price: 45, art: PET_ACCESSORY_ART['hat-8'], purchasable: true, equippable: true },
+    { id: 'hat-9', name: 'Mushroom Hat', price: 50, art: PET_ACCESSORY_ART['hat-9'], purchasable: true, equippable: true },
+    { id: 'hat-10', name: 'Witch Hat', price: 55, art: PET_ACCESSORY_ART['hat-10'], purchasable: true, equippable: true },
+    { id: 'hat-11', name: 'Wizard Hat', price: 60, art: PET_ACCESSORY_ART['hat-11'], purchasable: true, equippable: true },
+    { id: 'hat-12', name: 'Rainbow Party Hat', price: 65, art: PET_ACCESSORY_ART['hat-12'], purchasable: true, equippable: true },
+    { id: 'hat2-1', name: 'Pumpkin Hat', price: 45, art: PET_ACCESSORY_ART['hat2-1'], purchasable: true, equippable: true },
+    { id: 'hat2-2', name: 'Reindeer Hat', price: 55, art: PET_ACCESSORY_ART['hat2-2'], purchasable: true, equippable: true },
+    { id: 'hat2-3', name: 'Santa Hat', price: 55, art: PET_ACCESSORY_ART['hat2-3'], purchasable: true, equippable: true },
+    { id: 'hat2-4', name: 'Christmas Bell Hat', price: 55, art: PET_ACCESSORY_ART['hat2-4'], purchasable: true, equippable: true },
+    { id: 'hat2-5', name: 'Pink Heart Beret', price: 40, art: PET_ACCESSORY_ART['hat2-5'], purchasable: true, equippable: true },
+    { id: 'hat2-6', name: 'Cream Paw Beret', price: 40, art: PET_ACCESSORY_ART['hat2-6'], purchasable: true, equippable: true },
+    { id: 'hat2-7', name: 'Brown Plaid Beret', price: 45, art: PET_ACCESSORY_ART['hat2-7'], purchasable: true, equippable: true },
+    { id: 'hat2-8', name: 'Yellow Sun Hat', price: 45, art: PET_ACCESSORY_ART['hat2-8'], purchasable: true, equippable: true },
+    { id: 'hat2-9', name: 'Winter Beanie', price: 50, art: PET_ACCESSORY_ART['hat2-9'], purchasable: true, equippable: true },
+    { id: 'hat2-10', name: 'Shark Hat', price: 60, art: PET_ACCESSORY_ART['hat2-10'], purchasable: true, equippable: true },
+    { id: 'hat2-11', name: 'Cow Hat', price: 50, art: PET_ACCESSORY_ART['hat2-11'], purchasable: true, equippable: true },
+    { id: 'hat2-12', name: 'Dino Hat', price: 55, art: PET_ACCESSORY_ART['hat2-12'], purchasable: true, equippable: true },
+    { id: 'hat2-13', name: 'Unicorn Hat', price: 65, art: PET_ACCESSORY_ART['hat2-13'], purchasable: true, equippable: true },
+    // Bandanas temporarily removed from the Shop catalog (postponed to
+    // focus on other app features) — not deleted, just commented out, so
+    // they're a one-line uncomment away from coming back. Their crop
+    // data, the 'neckBandana' slot, and the equip/placement system in
+    // @/utils/pet-accessories.ts and @/utils/pet-accessory-placement.ts
+    // are all untouched and still reusable once redesigned bandanas are
+    // ready to re-add here.
+    // { id: 'bandana-1', name: 'Pink Heart Bandana', price: 40, art: PET_ACCESSORY_ART['bandana-1'], purchasable: true, equippable: true },
+    // { id: 'bandana-2', name: 'Blue Gingham Cat Bandana', price: 45, art: PET_ACCESSORY_ART['bandana-2'], purchasable: true, equippable: true },
+    // { id: 'bandana-3', name: 'Strawberry Bandana', price: 45, art: PET_ACCESSORY_ART['bandana-3'], purchasable: true, equippable: true },
+    // { id: 'bandana-4', name: 'Daisy Bandana', price: 40, art: PET_ACCESSORY_ART['bandana-4'], purchasable: true, equippable: true },
+    // { id: 'bandana-5', name: 'Red Polka Dot Bell Bandana', price: 50, art: PET_ACCESSORY_ART['bandana-5'], purchasable: true, equippable: true },
+    // { id: 'bandana-6', name: 'Green Sprout Bandana', price: 35, art: PET_ACCESSORY_ART['bandana-6'], purchasable: true, equippable: true },
+    // { id: 'bandana-7', name: 'Purple Moon & Star Bandana', price: 55, art: PET_ACCESSORY_ART['bandana-7'], purchasable: true, equippable: true },
+    // { id: 'bandana-8', name: 'Pink Gingham Lace Heart Bandana', price: 50, art: PET_ACCESSORY_ART['bandana-8'], purchasable: true, equippable: true },
+    // { id: 'bandana-9', name: 'Cow Print Bandana', price: 45, art: PET_ACCESSORY_ART['bandana-9'], purchasable: true, equippable: true },
+    // { id: 'bandana-10', name: 'Blue Snowflake Bandana', price: 50, art: PET_ACCESSORY_ART['bandana-10'], purchasable: true, equippable: true },
+    // { id: 'bandana-11', name: 'Black Paw Bandana', price: 45, art: PET_ACCESSORY_ART['bandana-11'], purchasable: true, equippable: true },
+    // { id: 'bandana-12', name: 'Orange Gingham Pumpkin Bandana', price: 50, art: PET_ACCESSORY_ART['bandana-12'], purchasable: true, equippable: true },
   ],
   'Room Decor': [
     { id: 'rd-1', name: 'Cozy Rug', price: 80, emoji: '🟫' },
@@ -352,10 +506,58 @@ export function ShopScreen() {
       .finally(() => setPurchasingId(null));
   }
 
+  // The single currently-equipped accessory id, if any (see
+  // @/utils/pet-equipment.ts) — loaded once on mount so an equip choice
+  // made in an earlier session still shows "Equipped" after a
+  // refresh/reopen. Only bow-1 can actually be equipped right now, but
+  // this reads the real (single-item) equipped value so it's ready for
+  // more items later.
+  const [equippedId, setEquippedId] = useState<string | null>(null);
+  // Which single item (by id) currently has an equip/unequip call in
+  // flight — same disable-while-busy guard shape as purchasingId.
+  const [equipBusyId, setEquipBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getEquippedAccessoryId().then((id) => {
+      if (!cancelled) setEquippedId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Calls the real persistent equip/unequip actions (see
+  // @/utils/pet-equipment.ts) — no equipped-state bookkeeping lives here.
+  // This step only saves/reads the choice; nothing renders the accessory
+  // on the pet yet.
+  function handleEquipToggle(item: SampleShopItem) {
+    if (equipBusyId) return;
+    setEquipBusyId(item.id);
+    if (equippedId === item.id) {
+      unequipAccessory()
+        .then(() => setEquippedId(null))
+        .catch(() => {})
+        .finally(() => setEquipBusyId(null));
+    } else {
+      equipAccessory(item.id)
+        .then((result) => {
+          if (result.success) setEquippedId(item.id);
+        })
+        .catch(() => {})
+        .finally(() => setEquipBusyId(null));
+    }
+  }
+
   // Desktop-only hover state (mobile/touch never fires onHoverIn) — which
   // single item card, if any, currently has the mouse over it. Same
   // pattern as RoomHubScreen's hoveredRoom.
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  // Same idea, one level down: which single item's action button (Buy, or
+  // Equip/✓ Equipped — never both at once for the same item, so one id is
+  // enough) currently has the mouse over it specifically, separate from
+  // just hovering the card around it.
+  const [hoveredButtonId, setHoveredButtonId] = useState<string | null>(null);
 
   const items = SAMPLE_ITEMS[selectedCategory];
 
@@ -459,27 +661,111 @@ export function ShopScreen() {
 
                   {item.purchasable ? (
                     ownedIds.has(item.id) ? (
-                      <View style={[styles.ownedBadge, { backgroundColor: theme.mint }]}>
-                        <ThemedText type="smallBold">✓ Owned</ThemedText>
-                      </View>
+                      <>
+                        <View style={[styles.ownedBadge, { backgroundColor: theme.mint }]}>
+                          <ThemedText type="smallBold">✓ Owned</ThemedText>
+                        </View>
+                        {item.equippable ? (
+                          <Pressable
+                            onPress={() => handleEquipToggle(item)}
+                            onHoverIn={() => setHoveredButtonId(item.id)}
+                            onHoverOut={() => setHoveredButtonId(null)}
+                            disabled={equipBusyId === item.id}
+                            style={({ pressed }) => [
+                              pressed && styles.pressed,
+                              equipBusyId === item.id && styles.buyButtonDisabled,
+                            ]}>
+                            <View
+                              style={[
+                                styles.equipButton,
+                                {
+                                  backgroundColor:
+                                    hoveredButtonId === item.id
+                                      ? equippedId === item.id
+                                        ? EQUIPPED_BUTTON_HOVER_COLOR
+                                        : EQUIP_BUTTON_HOVER_COLOR
+                                      : equippedId === item.id
+                                        ? theme.purple
+                                        : theme.sky,
+                                },
+                                hoveredButtonId === item.id && [
+                                  styles.cardHovered,
+                                  styles.buttonHoverOutline,
+                                  equippedId === item.id
+                                    ? { borderColor: theme.purple }
+                                    : { borderColor: EQUIP_BUTTON_HOVER_BORDER, shadowColor: EQUIP_BUTTON_HOVER_BORDER },
+                                ],
+                              ]}>
+                              <ThemedText
+                                type="smallBold"
+                                style={equippedId === item.id ? styles.categoryLabelActive : undefined}>
+                                {equipBusyId === item.id
+                                  ? '…'
+                                  : equippedId === item.id
+                                    ? '✓ Equipped'
+                                    : 'Equip'}
+                              </ThemedText>
+                            </View>
+                          </Pressable>
+                        ) : null}
+                      </>
                     ) : insufficientFundsId === item.id ? (
                       <ThemedText type="small" themeColor="accent" style={styles.insufficientFundsText}>
                         Not enough Paw Tokens!
                       </ThemedText>
                     ) : (
-                      <Pressable
-                        onPress={() => handlePurchase(item)}
-                        disabled={purchasingId === item.id}
-                        style={({ pressed }) => [
-                          pressed && styles.pressed,
-                          purchasingId === item.id && styles.buyButtonDisabled,
-                        ]}>
-                        <View style={[styles.buyButton, { backgroundColor: theme.accent }]}>
-                          <ThemedText type="smallBold" style={styles.buyButtonText}>
-                            {purchasingId === item.id ? 'Buying…' : 'Buy'}
-                          </ThemedText>
-                        </View>
-                      </Pressable>
+                      <>
+                        <Pressable
+                          onPress={() => handlePurchase(item)}
+                          onHoverIn={() => setHoveredButtonId(item.id)}
+                          onHoverOut={() => setHoveredButtonId(null)}
+                          disabled={purchasingId === item.id}
+                          style={({ pressed }) => [
+                            pressed && styles.pressed,
+                            purchasingId === item.id && styles.buyButtonDisabled,
+                          ]}>
+                          <View
+                            style={[
+                              styles.buyButton,
+                              { backgroundColor: hoveredButtonId === item.id ? BUY_BUTTON_HOVER_COLOR : theme.accent },
+                              hoveredButtonId === item.id && [
+                                styles.cardHovered,
+                                styles.buttonHoverOutline,
+                                { borderColor: theme.accent },
+                              ],
+                            ]}>
+                            <ThemedText type="smallBold" style={styles.buyButtonText}>
+                              {purchasingId === item.id ? 'Buying…' : 'Buy'}
+                            </ThemedText>
+                          </View>
+                        </Pressable>
+                        {/* TEMPORARY dev/testing control (see
+                            @/utils/dev-flags.ts) — lets an unpurchased hat
+                            be equipped for visually tuning its placement,
+                            without buying it or touching Paw Tokens. Never
+                            marks the item as owned. Remove this block
+                            along with DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP
+                            once hat placements are finished. */}
+                        {DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP && item.art?.slot === 'headHat' ? (
+                          <Pressable
+                            onPress={() => handleEquipToggle(item)}
+                            disabled={equipBusyId === item.id}
+                            style={({ pressed }) => [
+                              pressed && styles.pressed,
+                              equipBusyId === item.id && styles.buyButtonDisabled,
+                            ]}>
+                            <View style={styles.devTestEquipButton}>
+                              <ThemedText type="small" style={styles.devTestEquipText}>
+                                {equipBusyId === item.id
+                                  ? '…'
+                                  : equippedId === item.id
+                                    ? '🧪 Equipped (test)'
+                                    : '🧪 Test Equip'}
+                              </ThemedText>
+                            </View>
+                          </Pressable>
+                        ) : null}
+                      </>
                     )
                   ) : null}
                 </ThemedView>
@@ -644,6 +930,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  // Extra "game UI" outline for a hovered action button specifically, on
+  // top of cardHovered's shared lift/shadow — borderColor is set inline
+  // per button (each button's own base color), since this is a plain
+  // outline, not a color change by itself.
+  buttonHoverOutline: {
+    borderWidth: 2,
+  },
   artPlaceholder: {
     width: '100%',
     aspectRatio: 1,
@@ -675,7 +968,30 @@ const styles = StyleSheet.create({
   buyButtonDisabled: {
     opacity: 0.6,
   },
+  // TEMPORARY dev/testing button style (see @/utils/dev-flags.ts) —
+  // deliberately distinct from buyButton/equipButton (dashed border,
+  // transparent fill) so it reads as a test-only control, never confused
+  // with a real purchase or equip action. Remove alongside the flag.
+  devTestEquipButton: {
+    marginTop: Spacing.half,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.five,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#B98900',
+    backgroundColor: 'rgba(185, 137, 0, 0.1)',
+  },
+  devTestEquipText: {
+    color: '#8A6600',
+  },
   ownedBadge: {
+    marginTop: Spacing.half,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.five,
+  },
+  equipButton: {
     marginTop: Spacing.half,
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.one,

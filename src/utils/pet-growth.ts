@@ -1,0 +1,106 @@
+import { DEV_BYPASS_GROWTH_TASK_REQUIREMENT } from '@/utils/dev-flags';
+import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
+import { PET_STAGES, getPetStageIndex, type PetStage } from '@/utils/pet-stage';
+
+// Paid pet growth — Young and Adult are no longer automatic. Deliberately
+// its own file, separate from pet-stage.ts (which stays exactly as it was,
+// still the pure "automatic stage from completed-task count" math used by
+// Egg/Hatchling/Baby) and from pet-profile.ts (which still owns the
+// paidStageIndex field itself). This only ever READS the profile's
+// pawTokens/paidStageIndex and, on a successful upgrade, SPENDS pawTokens
+// and raises paidStageIndex by exactly one stage — same shape as
+// purchaseShopItem in shop-inventory.ts.
+
+// Highest stage index that still advances automatically and for free,
+// purely from completed-task count — Baby (index 2). Young (3) and Adult
+// (4) only ever advance via a successful growPet() call below.
+const FREE_AUTO_MAX_STAGE_INDEX = 2;
+
+type GrowthRequirement = { taskThreshold: number; cost: number };
+
+// Keyed by the stage index being grown FROM. Egg/Hatchling need no entry
+// (still fully automatic); Adult (index 4) has no entry since it's the max
+// stage and can't grow further.
+const GROWTH_REQUIREMENTS: Partial<Record<number, GrowthRequirement>> = {
+  2: { taskThreshold: 30, cost: 500 }, // Baby -> Young
+  3: { taskThreshold: 40, cost: 1000 }, // Young -> Adult
+};
+
+// The stage actually shown on the pet. Egg/Hatchling/Baby derive live from
+// completedTaskCount exactly as pet-stage.ts always has (capped here at
+// Baby); Young/Adult only ever show once paidStageIndex has been raised by
+// a successful growPet() call, regardless of how many tasks are completed
+// — reaching the task threshold alone never advances past Baby. Once paid,
+// the stage never drops back down even if a task gets unchecked afterward
+// (paidStageIndex only ever increases, via growPet).
+export function getRenderedStageIndex(completedTaskCount: number, paidStageIndex: number): number {
+  const freeIndex = Math.min(getPetStageIndex(completedTaskCount), FREE_AUTO_MAX_STAGE_INDEX);
+  return Math.max(freeIndex, paidStageIndex);
+}
+
+export function getRenderedStage(completedTaskCount: number, paidStageIndex: number): PetStage {
+  return PET_STAGES[getRenderedStageIndex(completedTaskCount, paidStageIndex)];
+}
+
+export type GrowthEligibility =
+  | { canGrow: false; reason: 'max-stage' | 'not-eligible-yet' }
+  | { canGrow: true; nextStage: PetStage; cost: number; tasksNeeded: number };
+
+// Whether the pet currently shown at renderedStageIndex can be grown right
+// now — purely informational (e.g. for a UI prompt). growPet() below
+// re-derives and re-checks all of this itself against the real saved
+// profile rather than trusting a value computed earlier by the caller.
+export function getGrowthEligibility(renderedStageIndex: number, completedTaskCount: number): GrowthEligibility {
+  const requirement = GROWTH_REQUIREMENTS[renderedStageIndex];
+  if (!requirement) return { canGrow: false, reason: 'max-stage' };
+  if (!DEV_BYPASS_GROWTH_TASK_REQUIREMENT && completedTaskCount < requirement.taskThreshold) {
+    return { canGrow: false, reason: 'not-eligible-yet' };
+  }
+  return {
+    canGrow: true,
+    nextStage: PET_STAGES[renderedStageIndex + 1],
+    cost: requirement.cost,
+    tasksNeeded: requirement.taskThreshold,
+  };
+}
+
+export type GrowResult =
+  | { success: true; newStage: PetStage; profile: PetProfile }
+  | { success: false; reason: 'not-eligible' | 'insufficient-funds' };
+
+// Serializes the whole read-check-spend-write cycle so two grow attempts
+// triggered close together can't both read the same pre-upgrade profile
+// and double-spend/double-advance — same technique as purchaseShopItem in
+// shop-inventory.ts and equipAccessory in pet-equipment.ts.
+let pendingGrowth: Promise<GrowResult> = Promise.resolve({ success: false, reason: 'not-eligible' });
+
+export function growPet(completedTaskCount: number): Promise<GrowResult> {
+  const next = pendingGrowth.then(() => runGrowPet(completedTaskCount));
+  pendingGrowth = next;
+  return next;
+}
+
+async function runGrowPet(completedTaskCount: number): Promise<GrowResult> {
+  const profile = await getPetProfile();
+  const renderedStageIndex = getRenderedStageIndex(completedTaskCount, profile.paidStageIndex);
+  const eligibility = getGrowthEligibility(renderedStageIndex, completedTaskCount);
+  if (!eligibility.canGrow) {
+    return { success: false, reason: 'not-eligible' };
+  }
+  if (profile.pawTokens < eligibility.cost) {
+    return { success: false, reason: 'insufficient-funds' };
+  }
+
+  // Tokens are only ever deducted here, together with raising
+  // paidStageIndex, in this one save — never before eligibility/funds are
+  // confirmed, and never as a separate step that could leave the pet
+  // un-advanced after tokens were already spent.
+  const updated: PetProfile = {
+    ...profile,
+    pawTokens: profile.pawTokens - eligibility.cost,
+    paidStageIndex: renderedStageIndex + 1,
+  };
+  savePetProfile(updated);
+
+  return { success: true, newStage: eligibility.nextStage, profile: updated };
+}

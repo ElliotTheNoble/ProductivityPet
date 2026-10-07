@@ -16,6 +16,7 @@ SplashScreen.preventAutoHideAsync();
 const LIVING_ROOM_NORMAL = require('@/assets/images/rooms/living-room.png');
 const TASKS_NORMAL = require('@/assets/images/rooms/backgrounds/Task_Background.png');
 const STATS_BACKGROUND = require('@/assets/images/stats/stats_background.png');
+const MINI_GAMES_BACKGROUND = require('@/assets/images/mini-games/mini_games_background.png');
 
 // Mounted once, for the lifetime of the app (RootLayout itself never
 // remounts on navigation — only the routed screen inside <Slot/> swaps), so
@@ -53,6 +54,7 @@ export default function RootLayout() {
   const isHome = pathname === '/';
   const isTasks = pathname === '/tasks';
   const isStats = pathname === '/stats';
+  const isMiniGames = pathname === '/mini-games';
   // Re-checks whenever the route changes (RootLayout itself persists across
   // navigation, unlike the screens it wraps), so adding/removing a birthday
   // and then (re)visiting a screen reflects it without a full app restart.
@@ -126,6 +128,19 @@ export default function RootLayout() {
       ) : null}
       {isStats ? (
         <Image source={STATS_BACKGROUND} style={styles.homeBackground} contentFit="cover" cachePolicy="memory-disk" />
+      ) : null}
+      {/* Mini-Games' own background (mini_games_background.png), same
+          single-static-image treatment as Stats' — shared by every screen
+          under the /mini-games route (hub, Kitty Catch, Memory Match, and
+          any future mini-game) via this one route-level image, instead of
+          each needing its own copy. */}
+      {isMiniGames ? (
+        <Image
+          source={MINI_GAMES_BACKGROUND}
+          style={styles.homeBackground}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
       ) : null}
       <AppHeader />
       <Slot />

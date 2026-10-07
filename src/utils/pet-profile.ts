@@ -27,6 +27,14 @@ export type PetProfile = {
   isSleeping: boolean;
   isSick: boolean;
   hasPoop: boolean;
+  // Highest pet-stage index (see @/utils/pet-stage.ts's PET_STAGES) ever
+  // unlocked via a PAID growth upgrade (see @/utils/pet-growth.ts) — 0
+  // means "no paid upgrade yet". Egg/Hatchling/Baby never need this field
+  // to be set; they still advance automatically for free purely from
+  // completed-task count, exactly as before. Only growPet() ever writes
+  // this, after a successful, already-charged upgrade — never set
+  // optimistically before payment succeeds.
+  paidStageIndex: number;
 };
 
 // Same key-prefix convention as the rest of the app's AsyncStorage keys
@@ -58,6 +66,7 @@ function createDefaultPetProfile(): PetProfile {
     isSleeping: false,
     isSick: false,
     hasPoop: false,
+    paidStageIndex: 0,
   };
 }
 
@@ -84,6 +93,10 @@ export function normalizePetProfile(raw: unknown): PetProfile {
     isSleeping: typeof value.isSleeping === 'boolean' ? value.isSleeping : false,
     isSick: typeof value.isSick === 'boolean' ? value.isSick : false,
     hasPoop: typeof value.hasPoop === 'boolean' ? value.hasPoop : false,
+    paidStageIndex:
+      typeof value.paidStageIndex === 'number' && value.paidStageIndex >= 0
+        ? value.paidStageIndex
+        : fallback.paidStageIndex,
   };
 }
 
