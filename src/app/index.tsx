@@ -24,6 +24,7 @@ import { feedPet } from '@/utils/pet-feeding';
 import { getGrowthEligibility, getRenderedStageIndex, getRenderedStage, growPet } from '@/utils/pet-growth';
 import { restPet } from '@/utils/pet-resting';
 import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
+import { PET_STAGES } from '@/utils/pet-stage';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   excludeDateFromTask,
@@ -100,6 +101,16 @@ export default function HomeScreen() {
   // TEMPORARY — supports the test-only Grow control in handleGrow below.
   const [isGrowing, setIsGrowing] = useState(false);
   const [growResultMessage, setGrowResultMessage] = useState<string | null>(null);
+  // TEMPORARY — supports the test-only Pet Stage Preview, clickable
+  // directly on PetProgress's own stage icons (gated behind
+  // DEV_ENABLE_STAGE_PREVIEW there — see @/components/pet-progress.tsx and
+  // @/utils/dev-flags.ts). null = showing the pet's actual rendered stage;
+  // otherwise an index into PET_STAGES to preview instead. Purely local UI
+  // state — never persisted, never read by anything that computes real
+  // progression (petStage/renderedStageIndex/growthEligibility below are
+  // completely unaffected by this), so a page reload always comes back
+  // showing the real stage.
+  const [devPreviewStageIndex, setDevPreviewStageIndex] = useState<number | null>(null);
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useWindowDimensions();
@@ -421,6 +432,16 @@ export default function HomeScreen() {
   // to paidStageIndex 0 (no paid upgrade yet) before petProfile has
   // loaded, same "not loaded yet" convention as petProfile?.hunger below.
   const petStage = getRenderedStage(completedTaskCount, petProfile?.paidStageIndex ?? 0);
+  // TEMPORARY — when a Pet Stage Preview is active (selected directly on
+  // PetProgress's own stage icons — see @/components/pet-progress.tsx),
+  // this is what's actually passed to <PetRoom> instead of petStage —
+  // purely a display swap. Nothing that computes REAL progression
+  // (petStage itself, renderedStageIndex/growthEligibility below, and
+  // PetProgress's own stage/level math) reads this — PetProgress is only
+  // ever given devPreviewStageIndex to decide which icon to highlight as
+  // "currently previewed," never to change what it reports as the real
+  // stage.
+  const displayedStage = devPreviewStageIndex !== null ? PET_STAGES[devPreviewStageIndex] : petStage;
   // Reactive task messages take priority while active; otherwise the pet's
   // bubble shows the ambient mood message.
   const displayedPetMessage = temporaryMessage ?? moodMessage;
@@ -537,7 +558,7 @@ export default function HomeScreen() {
             <View style={styles.petOverlayWide} pointerEvents="box-none">
               <View style={styles.petOverlaySpacerTop} />
               <PetRoom
-                stage={petStage}
+                stage={displayedStage}
                 message={displayedPetMessage}
                 equippedAccessoryId={equippedAccessoryId}
                 hunger={petProfile?.hunger}
@@ -570,7 +591,13 @@ export default function HomeScreen() {
               contentContainerStyle={styles.rightScrollContent}
               showsVerticalScrollIndicator={false}>
               <RoomsCard />
-              <PetProgress completedTaskCount={completedTaskCount} />
+              <PetProgress
+                completedTaskCount={completedTaskCount}
+                paidStageIndex={petProfile?.paidStageIndex ?? 0}
+                previewStageIndex={devPreviewStageIndex}
+                onPreviewStage={setDevPreviewStageIndex}
+                onResetPreview={() => setDevPreviewStageIndex(null)}
+              />
               {growTestControl}
             </ScrollView>
           </View>
@@ -580,7 +607,7 @@ export default function HomeScreen() {
           <View style={styles.narrowStack}>
             <View style={styles.fixedPetTop}>
               <PetRoom
-                stage={petStage}
+                stage={displayedStage}
                 message={displayedPetMessage}
                 equippedAccessoryId={equippedAccessoryId}
                 hunger={petProfile?.hunger}
@@ -601,7 +628,13 @@ export default function HomeScreen() {
               style={styles.scrollPane}
               contentContainerStyle={styles.narrowScrollContent}
               showsVerticalScrollIndicator={false}>
-              <PetProgress completedTaskCount={completedTaskCount} />
+              <PetProgress
+                completedTaskCount={completedTaskCount}
+                paidStageIndex={petProfile?.paidStageIndex ?? 0}
+                previewStageIndex={devPreviewStageIndex}
+                onPreviewStage={setDevPreviewStageIndex}
+                onResetPreview={() => setDevPreviewStageIndex(null)}
+              />
               {growTestControl}
               {taskCard}
               {appointmentsCard}

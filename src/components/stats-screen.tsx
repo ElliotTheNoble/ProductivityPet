@@ -8,9 +8,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskCategory } from '@/utils/categorize-task';
-import { getRenderedStage } from '@/utils/pet-growth';
+import { getRenderedStage, getRenderedStageProgress } from '@/utils/pet-growth';
 import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
-import { TASKS_PER_STAGE, getStageProgress, type PetStage } from '@/utils/pet-stage';
+import { TASKS_PER_STAGE, type PetStage } from '@/utils/pet-stage';
 import { ALL_CATEGORIES, getCategoryCompletionCounts, getImportantCompletedCount } from '@/utils/stats';
 import { getCachedTasks } from '@/utils/task-storage';
 import { getCompletedTaskCount, type Task } from '@/utils/tasks';
@@ -236,21 +236,23 @@ export function StatsHubScreen() {
 
   // Every number and the pet's own stage below are derived from the exact
   // same Task[] using the project's existing, unmodified helpers — no
-  // separate tracking system, nothing hard-coded. getStageProgress computes
-  // the identical stage/level/progress picture PetProgress already shows on
-  // Home, just without that component's fixed layout, so this page can lay
-  // it out differently while still being driven by the same pet-growth
-  // math.
+  // separate tracking system, nothing hard-coded. getRenderedStageProgress
+  // computes the identical stage/level/progress picture PetProgress already
+  // shows on Home, just without that component's fixed layout, so this page
+  // can lay it out differently while still being driven by the same
+  // pet-growth math.
   const completedTaskCount = getCompletedTaskCount(tasks);
   const importantCompletedCount = getImportantCompletedCount(tasks);
   const categoryCounts = getCategoryCompletionCounts(tasks);
-  const stageProgress = getStageProgress(completedTaskCount);
+  // Floored at paidStageIndex (see @/utils/pet-growth.ts and bugs.md's
+  // BUG-004) so the level/progress-bar/"X more tasks" message below can
+  // never disagree with renderedStage (the pet art + stage label) about
+  // which stage the pet is actually on.
+  const stageProgress = getRenderedStageProgress(completedTaskCount, petProfile?.paidStageIndex ?? 0);
   // The pet's ACTUAL rendered stage (art + stage label below) — stays in
   // sync with Home's own petStage: Egg/Hatchling/Baby still derive live
   // from completedTaskCount, but Young/Adult only show once paid for via
   // growPet() (see @/utils/pet-growth.ts), never from task count alone.
-  // stageProgress above is left untouched for the level/progress-bar/
-  // "X more tasks" message, which still reflect raw task-based progress.
   const renderedStage = getRenderedStage(completedTaskCount, petProfile?.paidStageIndex ?? 0);
 
   // Explicit line break (rather than relying on text wrap) so the bubble

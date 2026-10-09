@@ -76,3 +76,24 @@ export const DEV_BYPASS_GROWTH_TASK_REQUIREMENT = true;
 // and the button + handler in src/app/index.tsx) once growth testing is done.
 export const DEV_ENABLE_TEST_PAW_TOKEN_GRANT = true;
 export const DEV_TEST_PAW_TOKEN_GRANT_AMOUNT = 1500;
+
+// When true, shows a TEMPORARY "Dev: Pet Stage Preview" control on Home
+// that lets any pet stage (Egg/Hatchling/Baby/Young/Adult) be shown on the
+// main pet image + its accessory placement, for visual testing — e.g.
+// checking a hat's placement on Baby without needing to actually reach
+// Baby through real (or dev-bypassed) progression first.
+//
+// What this flag does NOT do, by design:
+// - It never writes to the real saved Pet Profile — completedTaskCount
+//   (derived from real tasks) and paidStageIndex are completely untouched,
+//   so no real progression is gained, lost, or skipped.
+// - It never calls growPet() or spends/refunds Paw Tokens.
+// - It never changes what Pet Progress (Home) or the Stats page's own
+//   stage math shows — both keep reflecting the real saved progression
+//   exactly as before, regardless of what's being previewed.
+// - It is purely local React state (src/app/index.tsx) — never persisted,
+//   so a page reload (or its own "Reset to actual stage" button) always
+//   returns to the real rendered stage.
+// Turn this back to false (or delete this flag and the control + state in
+// src/app/index.tsx) once stage/accessory-placement testing is done.
+export const DEV_ENABLE_STAGE_PREVIEW = true;

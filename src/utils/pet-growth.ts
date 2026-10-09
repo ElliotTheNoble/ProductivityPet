@@ -1,6 +1,6 @@
 import { DEV_BYPASS_GROWTH_TASK_REQUIREMENT } from '@/utils/dev-flags';
 import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
-import { PET_STAGES, getPetStageIndex, type PetStage } from '@/utils/pet-stage';
+import { PET_STAGES, TASKS_PER_STAGE, getPetStageIndex, type PetStage, type StageProgress } from '@/utils/pet-stage';
 
 // Paid pet growth — Young and Adult are no longer automatic. Deliberately
 // its own file, separate from pet-stage.ts (which stays exactly as it was,
@@ -40,6 +40,40 @@ export function getRenderedStageIndex(completedTaskCount: number, paidStageIndex
 
 export function getRenderedStage(completedTaskCount: number, paidStageIndex: number): PetStage {
   return PET_STAGES[getRenderedStageIndex(completedTaskCount, paidStageIndex)];
+}
+
+// The same "how far into this stage" picture as pet-stage.ts's
+// getStageProgress, but built on getRenderedStageIndex above instead of
+// raw completedTaskCount — so this can never show a stage/level BELOW the
+// one actually shown on the pet (e.g. "Level 1" while the pet art is
+// Adult), and can never show Young/Adult from task count alone before
+// either has actually been paid for. See bugs.md (BUG-004) for the full
+// writeup of why PetProgress and the Stats page needed this.
+//
+// tasksIntoStage is clamped to [0, TASKS_PER_STAGE] rather than computed
+// as a raw difference — it would otherwise go negative (a paid stage held
+// up above what current completedTaskCount alone would justify, e.g.
+// after unchecking/removing tasks post-upgrade) or overshoot past
+// TASKS_PER_STAGE (plenty of completed tasks but capped at Baby because
+// Young/Adult haven't been paid for yet). Either way the bar simply reads
+// as empty or full, which is the only sensible rendering once the shown
+// stage has decoupled from a simple "completedTaskCount / 10" reading.
+export function getRenderedStageProgress(completedTaskCount: number, paidStageIndex: number): StageProgress {
+  const stageIndex = getRenderedStageIndex(completedTaskCount, paidStageIndex);
+  const isMaxStage = stageIndex === PET_STAGES.length - 1;
+  const rawTasksIntoStage = completedTaskCount - stageIndex * TASKS_PER_STAGE;
+  const tasksIntoStage = isMaxStage ? TASKS_PER_STAGE : Math.min(TASKS_PER_STAGE, Math.max(0, rawTasksIntoStage));
+
+  return {
+    stage: PET_STAGES[stageIndex],
+    stageIndex,
+    level: stageIndex + 1,
+    isMaxStage,
+    tasksIntoStage,
+    tasksUntilNextStage: isMaxStage ? 0 : TASKS_PER_STAGE - tasksIntoStage,
+    progressPercent: Math.round((tasksIntoStage / TASKS_PER_STAGE) * 100),
+    nextStage: isMaxStage ? null : PET_STAGES[stageIndex + 1],
+  };
 }
 
 export type GrowthEligibility =
