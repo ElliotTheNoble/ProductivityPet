@@ -47,11 +47,20 @@ type PetPlaceholderProps = {
 };
 
 // Egg and Hatchling each have their own dedicated full illustration.
-// Baby/Young/Adult are pre-cropped from the shared growth sprite sheet
-// (assets/images/pets/pet_growth_stages.png) into their own files, so every
-// stage is simply "one image, sized to its own real aspect ratio" — no
-// runtime sprite-cropping needed here (that technique needs a known pixel
-// size, which this responsively-sized component doesn't have).
+// Baby/Young/Adult are pre-cropped into their own standalone files, so
+// every stage is simply "one image, sized to its own real aspect ratio" —
+// no runtime sprite-cropping needed here (that technique needs a known
+// pixel size, which this responsively-sized component doesn't have).
+// Baby was cropped from the original shared sheet
+// (assets/images/pets/pet_growth_stages.png); Young and Adult were
+// re-cropped from assets/images/pets/pet_growth2.png (a 2017x780 sheet
+// with Young on the left, Adult on the right, measured via an
+// alpha-channel bounding-box scan with a safety margin, then visually
+// verified before cropping — never guessed) and saved back over the same
+// pet_young.png/pet_adult.png filenames, so neither this switch statement
+// nor anything downstream needed to change paths, only the aspect ratios
+// below (the new art's real pixel dimensions: 827x752 for Young,
+// 769x780 for Adult — neither is square like the old placeholder art was).
 function getStageImage(stage: PetStage) {
   switch (stage) {
     case 'Egg':
@@ -61,9 +70,9 @@ function getStageImage(stage: PetStage) {
     case 'Baby':
       return { source: require('@/assets/images/pets/pet_baby.png'), aspectRatio: 1 };
     case 'Young':
-      return { source: require('@/assets/images/pets/pet_young.png'), aspectRatio: 1 };
+      return { source: require('@/assets/images/pets/pet_young.png'), aspectRatio: 827 / 752 };
     case 'Adult':
-      return { source: require('@/assets/images/pets/pet_adult.png'), aspectRatio: 1 };
+      return { source: require('@/assets/images/pets/pet_adult.png'), aspectRatio: 769 / 780 };
   }
 }
 
