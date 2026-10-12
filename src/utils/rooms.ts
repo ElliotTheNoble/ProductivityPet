@@ -61,3 +61,28 @@ export const ROOM_ORDER: RoomSlug[] = ['study-room', 'gym', 'bedroom', 'bathroom
 export function isRoomSlug(value: string | string[] | undefined): value is RoomSlug {
   return typeof value === 'string' && value in ROOMS;
 }
+
+// A task can be explicitly assigned to any of the 6 rooms, including
+// Living Room — unlike RoomSlug above (which only covers the 5 rooms with
+// their own detail page), since "Living Room" is a real, pre-existing
+// task grouping (see @/utils/room-tasks.ts) even though Living Room
+// itself has no separate route (it's Home). Defined here, next to
+// RoomSlug, so both @/utils/tasks.ts (the Task.room field) and
+// @/utils/room-tasks.ts (filtering/assignment logic) can import it
+// without either depending on the other.
+export type TaskRoom = RoomSlug | 'living-room';
+
+export const TASK_ROOMS: TaskRoom[] = ['living-room', ...ROOM_ORDER];
+
+export const TASK_ROOM_LABELS: Record<TaskRoom, string> = {
+  'living-room': 'Living Room',
+  'study-room': 'Study Room',
+  gym: 'Gym',
+  bedroom: 'Bedroom',
+  bathroom: 'Bathroom',
+  kitchen: 'Kitchen',
+};
+
+export function isTaskRoom(value: unknown): value is TaskRoom {
+  return typeof value === 'string' && (TASK_ROOMS as string[]).includes(value);
+}

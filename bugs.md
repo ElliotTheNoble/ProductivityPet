@@ -56,3 +56,51 @@ Track known bugs here. Copy the template for each new bug.
 - **Fix:** Added `getRenderedStageProgress(completedTaskCount, paidStageIndex)` to `src/utils/pet-growth.ts` — the same stage/level/progress-bar shape as the old `getStageProgress()`, but built on the paid-aware `getRenderedStageIndex()` instead of raw task count, with "tasks into this stage" clamped to `[0, TASKS_PER_STAGE]` (it can't stay a meaningful raw difference once the shown stage is held up by payment rather than task count). `src/components/pet-progress.tsx` now takes a `paidStageIndex` prop and calls this instead of `getPetStageIndex()` directly; `src/components/stats-screen.tsx` now calls it instead of `getStageProgress()`. Both call sites in `src/app/index.tsx` were updated to pass `petProfile?.paidStageIndex ?? 0`. Pet Progress and the Stats page's progress bar can no longer show a stage below the one actually rendered on the pet, and can no longer show Young/Adult without an actual paid upgrade.
 
   Separately, added a development-only **Pet Stage Preview** control (gated behind the new `DEV_ENABLE_STAGE_PREVIEW` flag in `src/utils/dev-flags.ts`) so Egg/Hatchling/Baby/Young/Adult can each be previewed on the main pet image and its accessory placement for visual testing, with a "Reset to actual stage" button to return to the real stage. This is local React state only (`devPreviewStageIndex` in `src/app/index.tsx`) — it is never written to the saved Pet Profile, never touches `completedTaskCount`/`paidStageIndex`/Paw Tokens, and never feeds into Pet Progress, the Stats page, or growth eligibility, so it cannot affect real saved progression; a page reload always returns to the real stage. This directly replaces the previous ad-hoc workaround of removing real completed tasks to preview an earlier stage, which is what surfaced this bug in the first place.
+
+### [BUG-005] Kitty Becomes Clean After Poop Cleanup
+
+- **Status:** Fixed and tested.
+- **Date:** October 10, 2026
+- **Description:** Kitty returns to her clean appearance immediately after the player cleans up poop, even though she hasn't been bathed.
+- **Expected behavior:** The poop disappears, but Kitty remains dirty until she receives a bath.
+- **Actual behavior:** Kitty becomes clean when `hasPoop` is cleared and Cleanliness is above 20%.
+- **Cause:** The current dirty-state logic does not remember that Kitty still needs a bath after poop cleanup.
+- **Proposed fix:** Add a persistent `needsBath` state that remains active after poop cleanup and is cleared by the completed bathing process.
+- **Fix implemented:** Added a persistent `needsBath` field that remembers Kitty needs a bath even after `hasPoop` becomes false. Dirty-state logic now treats Kitty as dirty whenever Cleanliness is at/below 20%, `hasPoop` is true, OR `needsBath` is true, so cleaning up the poop (which only clears `hasPoop`) and restoring Cleanliness no longer clear the dirty appearance on their own — only a completed bathing process will clear `needsBath`.
+- **Test results:** Manually tested October 10, 2026 and confirmed working correctly:
+  - Triggering poop makes Kitty dirty.
+  - Clicking "Clean Up!" removes the poop.
+  - Kitty remains dirty after the poop is removed.
+
+### [BUG-006] Poop still active during the Egg stage
+
+- **Status:** Fixed and manually tested successfully.
+- **Date:** October 12, 2026
+- **Description:** Poop events and poop artwork were still active during the Egg stage, even though the Egg is meant to be a pre-hatching stage with no pet-care features.
+- **Expected behavior:** The Egg should have no poop or pet-care features — no poop events, no poop artwork, no Clean Up button, no accessories, no Feed/Bath/Play/Rest, and no Dirty Kitty artwork — regardless of whether the Egg is the pet's real saved stage or is only being shown via the developer Pet Stage Preview.
+- **Actual behavior:** Poop artwork and the Clean Up button (and other pet-care controls) could still render while viewing the Egg if the gating only checked the real saved stage — specifically, previewing the Egg (via the developer Stage Preview) on an already-hatched pet with an active poop/dirty state left those controls visible, since they were keyed only on the real stage, not on what was actually being displayed. The developer poop-trigger buttons were also not blocked from writing poop state onto a genuinely unhatched real Egg.
+- **Cause:** Egg-stage restrictions were applied inconsistently: pet-care props passed to the Living Room pet were gated on the real saved stage only, which correctly protected real data but didn't hide controls while previewing the Egg on a different real stage. Separately, the developer poop-trigger controls had no Egg guard at all.
+- **Fix:** Egg-stage restrictions were applied to poop scheduling, triggering, and rendering: the real poop-event scheduler (`applyPoopScheduling` in `src/utils/pet-poop.ts`) already refused to trigger on a real Egg; rendering is now gated on the currently-*displayed* stage (`isDisplayedEgg`, covering both the real stage and the Pet Stage Preview override) so previewing the Egg correctly hides poop artwork, the Clean Up button, need bars, accessories, and Feed/Bath/Play/Rest; every handler that actually writes to the saved profile (`handleFeed`/`handleBathe`/`handlePlay`/`handleRest`/`handleCleanUpPoop`, and the dev poop-trigger handlers) is separately guarded by the *real* saved stage (`isRealEgg`), so previewing a later stage can never be used to sneak in a real pet-care mutation while the pet is genuinely still an unhatched Egg. The developer poop-trigger buttons are now hidden (with an explanatory note) whenever the real pet is an Egg.
+- **Test results:** Manually tested and confirmed working — previewing the Egg hides all pet-care UI even on an already-dirty/hatched pet, a genuinely unhatched Egg shows no poop/Clean Up/accessories/need bars, the developer poop-trigger buttons are disabled on a real Egg, and task completion/hatching progression continue to work normally.
+
+### [BUG-007] Poop piles overlapping or appearing too close together
+
+- **Status:** Fixed and tested.
+- **Date:** October 12, 2026
+- **Description:** When several poop piles had accumulated on the floor, their random positions could land too close together or directly on top of each other, since the earlier positioning system picked a position for each pile without checking it against its siblings' real size on screen.
+- **Expected behavior:** Every pile should have clear visible spacing from every other pile, Kitty, the needs bars, and the Clean Up controls, regardless of how many piles (up to 5) are currently on the floor or which random side of Kitty they land on.
+- **Actual behavior:** Piles could be placed close enough to touch or overlap, especially once several had accumulated.
+- **Cause:** The original random-placement system picked each pile's spot independently, without comparing its own size (Small/Medium/Large render at different widths/heights) against where other piles already were.
+- **Fix:** Added real collision-aware placement (`placePoopPile` in `src/utils/pet-poop.ts`): a new pile's candidate position is checked against every existing pile's own real size-based footprint, requiring a minimum ~25px visible gap. Invalid positions are retried (up to 40 random attempts), with a small set of fixed, still-checked fallback positions used as a last resort so a pile is never left unplaced.
+- **Test results:** Manually tested and confirmed working — accumulated piles (including all 5 at once) no longer overlap or sit flush against each other, on both sides of Kitty.
+
+### [BUG-008] Excessive cleanup buttons covering the Living Room
+
+- **Status:** Fixed and tested.
+- **Date:** October 12, 2026
+- **Description:** Each poop pile had its own separate "Clean Small/Medium/Large" button rendered below Kitty. With up to 5 piles accumulated at once, this row of buttons took up too much of the Living Room screen.
+- **Expected behavior:** Cleaning up poop shouldn't require a large, growing block of buttons that crowds out the rest of the Living Room.
+- **Actual behavior:** Up to 5 separate orange buttons stacked/wrapped below Kitty, visually dominating the screen whenever several piles were active.
+- **Cause:** Cleanup was implemented as one dedicated button per pile rather than an interaction on the poop artwork itself.
+- **Fix:** Removed the per-pile button row entirely. Each poop pile's own artwork is now the cleanup control — click it on web, tap it on Android/iOS — with wiggle/shrink feedback on every click, a temporary "N left!" indicator for Medium/Large piles, and a sparkle-and-shrink animation on the final click. See FEATURE-036 in `features.md` for the full implementation.
+- **Test results:** Manually tested and confirmed working — poop piles can be cleaned by clicking/tapping directly on them, no separate buttons appear, and the Living Room stays uncluttered even with 5 piles active.

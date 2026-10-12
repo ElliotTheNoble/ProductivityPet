@@ -1,4 +1,5 @@
 import { categorizeTask, type TaskCategory } from '@/utils/categorize-task';
+import { isTaskRoom, type TaskRoom } from '@/utils/rooms';
 
 export type RepeatRule = { kind: 'daily' } | { kind: 'weekly'; days: number[] } | { kind: 'yearly' };
 
@@ -73,6 +74,24 @@ export type Task = {
   // date it targets, so a stale schedule can be recognized and replaced.
   scheduledNotificationId?: string;
   scheduledNotificationFor?: string;
+  // Explicit room assignment (see @/utils/rooms.ts's TaskRoom and
+  // @/utils/room-tasks.ts, which owns the actual filtering/fallback
+  // logic). THREE distinct states, not two:
+  // - undefined: never explicitly set — a task saved before this field
+  //   existed (or otherwise created without a room decision). Its room is
+  //   INFERRED from category/keyword as a backward-compatible fallback
+  //   (see getTaskRoom in room-tasks.ts), reproducing the exact behavior
+  //   this app had before this field existed.
+  // - null: explicitly marked "no room" by the user (via the Assign to
+  //   Room picker). This is a deliberate choice and must NEVER fall back
+  //   to inference, even though it looks similar to "missing."
+  // - a TaskRoom value: explicitly assigned — always wins over whatever
+  //   category/keyword inference would otherwise suggest.
+  // This undefined/null split is the migration strategy: it's what lets a
+  // legacy task be told apart from one a user intentionally left
+  // unassigned, without needing a separate flag or a one-time rewrite of
+  // existing stored tasks.
+  room?: TaskRoom | null;
 };
 
 // What list-row UI components (TaskCard, the Tasks-tab day list) render —
@@ -160,6 +179,13 @@ export function normalizeTask(raw: any, fallbackDate: string): Task {
       typeof raw.scheduledNotificationId === 'string' ? raw.scheduledNotificationId : undefined,
     scheduledNotificationFor:
       typeof raw.scheduledNotificationFor === 'string' ? raw.scheduledNotificationFor : undefined,
+    // Preserves exactly which of the three room states (see Task.room
+    // above) the stored record was in: a real TaskRoom value and explicit
+    // null both pass through as-is; anything else (the field was never
+    // present at all, or holds garbage) normalizes to undefined — i.e.
+    // "treat as legacy, infer it" — which is the correct, safe default
+    // for data this function has never seen before.
+    room: raw.room === null ? null : isTaskRoom(raw.room) ? raw.room : undefined,
   };
 }
 
@@ -279,6 +305,13 @@ export function editItemDetails(
     time?: string;
     repeat?: RepeatRule;
     reminderMinutesBefore?: ReminderOffsetMinutes;
+    // Omit this key entirely (not just pass undefined — see
+    // task-edit-modal.tsx) to leave the task's existing room field
+    // completely untouched, which is what preserves a legacy task's
+    // undefined/inferred state when the user edits something else
+    // without ever touching the room picker. Pass null to explicitly
+    // unassign, or a TaskRoom to explicitly (re)assign.
+    room?: TaskRoom | null;
   }
 ): Task[] {
   return tasks.map((task) => {
@@ -292,6 +325,7 @@ export function editItemDetails(
       time: changes.time,
       repeat: repeatForKind(changes.kind, changes.repeat),
       reminderMinutesBefore: changes.reminderMinutesBefore,
+      room: 'room' in changes ? changes.room : task.room,
     };
   });
 }
@@ -303,6 +337,13 @@ export function createTask(input: {
   time?: string;
   repeat?: RepeatRule;
   reminderMinutesBefore?: ReminderOffsetMinutes;
+  // Required (not optional) deliberately — every NEW task should get an
+  // explicit room decision from whatever UI creates it (a real TaskRoom,
+  // or null for "left unassigned"), never silently fall into the
+  // undefined/"legacy, please infer" state, which is reserved for tasks
+  // that predate this field entirely (see Task.room in the type above).
+  // Pass null for kinds where a room doesn't apply (events, birthdays).
+  room: TaskRoom | null;
 }): Task {
   const repeat = repeatForKind(input.kind, input.repeat);
   return {
@@ -317,5 +358,6 @@ export function createTask(input: {
     reminderMinutesBefore: input.reminderMinutesBefore,
     completed: false,
     completedDates: repeat ? [] : undefined,
+    room: input.room,
   };
 }

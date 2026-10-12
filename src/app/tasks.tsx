@@ -12,6 +12,8 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getHolidayForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
+import { getTaskRoom } from '@/utils/room-tasks';
+import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   createTask,
@@ -115,6 +117,10 @@ export default function TasksScreen() {
   const [draftRepeat, setDraftRepeat] = useState<RepeatOption>('none');
   const [draftWeeklyDays, setDraftWeeklyDays] = useState<Set<number>>(new Set());
   const [draftReminder, setDraftReminder] = useState<ReminderOption>('none');
+  // null = Unassigned (the default) — a brand new task always gets an
+  // explicit room decision, never the "legacy, please infer" undefined
+  // state (see createTask's room param in @/utils/tasks.ts).
+  const [draftRoom, setDraftRoom] = useState<TaskRoom | null>(null);
 
   const [editingItem, setEditingItem] = useState<Task | null>(null);
 
@@ -183,6 +189,7 @@ export default function TasksScreen() {
     setDraftRepeat('none');
     setDraftWeeklyDays(new Set());
     setDraftReminder('none');
+    setDraftRoom(null);
     setIsAdding(false);
   }
 
@@ -227,6 +234,7 @@ export default function TasksScreen() {
       time: draftTime.trim() || undefined,
       repeat,
       reminderMinutesBefore: reminderOptionToMinutes(draftReminder),
+      room: draftKind === 'task' ? draftRoom : null,
     });
     setTasks((prev) => [...prev, newTask]);
     resetDraft();
@@ -283,6 +291,12 @@ export default function TasksScreen() {
         time: values.time,
         repeat: values.repeat,
         reminderMinutesBefore: values.reminderMinutesBefore,
+        // Only forwarded when the modal's own Room picker was actually
+        // touched (see TaskEditModal's handleSave) — editItemDetails
+        // leaves a task's existing room field completely alone otherwise,
+        // which is what keeps a legacy task's inferred room from being
+        // silently pinned just because something else was edited.
+        ...('room' in values ? { room: values.room } : {}),
       })
     );
   }
@@ -553,6 +567,43 @@ export default function TasksScreen() {
             </View>
           ) : null}
 
+          {draftKind === 'task' ? (
+            <View style={styles.repeatSection}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Assign to Room
+              </ThemedText>
+              <View style={styles.pillRow}>
+                <Pressable onPress={() => setDraftRoom(null)} style={({ pressed }) => pressed && styles.pressed}>
+                  <View
+                    style={[
+                      styles.pill,
+                      { backgroundColor: draftRoom === null ? theme.purple : theme.background },
+                    ]}>
+                    <ThemedText type="small" style={draftRoom === null ? styles.pillTextActive : undefined}>
+                      Unassigned
+                    </ThemedText>
+                  </View>
+                </Pressable>
+                {TASK_ROOMS.map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setDraftRoom(option)}
+                    style={({ pressed }) => pressed && styles.pressed}>
+                    <View
+                      style={[
+                        styles.pill,
+                        { backgroundColor: draftRoom === option ? theme.purple : theme.background },
+                      ]}>
+                      <ThemedText type="small" style={draftRoom === option ? styles.pillTextActive : undefined}>
+                        {TASK_ROOM_LABELS[option]}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.formButtonRow}>
             <Pressable onPress={handleAdd} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="accent" style={styles.saveButton}>
@@ -729,6 +780,8 @@ export default function TasksScreen() {
           initialTime={editingItem.time}
           initialRepeat={editingItem.repeat}
           initialReminderMinutes={editingItem.reminderMinutesBefore}
+          initialRoom={editingItem.room}
+          inferredRoom={getTaskRoom(editingItem)}
           onSave={(values) => {
             handleSaveEdit(editingItem.id, values);
             setEditingItem(null);

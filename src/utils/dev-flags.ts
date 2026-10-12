@@ -97,3 +97,26 @@ export const DEV_TEST_PAW_TOKEN_GRANT_AMOUNT = 1500;
 // Turn this back to false (or delete this flag and the control + state in
 // src/app/index.tsx) once stage/accessory-placement testing is done.
 export const DEV_ENABLE_STAGE_PREVIEW = true;
+
+// When true, shows a TEMPORARY "Dev: Dirty Kitty testing" card on Home
+// with buttons that write directly to the real saved Pet Profile: set
+// Cleanliness to exactly DEV_DIRTY_TEST_CLEANLINESS_VALUE (20, the dirty
+// threshold itself — see DIRTY_CLEANLINESS_THRESHOLD in
+// @/utils/pet-needs.ts), restore Cleanliness to 100, add/clear poop piles
+// (including specific sizes and a "fast-forward" accumulation simulator —
+// see @/utils/pet-poop.ts), and reset needsBath — so the Dirty Kitty art
+// swap (Living Room + Bathroom), the gradual Happiness/Energy penalty, and
+// poop-pile accumulation can all be tested without waiting for real decay
+// or real elapsed hours.
+//
+// What this flag does NOT do, by design:
+// - It never touches Hunger, Happiness, Energy, pawTokens, paidStageIndex,
+//   or any other field — each button writes only the field(s) it names.
+// - Each button is an explicit, visible, user-pressed action — nothing
+//   here runs automatically or on a timer.
+// - It is not shown to, or usable by, anyone unless this flag is true.
+// Turn this back to false (or delete this flag, DEV_DIRTY_TEST_CLEANLINESS_VALUE,
+// and the card + handlers in src/app/index.tsx) once dirty-state/poop
+// testing is done.
+export const DEV_ENABLE_DIRTY_TEST_CONTROLS = true;
+export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;

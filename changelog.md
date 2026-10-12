@@ -20,6 +20,38 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-12]
+
+### Added
+- **Summary:** built the full poop system end to end — random accumulation (up to 5 piles, one every 2 hours while neglected), Small/Medium/Large piles with their own cleanup difficulty, random non-overlapping floor placement on both sides of Kitty, click/tap-to-clean with animated feedback, a horizontal needs-bar layout, and a fix for poop/pet-care leaking into the Egg stage — plus a pass of beginner-friendly explanatory comments across all of it ahead of starting the bathing system next.
+- Beginner-friendly code comments added across the poop system (`src/utils/pet-poop.ts`, `src/utils/pet-profile.ts`, `src/utils/pet-needs.ts`, `src/components/pet-placeholder.tsx`, `src/app/index.tsx`, `src/app/_layout.tsx`) — short "Simple explanation" notes above the important functions/sections, kept alongside (not replacing) the existing detailed comments. No behavior changed.
+- BUG-007 and BUG-008 documented in `bugs.md` (poop piles overlapping, and the per-pile button row covering too much of the Living Room) — both fixed and manually tested; see the Added entries below for the fixes themselves.
+- FEATURE-037 and FEATURE-038 documented in `features.md`: the Egg stage's full pet-care restrictions, and Dirty Kitty staying dirty until an actual bath (`needsBath`) — both already implemented and tested in earlier work, now written up as standalone features.
+- Poop pile accumulation (FEATURE-034): Kitty can now have up to 5 independent poop piles on the floor at once instead of just one. The first pile still appears after a random 3-8 hour wait; left uncleaned, another pile piles on every 2 hours up to the cap. Each pile rolls its own Small/Medium/Large size and cleanup difficulty (1/2/3 clicks) and gets its own floor artwork and "Clean Up!" button — cleaning one pile never affects the others.
+- `src/utils/pet-profile.ts`: new `poopPiles: PoopPile[]` field (replacing the old single `hasPoop`/`poopSize`/`poopCleanupRemaining`) and `MAX_POOP_PILES` (5). Profiles saved in the older single-poop shape are migrated automatically on load.
+- `src/utils/pet-poop.ts`: `applyPoopAccumulation` — the real time-based accumulation scheduler, with a bounded catch-up pass so reopening the app after several hours away adds exactly as many piles as should have accumulated (capped at 5), not just one. `applyCleanUpPile(profile, pileId)` clears one cleanup click from one named pile only.
+- Developer-only test controls: add a pile of a specific or random size instantly, a "Fast-Forward Accumulation (+2h)" button that simulates one real accumulation tick via the actual production logic, and a "Clear All Piles" bulk reset — all disabled while the real pet is still an Egg.
+- BUG-006 documented in `bugs.md`: poop/pet-care controls were still reachable while viewing the Egg (specifically when previewing the Egg via the developer Stage Preview on an already-hatched, already-dirty pet) — fixed and manually tested.
+- Random, stable poop-pile floor positions (FEATURE-035): each pile now appears at a random floor spot (picked from a fixed set of 6 non-overlapping slots, plus a small random jitter) instead of lining up left-to-right, staying grounded, away from Kitty, and away from the Clean Up buttons. A pile's position is generated once at creation and persisted — it never changes on rerender or app reopen, only new piles get a fresh random spot. `src/utils/pet-profile.ts`'s `PoopPile` gained `slotIndex`/`jitterXPx`/`jitterYPx`; `src/utils/pet-poop.ts`'s `createPoopPile` now picks an unused slot among the pile's current siblings (correctly avoiding collisions even when several piles are added at once during a multi-hour catch-up).
+- Horizontal pet-needs bars (FEATURE-035): Hunger/Cleanliness/Happiness/Energy now render side by side in one wrapping row (`src/components/pet-placeholder.tsx`'s new `needsRow`/`needBarHorizontal` styles) instead of stacked vertically, falling back to a 2x2 grid on narrow phone screens via plain flexbox wrapping — no new breakpoint logic. Shortens the panel noticeably, leaving more of the floor visible.
+- Random both-sides, collision-aware poop placement: replaced the 6-slot grid above with real placement logic (`placePoopPile` in `src/utils/pet-poop.ts`) that randomly picks either side of Kitty (not favoring one), checks each candidate against every existing pile's own real size-based footprint with a required ~25px gap, retries on collision, and falls back to a safe fixed position as a last resort. `PoopPile.slotIndex`/`jitterXPx`/`jitterYPx` were replaced by a single fully-resolved `offsetXPx`/`offsetYPx` per pile.
+- Kitty nudged up ~30px in the Living Room (`KITTY_LIVING_ROOM_OFFSET_Y_PX` in `src/components/pet-placeholder.tsx`) for Hatchling/Baby/Young/Adult — the Egg, and every other room, are unaffected.
+- Tap/click-to-clean poop (FEATURE-036): each pile's own artwork is now the cleanup control (click on web, tap on Android/iOS) — no more separate "Clean Small/Medium/Large" buttons. Gives wiggle/shrink feedback on every click, a brief "N left!" bubble for Medium/Large piles with clicks remaining, and a sparkle + shrink/fade animation on the final click before the pile disappears. Built with React Native's `Animated` API (no new dependency); includes `accessibilityRole`/`accessibilityLabel` for screen readers and keyboard activation on web, a `hitSlop`-enlarged tap target, and a short per-pile press lock to prevent double-activation.
+
+### Changed
+- `isPetDirty` (`src/utils/pet-needs.ts`) now checks `poopPiles.length > 0` instead of the old single boolean — still one combined dirty check with Cleanliness/`needsBath`, so multiple accumulated piles don't stack the Happiness/Energy penalty.
+- Poop floor artwork positioning: Young/Adult nudged further right (now 250px from baseline) and Hatchling/Baby nudged left (-100px from baseline) — now used as each side's *minimum* distance from Kitty's center rather than a single fixed direction, since piles can land on either side.
+- Egg-stage pet-care gating (`src/app/index.tsx`) now correctly distinguishes the real saved stage (used to guard every profile-writing handler) from the currently *displayed* stage, which includes the developer Pet Stage Preview (used to decide what's actually visible) — see BUG-006.
+
+### Fixed
+- BUG-006: poop artwork, the Clean Up button, and other pet-care controls could still render while viewing the Egg if gating only checked the real saved stage; now gated on the displayed stage for visibility and separately backstopped on the real stage for every state-mutating action.
+
+### Removed
+- The old single-poop model (`hasPoop: boolean` / `poopSize: PoopSize | null` / `poopCleanupRemaining: number` fields, `applyPoopTrigger`/`applyPoopScheduling`/`applyCleanUpPoop`/`checkForPoopEvent`) — superseded by the `poopPiles` accumulation system above. Existing saved profiles using the old shape are migrated automatically, not reset.
+- The per-pile "Clean Small/Medium/Large" button row — cleaning now happens by pressing the poop artwork itself (see FEATURE-036 above).
+
+---
+
 ## [2026-10-02]
 
 ### Added

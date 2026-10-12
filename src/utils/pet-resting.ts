@@ -30,7 +30,7 @@ export const REST_ENERGY_AMOUNT = 20;
 
 // Increases Energy by REST_ENERGY_AMOUNT, clamped so it never exceeds 100.
 // Touches Energy only — Hunger, Cleanliness, Happiness, Paw Tokens,
-// isSleeping, isSick, hasPoop, adoptionDate, and lastUpdatedAt all pass
+// isSleeping, isSick, poopPiles, adoptionDate, and lastUpdatedAt all pass
 // through unchanged.
 export function applyResting(profile: PetProfile): PetProfile {
   const nextEnergy = clampNeedValue(profile.energy + REST_ENERGY_AMOUNT);
@@ -62,7 +62,7 @@ export function applyResting(profile: PetProfile): PetProfile {
 // save" convention. savePetProfile stamps lastUpdatedAt to the current
 // time on this save, same as every other save in the app; every other
 // field, including adoptionDate, Hunger, Cleanliness, Happiness, Paw
-// Tokens, isSleeping, isSick, and hasPoop, is preserved exactly as
+// Tokens, isSleeping, isSick, and poopPiles, is preserved exactly as
 // loadPetProfileWithNeedsUpdate left it.
 export async function restPet(now: Date = new Date()): Promise<PetProfile> {
   const profile = await loadPetProfileWithNeedsUpdate(now);

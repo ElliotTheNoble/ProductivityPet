@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
+import { isRoomSlug } from '@/utils/rooms';
 
 type NavItem = {
   href: Href;
@@ -43,15 +44,21 @@ export function AppHeader() {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  // Home, Tasks, Stats, and Mini-Games each render their own full-screen
-  // background behind this header (see src/app/_layout.tsx) — transparent
-  // here lets it show through instead of the usual solid header fill.
-  // Every other route is unaffected. The logo/tagline keep their own
-  // translucent backdrop (brandBackdrop below) and the nav pills already
-  // have their own opaque fill regardless of this flag, so both stay
-  // readable over any background.
+  // Home, Tasks, Stats, Mini-Games, and each individual Room detail page
+  // each render their own full-screen background behind this header (see
+  // src/app/_layout.tsx) — transparent here lets it show through instead
+  // of the usual solid header fill. Every other route (including the
+  // Rooms hub list itself, /rooms with no slug) is unaffected. The
+  // logo/tagline keep their own translucent backdrop (brandBackdrop below)
+  // and the nav pills already have their own opaque fill regardless of
+  // this flag, so both stay readable over any background.
+  const roomDetailSlug = pathname.startsWith('/rooms/') ? pathname.slice('/rooms/'.length) : null;
   const isImmersiveRoute =
-    pathname === '/' || pathname === '/tasks' || pathname === '/stats' || pathname === '/mini-games';
+    pathname === '/' ||
+    pathname === '/tasks' ||
+    pathname === '/stats' ||
+    pathname === '/mini-games' ||
+    (roomDetailSlug !== null && isRoomSlug(roomDetailSlug));
 
   // The real pawTokens value from the persistent Pet Profile (see
   // @/utils/pet-profile.ts) — null until the first load resolves, so the

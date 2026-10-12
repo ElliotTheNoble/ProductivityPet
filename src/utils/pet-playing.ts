@@ -20,8 +20,8 @@ export const PLAY_HAPPINESS_AMOUNT = 20;
 
 // Increases Happiness by PLAY_HAPPINESS_AMOUNT, clamped so it never
 // exceeds 100. Touches Happiness only — Hunger, Cleanliness, Energy, Paw
-// Tokens, isSleeping, isSick, hasPoop, adoptionDate, and lastUpdatedAt all
-// pass through unchanged.
+// Tokens, isSleeping, isSick, poopPiles, adoptionDate, and lastUpdatedAt
+// all pass through unchanged.
 export function applyPlaying(profile: PetProfile): PetProfile {
   const nextHappiness = clampNeedValue(profile.happiness + PLAY_HAPPINESS_AMOUNT);
   if (nextHappiness === profile.happiness) return profile;
@@ -49,7 +49,7 @@ export function applyPlaying(profile: PetProfile): PetProfile {
 // save" convention. savePetProfile stamps lastUpdatedAt to the current
 // time on this save, same as every other save in the app; every other
 // field, including adoptionDate, Hunger, Cleanliness, Energy, Paw Tokens,
-// isSleeping, isSick, and hasPoop, is preserved exactly as
+// isSleeping, isSick, and poopPiles, is preserved exactly as
 // loadPetProfileWithNeedsUpdate left it.
 export async function playWithPet(now: Date = new Date()): Promise<PetProfile> {
   const profile = await loadPetProfileWithNeedsUpdate(now);

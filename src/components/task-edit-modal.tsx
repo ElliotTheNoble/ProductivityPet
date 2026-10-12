@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureNotificationPermission } from '@/utils/notifications';
+import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
 import { reminderOffsetLabel, type ReminderOffsetMinutes, type RepeatRule, type TaskKind } from '@/utils/tasks';
 
 const WEEKDAY_TOGGLE_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -99,6 +100,11 @@ export type TaskEditValues = {
   time?: string;
   repeat?: RepeatRule;
   reminderMinutesBefore?: ReminderOffsetMinutes;
+  // Omitted entirely (not present as a key) when the user never touched
+  // the Room picker — see the room/displayedRoom split below and
+  // editItemDetails in @/utils/tasks.ts, which only touches a task's
+  // existing room field when this key is actually present.
+  room?: TaskRoom | null;
 };
 
 type TaskEditModalProps = {
@@ -108,6 +114,18 @@ type TaskEditModalProps = {
   initialTime?: string;
   initialRepeat?: RepeatRule;
   initialReminderMinutes?: ReminderOffsetMinutes;
+  // The task's raw room field (see Task.room in @/utils/tasks.ts) —
+  // undefined for a legacy task that's never had an explicit room set,
+  // null for one explicitly marked Unassigned, or a concrete TaskRoom.
+  // Carried through to onSave's output untouched UNLESS the user actually
+  // picks a different pill — see the room/displayedRoom split below.
+  initialRoom?: TaskRoom | null;
+  // The room this task currently effectively belongs to, after the same
+  // category/keyword fallback inference everything else uses (see
+  // getTaskRoom in @/utils/room-tasks.ts) — used ONLY to decide which
+  // pill looks selected when initialRoom is undefined; never written back
+  // unless the user actually interacts with this field.
+  inferredRoom: TaskRoom | null;
   onSave: (values: TaskEditValues) => void;
   onCancel: () => void;
 };
@@ -122,6 +140,8 @@ export function TaskEditModal({
   initialTime,
   initialRepeat,
   initialReminderMinutes,
+  initialRoom,
+  inferredRoom,
   onSave,
   onCancel,
 }: TaskEditModalProps) {
@@ -137,6 +157,15 @@ export function TaskEditModal({
   const [reminderOption, setReminderOption] = useState<ReminderOption>(
     reminderMinutesToOption(initialReminderMinutes)
   );
+  // Stays exactly `initialRoom` (including undefined, for a legacy task)
+  // until the user actually presses a Room pill — see handleSave below,
+  // which only includes `room` in its output at all once this has
+  // actually been touched. displayedRoom (used only for which pill looks
+  // active) falls back to inferredRoom — deliberately NOT `room ?? inferredRoom`,
+  // since `??` would also replace an explicit null (Unassigned) with the
+  // inferred value, which is wrong.
+  const [room, setRoom] = useState<TaskRoom | null | undefined>(initialRoom);
+  const displayedRoom = room !== undefined ? room : inferredRoom;
 
   function toggleWeeklyDay(day: number) {
     setWeeklyDays((prev) => {
@@ -186,6 +215,13 @@ export function TaskEditModal({
       time: time.trim() || undefined,
       repeat,
       reminderMinutesBefore: reminderOptionToMinutes(reminderOption),
+      // Only included at all once the user has actually touched the Room
+      // picker (room !== undefined) — see editItemDetails in
+      // @/utils/tasks.ts, which leaves a task's existing room field
+      // completely alone when this key is absent, which is what keeps a
+      // legacy task's inferred room from being silently pinned just
+      // because something else on the task was edited.
+      ...(room !== undefined ? { room } : {}),
     });
   }
 
@@ -362,6 +398,45 @@ export function TaskEditModal({
                     })}
                   </View>
                 ) : null}
+              </View>
+            ) : null}
+
+            {selectedKind === 'task' ? (
+              <View style={styles.fieldGroup}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Assign to Room
+                </ThemedText>
+                <View style={styles.pillRow}>
+                  <Pressable onPress={() => setRoom(null)} style={({ pressed }) => pressed && styles.pressed}>
+                    <View
+                      style={[
+                        styles.pill,
+                        { backgroundColor: displayedRoom === null ? theme.purple : theme.background },
+                      ]}>
+                      <ThemedText type="small" style={displayedRoom === null ? styles.pillTextActive : undefined}>
+                        Unassigned
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                  {TASK_ROOMS.map((option) => (
+                    <Pressable
+                      key={option}
+                      onPress={() => setRoom(option)}
+                      style={({ pressed }) => pressed && styles.pressed}>
+                      <View
+                        style={[
+                          styles.pill,
+                          { backgroundColor: displayedRoom === option ? theme.purple : theme.background },
+                        ]}>
+                        <ThemedText
+                          type="small"
+                          style={displayedRoom === option ? styles.pillTextActive : undefined}>
+                          {TASK_ROOM_LABELS[option]}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
             ) : null}
 

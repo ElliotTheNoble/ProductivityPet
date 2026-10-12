@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { PetPlaceholder } from '@/components/pet-placeholder';
 import { Spacing } from '@/constants/theme';
+import type { PoopPile } from '@/utils/pet-profile';
 import type { PetStage } from '@/utils/pet-stage';
 
 type PetRoomProps = {
@@ -27,6 +28,13 @@ type PetRoomProps = {
   happiness?: number;
   // Same as hunger, for Energy.
   energy?: number;
+  // The real petProfile.poopPiles value, passed straight through to
+  // PetPlaceholder — see that component, @/utils/pet-needs.ts's
+  // isPetDirty, and @/utils/pet-poop.ts's accumulation system.
+  poopPiles?: PoopPile[];
+  // Same as poopPiles, for needsBath — see PetPlaceholder and
+  // @/utils/pet-needs.ts's isPetDirty.
+  needsBath?: boolean;
   // Passed straight through to PetPlaceholder, which renders the
   // Feed/Bath/Play/Rest buttons only when their own handler is provided —
   // see that component. Optional so the room-detail screens (which also
@@ -40,6 +48,9 @@ type PetRoomProps = {
   isPlaying?: boolean;
   onRest?: () => void;
   isResting?: boolean;
+  // Passed straight through to PetPlaceholder's per-pile "Clean Up!"
+  // buttons — see that component and @/utils/pet-poop.ts.
+  onCleanUpPile?: (pileId: string) => void;
 };
 
 // The living-room background now lives once, fixed behind the whole Home
@@ -55,6 +66,8 @@ export function PetRoom({
   cleanliness,
   happiness,
   energy,
+  poopPiles,
+  needsBath,
   onFeed,
   isFeeding,
   onBathe,
@@ -63,6 +76,7 @@ export function PetRoom({
   isPlaying,
   onRest,
   isResting,
+  onCleanUpPile,
 }: PetRoomProps) {
   return (
     <View style={[styles.scene, spacious && styles.sceneSpacious]}>
@@ -74,6 +88,8 @@ export function PetRoom({
         cleanliness={cleanliness}
         happiness={happiness}
         energy={energy}
+        poopPiles={poopPiles}
+        needsBath={needsBath}
         onFeed={onFeed}
         isFeeding={isFeeding}
         onBathe={onBathe}
@@ -82,6 +98,7 @@ export function PetRoom({
         isPlaying={isPlaying}
         onRest={onRest}
         isResting={isResting}
+        onCleanUpPile={onCleanUpPile}
       />
     </View>
   );

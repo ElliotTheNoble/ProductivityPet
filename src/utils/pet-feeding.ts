@@ -20,7 +20,8 @@ export const FEED_HUNGER_AMOUNT = 20;
 
 // Increases Hunger by FEED_HUNGER_AMOUNT, clamped so it never exceeds 100.
 // Touches Hunger only — Cleanliness, Happiness, Energy, Paw Tokens,
-// isSleeping, isSick, hasPoop, and adoptionDate all pass through unchanged.
+// isSleeping, isSick, poopPiles, and adoptionDate all pass through
+// unchanged.
 export function applyFeeding(profile: PetProfile): PetProfile {
   const nextHunger = clampNeedValue(profile.hunger + FEED_HUNGER_AMOUNT);
   if (nextHunger === profile.hunger) return profile;
@@ -47,7 +48,7 @@ export function applyFeeding(profile: PetProfile): PetProfile {
 // the save" convention. savePetProfile (see pet-profile.ts) stamps
 // lastUpdatedAt to the current time on this save, same as every other
 // save in the app; every other field, including adoptionDate, Cleanliness,
-// Happiness, Energy, Paw Tokens, isSleeping, isSick, and hasPoop, is
+// Happiness, Energy, Paw Tokens, isSleeping, isSick, and poopPiles, is
 // preserved exactly as loadPetProfileWithNeedsUpdate left it.
 export async function feedPet(now: Date = new Date()): Promise<PetProfile> {
   const profile = await loadPetProfileWithNeedsUpdate(now);

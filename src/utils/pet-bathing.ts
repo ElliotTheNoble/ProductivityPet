@@ -19,8 +19,8 @@ export const BATHE_CLEANLINESS_AMOUNT = 25;
 
 // Increases Cleanliness by BATHE_CLEANLINESS_AMOUNT, clamped so it never
 // exceeds 100. Touches Cleanliness only — Hunger, Happiness, Energy, Paw
-// Tokens, isSleeping, isSick, hasPoop, adoptionDate, and lastUpdatedAt all
-// pass through unchanged.
+// Tokens, isSleeping, isSick, poopPiles, adoptionDate, and lastUpdatedAt
+// all pass through unchanged.
 export function applyBathing(profile: PetProfile): PetProfile {
   const nextCleanliness = clampNeedValue(profile.cleanliness + BATHE_CLEANLINESS_AMOUNT);
   if (nextCleanliness === profile.cleanliness) return profile;
@@ -47,7 +47,7 @@ export function applyBathing(profile: PetProfile): PetProfile {
 // convention. savePetProfile stamps lastUpdatedAt to the current time on
 // this save, same as every other save in the app; every other field,
 // including adoptionDate, Hunger, Happiness, Energy, Paw Tokens,
-// isSleeping, isSick, and hasPoop, is preserved exactly as
+// isSleeping, isSick, and poopPiles, is preserved exactly as
 // loadPetProfileWithNeedsUpdate left it.
 export async function bathePet(now: Date = new Date()): Promise<PetProfile> {
   const profile = await loadPetProfileWithNeedsUpdate(now);

@@ -9,6 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getRoomTasks } from '@/utils/room-tasks';
+import type { TaskRoom } from '@/utils/rooms';
 import { getCachedTasks } from '@/utils/task-storage';
 import { occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
@@ -103,35 +105,18 @@ const BACKGROUND_DECORATIONS: { glyph: string; top: Percent; left?: Percent; rig
   { glyph: '✨', top: '82%', right: '2%', size: 18 },
 ];
 
-function mentionsWord(text: string, word: string): boolean {
-  return new RegExp(`\\b${word}\\b`, 'i').test(text);
-}
-
-// How many of today's tasks are "relevant" to each room. Study Room and Gym
-// reuse the existing task category as an exact match ('Study'/'Exercise').
-// Kitchen/Bathroom/Bedroom have no dedicated category of their own — chores
-// for all three fall under the shared 'Clean' category — so those instead
-// count today's tasks whose own text mentions that room by name. Living Room
-// falls back to 'Personal', the closest existing category to general/
-// downtime tasks. Only kind: 'task' items count (matches Home's "Today's
-// Tasks" filter) — appointments and birthdays aren't to-dos.
-function countRoomTasks(roomName: string, todaysTasks: Task[]): number {
-  switch (roomName) {
-    case 'Study Room':
-      return todaysTasks.filter((task) => task.category === 'Study').length;
-    case 'Gym':
-      return todaysTasks.filter((task) => task.category === 'Exercise').length;
-    case 'Kitchen':
-      return todaysTasks.filter((task) => mentionsWord(task.text, 'kitchen')).length;
-    case 'Bathroom':
-      return todaysTasks.filter((task) => mentionsWord(task.text, 'bathroom')).length;
-    case 'Bedroom':
-      return todaysTasks.filter((task) => mentionsWord(task.text, 'bedroom')).length;
-    case 'Living Room':
-      return todaysTasks.filter((task) => task.category === 'Personal').length;
-    default:
-      return 0;
-  }
+// How many of today's tasks are "relevant" to each room — now a thin
+// wrapper over the shared getRoomTasks (see @/utils/room-tasks.ts, also
+// used by each Room detail page's own task panel), so a task's room
+// membership reads identically in both places. RoomPreview.slug is null
+// only for Living Room (it has no detail-page route — see
+// rooms-card.tsx), which maps to the 'living-room' TaskRoom. Only
+// kind: 'task' items count (matches Home's "Today's Tasks" filter) —
+// appointments and birthdays aren't to-dos; that filtering already
+// happened before todaysTasks was built below.
+function countRoomTasks(roomSlug: RoomPreview['slug'], todaysTasks: Task[]): number {
+  const taskRoom: TaskRoom = roomSlug ?? 'living-room';
+  return getRoomTasks(taskRoom, todaysTasks).length;
 }
 
 function taskBadgeLabel(count: number): string {
@@ -181,7 +166,7 @@ export function RoomHubScreen() {
     : CARD_WIDTH_PERCENT[columns as 1 | 2];
 
   function renderRoomCard(room: RoomPreview, width: number | `${number}%`) {
-    const count = countRoomTasks(room.name, todaysTasks);
+    const count = countRoomTasks(room.slug, todaysTasks);
     const isHovered = hoveredRoom === room.name;
     return (
       <Pressable

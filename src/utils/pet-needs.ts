@@ -136,12 +136,57 @@ export function applyEnergyDecay(profile: PetProfile, now: Date = new Date()): P
 // ever modifies that field, so each later call still sees the original
 // timestamp, not one advanced by an earlier one. Returns the same profile
 // reference back, unchanged, when nothing actually changed.
+// Cleanliness at or below this threshold, 1+ uncleaned poop piles
+// (poopPiles.length > 0 — see @/utils/pet-profile.ts/@/utils/pet-poop.ts's
+// accumulation system), OR Kitty still needing an actual bath after a poop
+// event (needsBath) counts as "dirty" for art-swapping and the gradual
+// penalty below. A single combined boolean (not separate additive checks)
+// is deliberate — it's what keeps the dirty penalty from stacking when
+// multiple conditions (or multiple accumulated piles) are true at once, per
+// the spec: 5 piles at once is no "dirtier" by this check than 1. needsBath
+// in particular is what keeps Dirty Kitty showing after every pile is
+// cleaned up and even after Cleanliness is restored above the threshold
+// (bathePet only raises cleanliness, it never clears needsBath) — only a
+// completed Bathroom wash/dry sequence (not implemented yet) clears it.
+export const DIRTY_CLEANLINESS_THRESHOLD = 20;
+
+// Simple explanation: returns true if Kitty should look/act "dirty" —
+// either her Cleanliness is too low, there's poop on the floor, or she
+// still needs a bath (needsBath). Any ONE of these is enough; having more
+// than one true at the same time doesn't make her "extra" dirty.
+export function isPetDirty(profile: PetProfile): boolean {
+  return profile.cleanliness <= DIRTY_CLEANLINESS_THRESHOLD || profile.poopPiles.length > 0 || profile.needsBath;
+}
+
+// Simple explanation: while Kitty is dirty (see isPetDirty above), her
+// Happiness and Energy slowly go down over time, on top of their normal
+// decay. This never runs while she's asleep.
+// While dirty, Happiness and Energy drain gradually on top of their normal
+// decay — same elapsed-hours mechanism as every other need above, not a
+// per-render penalty. Reads the chain's already-updated `cleanliness`/
+// `poopPiles` (consistent with how applyEnergyDecay already reads the
+// previous step's values), but still measures elapsed time from the same
+// shared `lastUpdatedAt`, since none of these functions mutate that field.
+export const DIRTY_HAPPINESS_PENALTY_PER_HOUR = 5 / 6;
+export const DIRTY_ENERGY_PENALTY_PER_HOUR = 5 / 6;
+export function applyDirtyPenalty(profile: PetProfile, now: Date = new Date()): PetProfile {
+  if (profile.isSleeping) return profile;
+  if (!isPetDirty(profile)) return profile;
+  const elapsedHours = getElapsedHoursSince(profile.lastUpdatedAt, now);
+  if (elapsedHours <= 0) return profile;
+  const nextHappiness = applyNeedDecay(profile.happiness, DIRTY_HAPPINESS_PENALTY_PER_HOUR, elapsedHours);
+  const nextEnergy = applyNeedDecay(profile.energy, DIRTY_ENERGY_PENALTY_PER_HOUR, elapsedHours);
+  if (nextHappiness === profile.happiness && nextEnergy === profile.energy) return profile;
+  return { ...profile, happiness: nextHappiness, energy: nextEnergy };
+}
+
 export function applyPetNeedsUpdate(profile: PetProfile, now: Date = new Date()): PetProfile {
   const afterHunger = applyHungerDecay(profile, now);
   const afterCleanliness = applyCleanlinessDecay(afterHunger, now);
   const afterHappiness = applyHappinessDecay(afterCleanliness, now);
   const afterEnergy = applyEnergyDecay(afterHappiness, now);
-  return afterEnergy;
+  const afterDirtyPenalty = applyDirtyPenalty(afterEnergy, now);
+  return afterDirtyPenalty;
 }
 
 // Same four-need result as applyPetNeedsUpdate, but correct across a real
