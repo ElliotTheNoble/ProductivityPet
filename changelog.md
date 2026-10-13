@@ -20,6 +20,34 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-13]
+
+### Added
+- **Summary:** built a full Egg-to-Hatchling hatching transition system — new Egg artwork, a new permanent Hatchling picture, a timed 5-second "just hatched" sequence with no image overlap, a developer-only Replay Hatching Animation control for repeatable testing, delayed pet-needs bars and pet-care buttons during that sequence, a fix for the needs bars shifting position between stages, and a fix for the message bubble getting covered by oversized artwork — plus the documentation for all of it (FEATURE-039, BUG-009 through BUG-011 in `bugs.md`).
+- Egg stage now shows `assets/images/pets/stats_egg.png` (reused from the Stats page) instead of `egg_nest.png`, enlarged (`EGG_SCALE`, 1.625×) and nudged up (`EGG_OFFSET_Y_PX`, -40px) in `src/components/pet-placeholder.tsx`. `egg_nest.png` is left on disk, unreferenced.
+- New permanent Hatchling picture, `assets/images/pets/pet_hatchling.png`, cropped from the existing `pet_growth_stages.png` sheet's own unused Hatchling pose (measured via an alpha-channel bounding-box scan, visually verified before cropping).
+- 5-second hatching sequence: right when a real hatch happens, `kitten_nest.png` (enlarged ~1.69× for just these 5 seconds, via `HATCHLING_INTRO_SCALE`) shows for exactly `HATCHLING_INTRO_DURATION_MS` (5000ms) before switching to the new permanent Hatchling picture. New `PetProfile.hatchedAt` field (`src/utils/pet-profile.ts`) records the real moment this happens, so it never replays on reopening the app and is never backfilled for older saves.
+- Developer-only "Replay Hatching Animation" button (gated behind new `DEV_ENABLE_HATCH_INTRO_PREVIEW` flag in `src/utils/dev-flags.ts`, shown on Home alongside the other developer test controls) simulates the exact same timed sequence for repeatable visual testing — purely local state, never touches the saved Pet Profile or task progression.
+- Hunger/Cleanliness/Happiness/Energy bars and the Feed/Bath/Play/Rest buttons are now both withheld (not rendered, not just disabled) for the same 5 seconds as the hatching sequence, reusing the same `isShowingHatchIntro` flag rather than a separate timer — unaffected by the regular Developer Stage Preview and by Baby/Young/Adult.
+- BUG-009, BUG-010, and BUG-011 documented in `bugs.md` (the temporary/permanent Hatchling images overlapping, the needs bars shifting position between stages, and the message bubble getting covered by oversized artwork) — all fixed and manually tested; see Fixed below.
+- FEATURE-039 documented in `features.md`: the full hatching transition system described above.
+
+### Changed
+- `src/components/pet-placeholder.tsx`'s `getStageImage` now takes an `isShowingHatchIntro` flag and returns exactly one `{source, aspectRatio}` pair at a time (the temporary or the permanent Hatchling picture, never both) — this mutually-exclusive rendering is what BUG-009's fix relies on.
+- `isShowingHatchIntro` is now computed fresh on every render directly from `hatchedAt` and the clock, instead of via `useState`/`useEffect` that started wrong for one render and self-corrected a moment later — removes a possible one-frame flash of the wrong picture/bars/buttons right when a real hatch happens.
+- `petWrap`'s box (`src/components/pet-placeholder.tsx`) now always uses a fixed `PET_ART_BOX_ASPECT_RATIO` (square) instead of sizing itself off whichever stage's picture is currently showing — see BUG-010.
+- The message bubble (`styles.bubble`) now sits 40px further from Kitty's own box and has `zIndex: 1` so it always paints above any oversized/offset pet or Egg artwork — see BUG-011.
+
+### Fixed
+- BUG-009: the temporary and permanent Hatchling pictures could both render at once, with the permanent one showing through gaps around the temporary one's different-shaped edges; fixed by mutually-exclusive rendering (see Changed above).
+- BUG-010: the needs bars moved vertically whenever the displayed pet picture changed, because the box around the art was sized off that picture's own aspect ratio; fixed with a fixed box ratio decoupled from the picture (see Changed above).
+- BUG-011: the message bubble could be partially covered by Kitty's/the Egg's own oversized artwork overflowing above its box; fixed with more clearance plus `zIndex` (see Changed above).
+
+### Removed
+-
+
+---
+
 ## [2026-10-12]
 
 ### Added

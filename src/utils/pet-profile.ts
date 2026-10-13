@@ -130,6 +130,25 @@ export type PetProfile = {
   // this, after a successful, already-charged upgrade — never set
   // optimistically before payment succeeds.
   paidStageIndex: number;
+  // Simple explanation: the exact moment the Egg hatched into a
+  // Hatchling, used to show a short 5-second "just hatched" animation
+  // once, right after it happens.
+  //
+  // ISO datetime of the moment the real stage first crossed from Egg into
+  // Hatchling, or '' if that hasn't happened yet (or happened before this
+  // field existed — old saved profiles normalize to '', not an invented
+  // past date, which is what correctly keeps them from ever showing the
+  // intro). Only ever set ONCE, the moment the crossing is actually
+  // detected live (see src/app/index.tsx) — never backfilled or reset.
+  // @/components/pet-placeholder.tsx compares real elapsed time since this
+  // timestamp to decide whether to still show the temporary hatching
+  // artwork (assets/images/pets/kitten_nest.png) or the normal, permanent
+  // Hatchling artwork (assets/images/pets/pet_hatchling.png) — the same
+  // "compare elapsed real time against a stored timestamp" approach used
+  // everywhere else in this app, so closing/reopening the app mid-animation
+  // correctly resumes as "already past the 5 seconds" rather than
+  // replaying it.
+  hatchedAt: string;
 };
 
 // Same key-prefix convention as the rest of the app's AsyncStorage keys
@@ -164,6 +183,7 @@ function createDefaultPetProfile(): PetProfile {
     nextPoopEventAt: '',
     needsBath: false,
     paidStageIndex: 0,
+    hatchedAt: '',
   };
 }
 
@@ -304,6 +324,11 @@ export function normalizePetProfile(raw: unknown): PetProfile {
       typeof value.paidStageIndex === 'number' && value.paidStageIndex >= 0
         ? value.paidStageIndex
         : fallback.paidStageIndex,
+    // A profile saved before this field existed normalizes to '' (never
+    // hatched, as far as the hatching-intro animation is concerned) —
+    // deliberately NOT backfilled to "now" or any other guessed date, so
+    // an existing Hatchling-or-later pet never wrongly replays the intro.
+    hatchedAt: typeof value.hatchedAt === 'string' ? value.hatchedAt : '',
   };
 }
 

@@ -18,8 +18,9 @@ export function isRoomPetSlug(slug: string): slug is RoomPetSlug {
 
 // The four growth stages actually drawn in each room's sheet, left to
 // right. Egg isn't part of any of them — @/components/room-pet.tsx falls
-// back to the same shared egg_nest.png used everywhere else for that
-// stage instead, per "keep Egg artwork unchanged." Exported so
+// back to the same shared Egg picture used everywhere else for that stage
+// instead (getStageImage's 'Egg' case in
+// @/components/pet-placeholder.tsx, currently stats_egg.png). Exported so
 // room-pet.tsx can narrow `stage` to this type after it's already ruled
 // out 'Egg'.
 export type RoomPetStage = Exclude<PetStage, 'Egg'>;

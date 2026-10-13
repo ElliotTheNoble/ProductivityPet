@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -16,8 +16,8 @@ import type { PetStage } from '@/utils/pet-stage';
 // How far up (in px, via a translateY transform) Kitty's own art — and
 // her equipped accessory, so it keeps tracking her body — sits in the
 // Living Room, relative to its normal position. Applies to every stage
-// except Egg (an Egg doesn't get nudged — it stays exactly where it's
-// always been). Deliberately does NOT move petWrap itself (the box poop
+// except Egg, which gets its own separate offset (EGG_OFFSET_Y_PX, just
+// below) instead. Deliberately does NOT move petWrap itself (the box poop
 // piles are positioned inside, via left: 6%/bottom: 4% in
 // poopFloorIndicator below) — only the pet's own Image and accessory
 // overlay shift, so the floor/poop reference frame, and the needs bars
@@ -27,6 +27,111 @@ import type { PetStage } from '@/utils/pet-stage';
 // (PetPlaceholder) — @/components/room-pet.tsx (every other room) is a
 // separate component untouched by this constant.
 const KITTY_LIVING_ROOM_OFFSET_Y_PX = -30;
+
+// How far up (in px) the normal Egg picture (stats_egg.png) sits, relative
+// to its old position (which was 0 — unmoved). History: 0 → -40 → -140 →
+// -90 → now -40 (moved another 50px back DOWN from -90). Applied the same
+// way as KITTY_LIVING_ROOM_OFFSET_Y_PX above: a translateY BEFORE the
+// scale transform in the array, so this flat -40px shift lands first and
+// the scale then applies around that already-shifted center — meaning
+// this offset is not itself multiplied by EGG_SCALE, it stays a flat
+// 40px regardless of how big the Egg renders. Applies everywhere the
+// normal Egg picture shows (Home, the regular Developer Stage Preview,
+// and the Egg phase of "Dev: Replay Hatching Animation") since all three
+// render through this same stage === 'Egg' path. Does not affect
+// kitten_nest.png (the temporary hatching picture) at all — that one is
+// shown while `stage` is 'Hatchling' (with isShowingHatchIntro true),
+// never 'Egg', so it always uses KITTY_LIVING_ROOM_OFFSET_Y_PX instead,
+// completely unchanged by this constant.
+const EGG_OFFSET_Y_PX = -40;
+
+// Simple explanation: right when the Egg hatches, Kitty briefly shows her
+// OLD "just hatched" picture (kitten_nest.png) for about 5 seconds, then
+// switches straight to her new, permanent Hatchling picture
+// (pet_hatchling.png — see getStageImage below). This only happens once,
+// right when hatching really happens — see hatchedAt in
+// @/utils/pet-profile.ts and the isShowingHatchIntro logic below.
+//
+// Deliberately a hard swap, not a crossfade: getStageImage below returns
+// ONE image (and its OWN matching aspect ratio) at a time for this —
+// never both at once layered on top of each other — so there's no risk
+// of the new art showing through gaps around the old art's different
+// shape the way a semi-transparent overlay could.
+//
+// How many milliseconds the temporary "just hatched" picture stays
+// visible before switching to the permanent one. Exported so
+// src/app/index.tsx's "Dev: Replay Hatching Animation" button can time
+// its own simulated sequence to match exactly, without guessing or
+// duplicating the number.
+export const HATCHLING_INTRO_DURATION_MS = 5000;
+
+// How much bigger (as a multiplier) the temporary "just hatched" picture
+// (kitten_nest.png) renders, compared to its own normal size. Was 1.3 (30%
+// bigger); bumped to 1.69 — another 30% bigger on top of that already-
+// enlarged 1.3 size (1.3 * 1.3 = 1.69), per the later request to enlarge it
+// further. Only ever applied via a `transform: scale`, never by changing
+// petWrap's own box size — so it grows visually in place around its own
+// center without moving, resizing, or reflowing anything else around it
+// (the box's layout size, and therefore the needs bars/other siblings
+// below it, stay exactly where they always are). Egg, the permanent
+// Hatchling picture, and every other stage are completely unaffected.
+const HATCHLING_INTRO_SCALE = 1.69;
+
+// How much bigger (as a multiplier) the normal Egg picture
+// (stats_egg.png) renders, compared to its own natural size. Was 1.3
+// (30% bigger); bumped to 1.625 — another 25% bigger on top of that
+// already-enlarged 1.3 size (1.3 * 1.25 = 1.625), per the later request
+// to enlarge it further. Same technique as HATCHLING_INTRO_SCALE just
+// above — a `transform: scale` only, never a change to petWrap's own box
+// size — so the Egg grows visually in place around its own center
+// (staying centered, contentFit="contain" keeps its aspect ratio)
+// without moving or resizing the box itself, and therefore without
+// affecting the needs bars, room layout, or any sibling below it.
+// Applies everywhere the normal Egg picture is shown — Home, the regular
+// Developer Stage Preview, and the Egg phase of "Dev: Replay Hatching
+// Animation" — since all three funnel through this same stage === 'Egg'
+// render path. Does not apply to the temporary hatching Kitty picture or
+// the permanent Hatchling picture (each has its own, separately-
+// controlled scale/size).
+const EGG_SCALE = 1.625;
+
+// The pet artwork's own display area (petWrap, the box immediately
+// around Kitty/the Egg's picture) always reserves exactly this much
+// height relative to its width, no matter which stage/image is actually
+// showing. This is what makes the Hunger/Cleanliness/Happiness/Energy
+// bars below it (needsRow, a separate sibling further down, laid out in
+// normal document flow right after this box) sit at one single fixed
+// vertical position.
+//
+// What caused the bug this fixes: petWrap's height used to be driven
+// directly by `{ aspectRatio }` from getStageImage's return value — i.e.
+// each stage's OWN real image ratio (Hatchling ~429/407 = 1.054,
+// Baby = 1, Young ~827/752 = 1.099, Adult ~769/780 = 0.986, Egg
+// ~1300/1210 = 1.074, kitten_nest ~1381/1139 = 1.212 — all different).
+// Since petWrap's width is fixed (a percentage, clamped between
+// minWidth/maxWidth below), a different aspectRatio meant a different
+// real height for the box, which pushed needsRow (and everything below
+// it) up or down by that same difference every time the pet image
+// changed — the exact bug reported.
+//
+// The fix: petWrap's box now always uses this ONE constant instead,
+// completely decoupled from whatever image is currently showing. The
+// <Image> inside it (styles.petImage) is untouched — contentFit="contain"
+// already uses the actual decoded picture's own true intrinsic
+// dimensions to scale it without stretching, regardless of what shape
+// box it's placed in — so every stage's picture still keeps its own real
+// proportions; a stage whose own picture is a different shape than this
+// box just letterboxes slightly inside it (a little extra transparent
+// space on two sides) instead of resizing the box itself.
+//
+// 1 (square) was picked deliberately because it's extremely close to
+// Hatchling/Baby/Young/Adult's own ratios already (0.986-1.099) — so
+// their appearance is practically unchanged from before — while Egg and
+// kitten_nest (further off at 1.074/1.212) don't need to match this box
+// pixel-for-pixel, since their own visible size/position are already
+// separately tuned via EGG_SCALE/EGG_OFFSET_Y_PX and
+// HATCHLING_INTRO_SCALE, and needsRow is hidden during Egg anyway.
+const PET_ART_BOX_ASPECT_RATIO = 1;
 
 // A pile's actual floor position (offsetXPx/offsetYPx, picked once at
 // creation and collision-checked against its siblings — see
@@ -38,6 +143,22 @@ const KITTY_LIVING_ROOM_OFFSET_Y_PX = -30;
 type PetPlaceholderProps = {
   stage: PetStage;
   message?: string | null;
+  // The real petProfile.hatchedAt value, passed down from Home — the
+  // real moment the Egg hatched, used to decide whether to still show the
+  // temporary "just hatched" picture instead of the normal Hatchling
+  // picture (see HATCHLING_INTRO_DURATION_MS above). undefined/'' means
+  // "never hatched (yet), or hatched before this field existed" — never
+  // shows the intro.
+  hatchedAt?: string;
+  // True while a developer Pet Stage Preview is active (selecting a
+  // different stage to look at, without touching the real saved
+  // progression — see @/utils/dev-stage-preview.ts). The hatching intro
+  // must NEVER play just because someone is previewing the Hatchling
+  // stage — only a REAL hatch does that. Home's own "preview the hatching
+  // animation" dev button (separate from the Stage Preview) passes this
+  // as false on purpose, since that button is deliberately simulating a
+  // real hatch for testing.
+  isStagePreviewActive?: boolean;
   // The id of the currently-equipped Pet Accessory (see
   // @/utils/pet-equipment.ts), passed down from Home — null/undefined
   // means nothing is equipped, so the pet renders exactly as it always
@@ -129,7 +250,16 @@ type PetPlaceholderProps = {
 // simple {source, aspectRatio} lookup with no runtime sprite-cropping
 // needed here. Egg deliberately has no dirty variant and always falls
 // through to its normal artwork regardless of `isDirty`.
-export function getStageImage(stage: PetStage, isDirty: boolean = false) {
+//
+// `isShowingHatchIntro` (see HATCHLING_INTRO_DURATION_MS above) swaps
+// Hatchling specifically to the OLD temporary "just hatched" picture
+// (kitten_nest.png) instead of the new permanent one, for the first few
+// seconds right after a real (or dev-replayed) hatch. This is a plain
+// mutually-exclusive switch, same as the isDirty one above — exactly ONE
+// {source, aspectRatio} pair is ever returned, never two layered
+// together, so the caller only ever renders a single Image for the pet's
+// own art at any given moment.
+export function getStageImage(stage: PetStage, isDirty: boolean = false, isShowingHatchIntro: boolean = false) {
   if (isDirty) {
     switch (stage) {
       case 'Hatchling':
@@ -142,11 +272,24 @@ export function getStageImage(stage: PetStage, isDirty: boolean = false) {
         return { source: require('@/assets/images/pets/dirty_adult.png'), aspectRatio: 537 / 600 };
     }
   }
+  if (stage === 'Hatchling' && isShowingHatchIntro) {
+    return { source: require('@/assets/images/pets/kitten_nest.png'), aspectRatio: 1381 / 1139 };
+  }
   switch (stage) {
     case 'Egg':
-      return { source: require('@/assets/images/pets/egg_nest.png'), aspectRatio: 1536 / 1024 };
+      // Simple explanation: the normal Egg-stage picture — originally
+      // egg_nest.png (still on disk, just no longer referenced here),
+      // now stats_egg.png (an existing illustration already used on the
+      // Stats page), reused here instead of adding a new asset. Shown
+      // centered via contentFit="contain" below, same as every other
+      // stage's own picture.
+      return { source: require('@/assets/images/pets/stats_egg.png'), aspectRatio: 1300 / 1210 };
     case 'Hatchling':
-      return { source: require('@/assets/images/pets/kitten_nest.png'), aspectRatio: 1381 / 1139 };
+      // Simple explanation: this is the normal, permanent Hatchling
+      // picture (cropped from pet_growth_stages.png's own Hatchling
+      // pose). The temporary "just hatched" picture is returned above,
+      // instead of here, whenever isShowingHatchIntro is true.
+      return { source: require('@/assets/images/pets/pet_hatchling.png'), aspectRatio: 429 / 407 };
     case 'Baby':
       return { source: require('@/assets/images/pets/pet_baby.png'), aspectRatio: 1 };
     case 'Young':
@@ -211,8 +354,49 @@ export function PetPlaceholder({
   onRest,
   isResting = false,
   onCleanUpPile,
+  hatchedAt,
+  isStagePreviewActive = false,
 }: PetPlaceholderProps) {
   const theme = useTheme();
+
+  // Simple explanation: decides whether to show the temporary "just
+  // hatched" picture (and, below, keep the needs bars hidden) right now,
+  // using the REAL elapsed time since hatchedAt (not a timer that
+  // restarts every time this component mounts) — so reopening the app
+  // after the 5 seconds have already passed in real life shows the
+  // normal picture/bars immediately, with no replay. This is a plain
+  // on/off switch, not a fade: getStageImage (above) returns ONE image at
+  // a time based on this value, so the old and new Hatchling pictures are
+  // never both on screen together, even for a moment — see the
+  // isShowingHatchIntro comment on that function.
+  //
+  // Computed directly from props/the clock on every render (not stored in
+  // state that starts false and gets corrected a moment later by an
+  // effect) specifically so there is no possible one-frame flash, right
+  // when a real hatch happens, of the permanent Hatchling picture and the
+  // needs bars before this flips to true — the very first render that
+  // receives a fresh hatchedAt already computes this correctly. The
+  // effect below exists only to force a re-render once the 5 seconds
+  // actually elapse (nothing else would otherwise touch this component at
+  // that exact moment) — it does not decide the on/off value itself.
+  const hatchedAtMs = hatchedAt ? new Date(hatchedAt).getTime() : NaN;
+  const hatchIntroElapsedMs = Number.isNaN(hatchedAtMs) ? Infinity : Date.now() - hatchedAtMs;
+  const isShowingHatchIntro =
+    !isStagePreviewActive && stage === 'Hatchling' && !!hatchedAt && hatchIntroElapsedMs < HATCHLING_INTRO_DURATION_MS;
+  const [, forceRerenderAfterHatchIntro] = useReducer((tick: number) => tick + 1, 0);
+  useEffect(() => {
+    if (!isShowingHatchIntro) return;
+    const remainingMs = Math.max(HATCHLING_INTRO_DURATION_MS - hatchIntroElapsedMs, 0);
+    const timer = setTimeout(forceRerenderAfterHatchIntro, remainingMs);
+    return () => clearTimeout(timer);
+    // Deliberately keyed on the real inputs (stage/hatchedAt/
+    // isStagePreviewActive), not on isShowingHatchIntro/hatchIntroElapsedMs
+    // themselves (those are derived from Date.now() and would otherwise
+    // re-run this effect, and re-register a fresh timer, on every single
+    // render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, hatchedAt, isStagePreviewActive]);
+
   // Defaults to [] so every render below can just map over `piles`
   // without a separate undefined-check at each usage site — undefined
   // (prop omitted, e.g. while the profile hasn't loaded yet, or while
@@ -358,11 +542,21 @@ export function PetPlaceholder({
   // rendering until a real value arrives.
   const isDirty =
     (cleanliness !== undefined && cleanliness <= DIRTY_CLEANLINESS_THRESHOLD) || piles.length > 0 || needsBath === true;
-  const { source, aspectRatio } = getStageImage(stage, isDirty);
-  // Egg stays exactly where it's always been — see
-  // KITTY_LIVING_ROOM_OFFSET_Y_PX's own comment above for why only the
-  // pet's own Image/accessory shift, not the whole petWrap box.
-  const kittyOffsetY = stage === 'Egg' ? 0 : KITTY_LIVING_ROOM_OFFSET_Y_PX;
+  const { source } = getStageImage(stage, isDirty, isShowingHatchIntro);
+  // Egg gets its own separate offset (EGG_OFFSET_Y_PX) — see its own
+  // comment above for why only the pet's own Image/accessory shift, not
+  // the whole petWrap box.
+  const kittyOffsetY = stage === 'Egg' ? EGG_OFFSET_Y_PX : KITTY_LIVING_ROOM_OFFSET_Y_PX;
+  // Only the temporary "just hatched" picture gets bigger — see
+  // HATCHLING_INTRO_SCALE's own comment above. 1 (no change) the rest of
+  // the time, including once isShowingHatchIntro switches off and the
+  // permanent Hatchling picture takes over.
+  const hatchIntroScale = isShowingHatchIntro ? HATCHLING_INTRO_SCALE : 1;
+  // Simple explanation: the Egg picture itself is 30% bigger than before —
+  // see EGG_SCALE's own comment above. Doesn't apply once isShowingHatchIntro
+  // is true, since that already shows a different picture (the temporary
+  // hatching Kitty) at its own separate scale, not the Egg.
+  const eggScale = stage === 'Egg' && !isShowingHatchIntro ? EGG_SCALE : 1;
   const accessoryArt = equippedAccessoryId ? PET_ACCESSORY_ART[equippedAccessoryId] : undefined;
   // Stage-aware — see @/utils/pet-accessory-placement.ts. 'home' is passed
   // explicitly (not a default) because this component is specifically the
@@ -412,10 +606,36 @@ export function PetPlaceholder({
         </ThemedView>
       ) : null}
 
-      <View style={[styles.petWrap, { aspectRatio }]}>
+      <View style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]}>
+        {/* The ONLY pet-art Image in this box — getStageImage (above)
+            already picked exactly one source to show (the temporary
+            "just hatched" picture, or the normal one for whatever stage
+            this is), so there is never a second Kitty image layered
+            underneath or on top of this one during the hatching
+            transition — a plain swap, not a crossfade, per
+            HATCHLING_INTRO_DURATION_MS's own comment. This box's own
+            aspect ratio is now a fixed constant (PET_ART_BOX_ASPECT_RATIO,
+            see its own comment above) instead of this image's real
+            aspect ratio, so the box's height — and therefore needsRow's
+            position right below it — never moves just because a
+            different stage's picture (with its own different real
+            proportions) is showing. contentFit="contain" keeps the real aspect ratio regardless of scale, so
+            hatchIntroScale (applied AFTER translateY, so the -30px shift
+            stays a flat pixel amount unaffected by the scale) makes the
+            temporary picture bigger without stretching it — petWrap's own
+            box size/layout is untouched, so this purely overflows
+            visually around its own center rather than pushing the needs
+            bars or anything else around it. The same technique makes the
+            normal Egg picture 30% bigger too (eggScale) — the two scales
+            are mutually exclusive (Egg is never shown while
+            isShowingHatchIntro is true), so multiplying them together is
+            equivalent to picking whichever one actually applies. */}
         <Image
           source={source}
-          style={[styles.petImage, { transform: [{ translateY: kittyOffsetY }] }]}
+          style={[
+            styles.petImage,
+            { transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale }] },
+          ]}
           contentFit="contain"
         />
 
@@ -575,7 +795,19 @@ export function PetPlaceholder({
           rows, leaving more of the floor below visibly free for poop
           piles (see POOP_ZONE_Y_MAX_PX in @/utils/pet-poop.ts).
           Calculation/storage of each need is completely unchanged — this
-          is a display-only layout change. */}
+          is a display-only layout change.
+          Hidden entirely (not just empty) while isShowingHatchIntro is
+          true — right after a real (or dev-replayed) hatch, Kitty's real
+          needs values are already flowing in from Home at this point (see
+          isDisplayedEgg in @/app/index.tsx — it only gates Egg, not the
+          first 5 seconds of Hatchling), so without this check the bars
+          would otherwise appear immediately, alongside the temporary
+          kitten_nest.png picture, rather than waiting for the permanent
+          Hatchling picture to take over. Never hidden for any other
+          reason — Baby/Young/Adult/a Hatchling shown via the regular
+          Developer Stage Preview (isStagePreviewActive keeps
+          isShowingHatchIntro false there) are completely unaffected. */}
+      {!isShowingHatchIntro ? (
       <View style={styles.needsRow}>
         {/* Hunger status bar — reads the real petProfile.hunger value
             passed down from Home, no separate/fake value. Re-renders
@@ -663,6 +895,7 @@ export function PetPlaceholder({
           </View>
         ) : null}
       </View>
+      ) : null}
 
       {/* Basic Feed/Bath/Play/Rest interactions — call the persistent
           feedPet()/bathePet()/playWithPet()/restPet() actions (see
@@ -677,8 +910,18 @@ export function PetPlaceholder({
           actions. Rest is a manual Energy top-up only — it never touches
           isSleeping, which stays entirely owned by the automatic 8 PM-8 AM
           bedtime system (see restPet itself, and resolvePetNeedsAcrossBedtime
-          in pet-needs.ts). */}
-      {onFeed || onBathe || onPlay || onRest ? (
+          in pet-needs.ts).
+          Hidden entirely (not rendered at all — not just disabled) while
+          isShowingHatchIntro is true, same reasoning and same flag as
+          needsRow just above: Home doesn't gate these specifically on the
+          hatch intro (only on isDisplayedEgg), so without this check
+          they'd otherwise appear immediately alongside the temporary
+          kitten_nest.png picture rather than waiting for the permanent
+          Hatchling picture + needs bars. Not rendering the buttons at all
+          (rather than rendering them disabled) is what guarantees they
+          can't be pressed during those 5 seconds — there's no Pressable
+          in the tree to receive a tap/click in the first place. */}
+      {(onFeed || onBathe || onPlay || onRest) && !isShowingHatchIntro ? (
         <View style={styles.actionsRow}>
           {onFeed ? (
             <Pressable
@@ -737,7 +980,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     borderRadius: Spacing.five,
-    marginBottom: Spacing.one,
+    // Was Spacing.one (4px) — bumped by +40px (to 44px) so the bubble
+    // sits noticeably higher, further away from Kitty/the Egg's own box
+    // below it.
+    marginBottom: Spacing.one + 40,
+    // Kitty's and the Egg's own artwork deliberately overflow ABOVE
+    // petWrap's own box when scaled up (see HATCHLING_INTRO_SCALE/
+    // EGG_SCALE's own comments — petWrap never clips its contents, by
+    // design, so the art can grow in place). Without this, that overflow
+    // — which can reach well above petWrap's top edge, especially for
+    // the enlarged Egg/hatching-intro pictures — would paint OVER this
+    // bubble (petWrap is the next sibling in the tree, so it would
+    // otherwise win the paint order wherever the two visually overlap).
+    // zIndex alone (no position: 'absolute' needed) makes this bubble
+    // always paint on top of that overflow instead, regardless of how
+    // big any given stage's art renders — combined with the extra
+    // marginBottom above and this view's own solid background
+    // (ThemedView type="backgroundElement"), the bubble and its text
+    // stay fully visible and legible no matter what's behind them.
+    zIndex: 1,
   },
   petWrap: {
     width: '46%',

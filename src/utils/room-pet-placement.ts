@@ -188,7 +188,7 @@ export const ROOM_PET_PLACEMENTS: Record<RoomSlug, RoomPetPlacement> = {
     // 120px, this pass).
     //
     // Egg has no stageAdjustments entry anywhere and always uses the
-    // shared egg_nest art instead (see @/components/room-pet.tsx) — keeps
+    // shared Egg art instead (see @/components/room-pet.tsx) — keeps
     // Kitchen's plain base placement exactly as before.
     stageAdjustments: {
       Hatchling: { offsetYPx: -60, offsetXPx: 180 },
@@ -214,9 +214,9 @@ export const ROOM_PET_PLACEMENTS: Record<RoomSlug, RoomPetPlacement> = {
     // paddingBottomPx (48) is unchanged, so the box's bottom edge — where
     // Kitty's feet/resting point sit — stays exactly where it was; a
     // taller box only extends upward from that same anchored bottom.
-    // Egg never reads this (it uses the separate shared egg_nest art
-    // path in @/components/room-pet.tsx, with no stage-adjustment concept
-    // at all), so its size/artwork are completely unaffected.
+    // Egg never reads this (it uses the separate shared Egg art path in
+    // @/components/room-pet.tsx, with no stage-adjustment concept at
+    // all), so its size/artwork are completely unaffected.
     stageAdjustments: {
       Hatchling: { scale: 1.25 },
       Baby: { scale: 1.25 },

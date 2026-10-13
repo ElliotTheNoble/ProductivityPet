@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppointmentsCard } from '@/components/appointments-card';
 import { ConfettiBurst } from '@/components/confetti-burst';
 import { PetProgress } from '@/components/pet-progress';
+import { HATCHLING_INTRO_DURATION_MS } from '@/components/pet-placeholder';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
 import { TaskCard } from '@/components/task-card';
@@ -17,6 +18,7 @@ import { Spacing } from '@/constants/theme';
 import {
   DEV_DIRTY_TEST_CLEANLINESS_VALUE,
   DEV_ENABLE_DIRTY_TEST_CONTROLS,
+  DEV_ENABLE_HATCH_INTRO_PREVIEW,
   DEV_ENABLE_TEST_PAW_TOKEN_GRANT,
   DEV_TEST_PAW_TOKEN_GRANT_AMOUNT,
 } from '@/utils/dev-flags';
@@ -40,7 +42,7 @@ import { feedPet } from '@/utils/pet-feeding';
 import { getGrowthEligibility, getRenderedStageIndex, getRenderedStage, growPet } from '@/utils/pet-growth';
 import { restPet } from '@/utils/pet-resting';
 import { getPetProfile, savePetProfile, type PetProfile, type PoopSize } from '@/utils/pet-profile';
-import { PET_STAGES } from '@/utils/pet-stage';
+import { PET_STAGES, type PetStage } from '@/utils/pet-stage';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   excludeDateFromTask,
@@ -85,6 +87,13 @@ const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 // Below this window width, the dashboard stacks into a single column instead
 // of showing the task card and living room side by side.
 const WIDE_LAYOUT_BREAKPOINT = 700;
+
+// How long the "Dev: Replay Hatching Animation" button's simulated Egg
+// artwork briefly shows before the simulated hatch itself begins — purely
+// a dev-preview flourish so the replay reads as "before -> after," same
+// as a real hatch genuinely starting from Egg art. Not a real pet-care
+// timing value; nothing else in the app reads this.
+const DEV_HATCH_REPLAY_EGG_HOLD_MS = 1200;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -301,6 +310,74 @@ export default function HomeScreen() {
     const updated = { ...petProfile, pawTokens: petProfile.pawTokens + DEV_TEST_PAW_TOKEN_GRANT_AMOUNT };
     savePetProfile(updated);
     setPetProfile(updated);
+  }
+
+  // TEMPORARY, test-only — replays the full Egg-to-Hatchling transition
+  // sequence on demand: briefly shows the Egg artwork (same as what's
+  // genuinely on screen right before a real hatch), then simulates the
+  // hatch itself, which triggers the exact same ~5-second "just hatched"
+  // picture that a real hatch does, before switching straight to the new
+  // permanent one (PetPlaceholder can't tell the difference between this
+  // and a real hatchedAt). Purely visual — never writes to petProfile,
+  // completedTaskCount, or paidStageIndex, so real saved progression is
+  // completely untouched.
+  //
+  // Only one timer is ever pending at a time, tracked in
+  // devHatchReplayTimerRef so it can be cancelled — both to prevent two
+  // overlapping replays if the button is somehow pressed again mid-replay
+  // (also guarded by the early-return + the button's own `disabled` prop
+  // below) and so leaving Home (component unmount) cleanly cancels it
+  // instead of it firing into an unmounted screen — see the cleanup
+  // effect right after this function.
+  const devHatchReplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleDevReplayHatchAnimation() {
+    if (devHatchReplayInProgress) return;
+    if (devHatchReplayTimerRef.current) {
+      clearTimeout(devHatchReplayTimerRef.current);
+      devHatchReplayTimerRef.current = null;
+    }
+    setDevHatchReplayInProgress(true);
+    setDevHatchIntroPreviewAt(null);
+    setDevHatchReplayShowingEgg(true);
+    devHatchReplayTimerRef.current = setTimeout(() => {
+      setDevHatchReplayShowingEgg(false);
+      setDevHatchIntroPreviewAt(Date.now());
+      devHatchReplayTimerRef.current = setTimeout(() => {
+        // devHatchIntroPreviewAt is deliberately left set here — this is
+        // what "leaves the new Hatchling artwork visible when the preview
+        // finishes" rather than snapping back to whatever the real/
+        // regular-preview stage is. Only devHatchReplayInProgress resets,
+        // so the button becomes pressable again for another replay.
+        setDevHatchReplayInProgress(false);
+        devHatchReplayTimerRef.current = null;
+      }, HATCHLING_INTRO_DURATION_MS);
+    }, DEV_HATCH_REPLAY_EGG_HOLD_MS);
+  }
+  // Cancels any pending replay timer the moment Home unmounts (navigating
+  // away, or closing the app) — "clean up animation timers when leaving
+  // the Home screen." PetPlaceholder's own hatch-intro timers already
+  // clean themselves up the same way (a normal useEffect cleanup
+  // function), since that component also unmounts along with Home.
+  useEffect(() => {
+    return () => {
+      if (devHatchReplayTimerRef.current) clearTimeout(devHatchReplayTimerRef.current);
+    };
+  }, []);
+  // Wraps the real Pet Stage Preview's own setter (passed to PetProgress
+  // below as onPreviewStage/onResetPreview) so picking a different stage
+  // there — or resetting it — always takes back control of what's shown,
+  // instead of the screen staying stuck on the replay's leftover Hatchling
+  // display (or, if pressed mid-replay, the in-progress sequence)
+  // regardless of what's actually selected.
+  function handleSetDevPreviewStage(index: number | null) {
+    if (devHatchReplayTimerRef.current) {
+      clearTimeout(devHatchReplayTimerRef.current);
+      devHatchReplayTimerRef.current = null;
+    }
+    setDevHatchReplayShowingEgg(false);
+    setDevHatchIntroPreviewAt(null);
+    setDevHatchReplayInProgress(false);
+    setDevPreviewStageIndex(index);
   }
 
   // TEMPORARY, test-only — handlers that each write to the real saved Pet
@@ -627,12 +704,85 @@ export default function HomeScreen() {
   // "currently previewed," never to change what it reports as the real
   // stage.
   const displayedStage = devPreviewStageIndex !== null ? PET_STAGES[devPreviewStageIndex] : petStage;
+  // TEMPORARY, test-only — lets a developer replay the full Egg-to-
+  // Hatchling transition sequence on demand ("Dev: Replay Hatching
+  // Animation" button below), without touching real saved progression.
+  // Two separate local-only phases, never persisted:
+  // - devHatchReplayShowingEgg: briefly shows the Egg artwork first,
+  //   same as what's actually on screen right before a real hatch.
+  // - devHatchIntroPreviewAt: the moment (if any) the simulated hatch
+  //   "happened" — PetPlaceholder computes the rest (the 5s hold + fade)
+  //   from this timestamp, the exact same way it does for a real hatch.
+  // Only one of the two is ever active at a time; see
+  // handleDevReplayHatchAnimation below for the sequence between them.
+  const [devHatchReplayShowingEgg, setDevHatchReplayShowingEgg] = useState(false);
+  const [devHatchIntroPreviewAt, setDevHatchIntroPreviewAt] = useState<number | null>(null);
+  // True only while the replay's OWN timers are actively mid-sequence
+  // (egg hold -> 5s hold -> fade) — this is what the button's `disabled`
+  // is tied to, NOT whether Hatchling art is still being force-displayed.
+  // It's deliberately a separate flag from the two above: once the
+  // sequence finishes, devHatchIntroPreviewAt is left set on purpose (see
+  // handleDevReplayHatchAnimation) so the new Hatchling artwork stays
+  // visible — but devHatchReplayInProgress still drops back to false right
+  // then, so the button re-enables for another replay ("allow me to
+  // replay the animation as many times as I want").
+  const [devHatchReplayInProgress, setDevHatchReplayInProgress] = useState(false);
+  // Whether either replay phase is currently forcing the displayed stage
+  // (used below for effectiveDisplayedStage/isEffectiveStagePreviewActive)
+  // — unlike devHatchReplayInProgress above, this stays true even after
+  // the sequence completes, for as long as devHatchIntroPreviewAt is left
+  // set (i.e. until the next replay, or leaving Home).
+  const isDevHatchReplayDisplayActive = devHatchReplayShowingEgg || devHatchIntroPreviewAt !== null;
+  // While either replay phase is active, it forces the stage actually
+  // shown to Egg (first) then Hatchling (next) — entirely separate from,
+  // and never writing to, the real petProfile.hatchedAt/completedTaskCount
+  // or the regular Pet Stage Preview (devPreviewStageIndex) below.
+  const effectiveDisplayedStage: PetStage = devHatchReplayShowingEgg
+    ? 'Egg'
+    : devHatchIntroPreviewAt !== null
+      ? 'Hatchling'
+      : displayedStage;
+  const effectiveHatchedAt =
+    devHatchIntroPreviewAt !== null ? new Date(devHatchIntroPreviewAt).toISOString() : petProfile?.hatchedAt;
+  // Must stay false during the replay specifically — it deliberately
+  // simulates a real hatch (so the intro SHOULD play), unlike the regular
+  // Pet Stage Preview, which must never trigger it (see PetPlaceholder's
+  // own isStagePreviewActive prop comment).
+  const isEffectiveStagePreviewActive = !isDevHatchReplayDisplayActive && devPreviewStageIndex !== null;
   // Simple explanation: true if the stage currently SHOWN on screen is
   // Egg — this can differ from isRealEgg while a developer is previewing
   // a different stage.
   // See the isRealEgg comment above — this is the display-only half of
   // the Egg gating, used purely to decide which props reach <PetRoom>.
-  const isDisplayedEgg = displayedStage === 'Egg';
+  const isDisplayedEgg = effectiveDisplayedStage === 'Egg';
+
+  // Simple explanation: watches for the REAL moment the Egg hatches into a
+  // Hatchling, and saves that exact timestamp (hatchedAt) the first time
+  // it happens — this is what PetPlaceholder later compares against to
+  // decide whether to still show the temporary "just hatched" picture.
+  //
+  // Detects the crossing (not just "is currently Hatchling") by comparing
+  // petStage (the REAL stage, never the preview) against the previous
+  // render's real stage, stored in a ref — this is deliberately NOT a
+  // lazy "if Hatchling-or-later and hatchedAt is empty, backfill it now"
+  // check, since that would wrongly set hatchedAt to "now" (and replay the
+  // intro) for an existing pet that hatched long ago, before this field
+  // existed. prevRealStageRef starting at null (nothing seen yet) is what
+  // correctly skips a returning player who's already past Egg on their
+  // very first render this session — only a LIVE Egg-to-Hatchling
+  // transition, observed while the app is actually open, ever sets this.
+  const prevRealStageRef = useRef<PetStage | null>(null);
+  useEffect(() => {
+    const previous = prevRealStageRef.current;
+    prevRealStageRef.current = petStage;
+    if (!petProfile) return;
+    if (previous === 'Egg' && petStage === 'Hatchling' && !petProfile.hatchedAt) {
+      const updated = { ...petProfile, hatchedAt: new Date().toISOString() };
+      savePetProfile(updated);
+      setPetProfile(updated);
+    }
+  }, [petStage, petProfile]);
+
   // Reactive task messages take priority while active; otherwise the pet's
   // bubble shows the ambient mood message.
   const displayedPetMessage = temporaryMessage ?? moodMessage;
@@ -731,6 +881,34 @@ export default function HomeScreen() {
         ) : null}
       </ThemedView>
     ) : null;
+
+  // TEMPORARY test control for the Egg-to-Hatchling hatching transition —
+  // see handleDevReplayHatchAnimation above and
+  // DEV_ENABLE_HATCH_INTRO_PREVIEW in @/utils/dev-flags.ts. Entirely
+  // gated behind that one flag, same as the other dev cards here — never
+  // rendered at all while it's false, so normal players never see it.
+  // disabled (while devHatchReplayInProgress) both greys the button out
+  // and makes React Native ignore extra taps, so a replay already in
+  // progress can't be started again on top of itself — note this is
+  // specifically about the SEQUENCE still running, not about whether the
+  // resulting Hatchling artwork is still being shown afterward (see
+  // devHatchReplayInProgress's own comment above), so the button is
+  // pressable again well before the next real/regular-preview stage
+  // change would otherwise replace what's on screen.
+  const hatchReplayTestControl = DEV_ENABLE_HATCH_INTRO_PREVIEW ? (
+    <ThemedView type="peachOverlay" style={styles.growTestCard}>
+      <ThemedText type="small" themeColor="textSecondary">
+        Temporary test control — hatching transition
+      </ThemedText>
+      <Pressable onPress={handleDevReplayHatchAnimation} disabled={devHatchReplayInProgress}>
+        <ThemedView type="sky" style={styles.growTestButton}>
+          <ThemedText type="smallBold">
+            {devHatchReplayInProgress ? 'Replaying…' : 'Dev: Replay Hatching Animation'}
+          </ThemedText>
+        </ThemedView>
+      </Pressable>
+    </ThemedView>
+  ) : null;
 
   // TEMPORARY test control for the Dirty Kitty appearance system — see the
   // 4 handlers above and DEV_ENABLE_DIRTY_TEST_CONTROLS in
@@ -839,7 +1017,7 @@ export default function HomeScreen() {
             <View style={styles.petOverlayWide} pointerEvents="box-none">
               <View style={styles.petOverlaySpacerTop} />
               <PetRoom
-                stage={displayedStage}
+                stage={effectiveDisplayedStage}
                 message={displayedPetMessage}
                 // The Egg is a pre-hatching stage, not an active pet-care
                 // stage. Gated on isDisplayedEgg (what's CURRENTLY SHOWN —
@@ -876,6 +1054,8 @@ export default function HomeScreen() {
                 onRest={isDisplayedEgg ? undefined : handleRest}
                 isResting={isResting}
                 onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
+                hatchedAt={effectiveHatchedAt}
+                isStagePreviewActive={isEffectiveStagePreviewActive}
               />
               <View style={styles.petOverlaySpacerBottom} />
             </View>
@@ -898,10 +1078,11 @@ export default function HomeScreen() {
                 completedTaskCount={completedTaskCount}
                 paidStageIndex={petProfile?.paidStageIndex ?? 0}
                 previewStageIndex={devPreviewStageIndex}
-                onPreviewStage={setDevPreviewStageIndex}
-                onResetPreview={() => setDevPreviewStageIndex(null)}
+                onPreviewStage={handleSetDevPreviewStage}
+                onResetPreview={() => handleSetDevPreviewStage(null)}
               />
               {growTestControl}
+              {hatchReplayTestControl}
               {dirtyTestControl}
             </ScrollView>
           </View>
@@ -909,9 +1090,9 @@ export default function HomeScreen() {
           // Same idea stacked vertically: the pet sits in a fixed strip at
           // the top, and everything else scrolls independently beneath it.
           <View style={styles.narrowStack}>
-            <View style={styles.fixedPetTop}>
+            <View style={[styles.fixedPetTop, isDisplayedEgg && styles.fixedPetTopEggClearance]}>
               <PetRoom
-                stage={displayedStage}
+                stage={effectiveDisplayedStage}
                 message={displayedPetMessage}
                 // Same Egg gating as the wide-layout <PetRoom> above — see
                 // its comment there for the full isRealEgg/isDisplayedEgg
@@ -932,6 +1113,8 @@ export default function HomeScreen() {
                 onRest={isDisplayedEgg ? undefined : handleRest}
                 isResting={isResting}
                 onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
+                hatchedAt={effectiveHatchedAt}
+                isStagePreviewActive={isEffectiveStagePreviewActive}
               />
             </View>
             <ScrollView
@@ -942,10 +1125,11 @@ export default function HomeScreen() {
                 completedTaskCount={completedTaskCount}
                 paidStageIndex={petProfile?.paidStageIndex ?? 0}
                 previewStageIndex={devPreviewStageIndex}
-                onPreviewStage={setDevPreviewStageIndex}
-                onResetPreview={() => setDevPreviewStageIndex(null)}
+                onPreviewStage={handleSetDevPreviewStage}
+                onResetPreview={() => handleSetDevPreviewStage(null)}
               />
               {growTestControl}
+              {hatchReplayTestControl}
               {dirtyTestControl}
               {taskCard}
               {appointmentsCard}
@@ -1050,6 +1234,26 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
+  },
+  // Only applied on top of fixedPetTop while the Egg is what's actually
+  // displayed (narrow/mobile layout only — the wide/desktop layout
+  // already has plenty of headroom above the pet via petOverlaySpacerTop
+  // below, so it doesn't need this). The Egg picture renders higher and
+  // bigger than its own box (see EGG_OFFSET_Y_PX/EGG_SCALE in
+  // @/components/pet-placeholder.tsx — currently -90px and 1.625x) via a
+  // transform, which doesn't get clipped by anything, but on a narrow
+  // phone the normal 16px top padding alone isn't enough room for that to
+  // stay fully on-screen above the SafeAreaView's own top edge. This
+  // extra padding pushes the whole fixed strip (and therefore the Egg's
+  // own box) down first, so the subsequent upward transform still lands
+  // comfortably on-screen instead of clipping off the top (kept generous
+  // rather than retuned to the exact current numbers, since it only ever
+  // applies while the Egg is displayed and costs nothing but some
+  // otherwise-empty space above it). Reverts to the normal fixedPetTop
+  // padding the instant any other stage is displayed — Hatchling/Baby/
+  // Young/Adult's own positioning is completely untouched by this.
+  fixedPetTopEggClearance: {
+    paddingTop: Spacing.three + 150,
   },
   narrowScrollContent: {
     paddingHorizontal: Spacing.four,

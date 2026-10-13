@@ -51,6 +51,10 @@ type PetRoomProps = {
   // Passed straight through to PetPlaceholder's per-pile "Clean Up!"
   // buttons — see that component and @/utils/pet-poop.ts.
   onCleanUpPile?: (pileId: string) => void;
+  // Passed straight through to PetPlaceholder — see that component and
+  // @/utils/pet-profile.ts's hatchedAt field.
+  hatchedAt?: string;
+  isStagePreviewActive?: boolean;
 };
 
 // The living-room background now lives once, fixed behind the whole Home
@@ -77,6 +81,8 @@ export function PetRoom({
   onRest,
   isResting,
   onCleanUpPile,
+  hatchedAt,
+  isStagePreviewActive,
 }: PetRoomProps) {
   return (
     <View style={[styles.scene, spacious && styles.sceneSpacious]}>
@@ -99,6 +105,8 @@ export function PetRoom({
         onRest={onRest}
         isResting={isResting}
         onCleanUpPile={onCleanUpPile}
+        hatchedAt={hatchedAt}
+        isStagePreviewActive={isStagePreviewActive}
       />
     </View>
   );

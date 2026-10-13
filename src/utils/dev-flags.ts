@@ -120,3 +120,22 @@ export const DEV_ENABLE_STAGE_PREVIEW = true;
 // testing is done.
 export const DEV_ENABLE_DIRTY_TEST_CONTROLS = true;
 export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;
+
+// When true, shows a TEMPORARY "Dev: Preview Hatching Transition" button
+// on Home that plays the ~5-second "just hatched" picture-then-fade
+// animation (see HATCHLING_INTRO_DURATION_MS in
+// @/components/pet-placeholder.tsx) on demand, without waiting for a real
+// Egg-to-Hatchling hatch.
+//
+// What this flag does NOT do, by design:
+// - It never writes to the real saved Pet Profile — petProfile.hatchedAt,
+//   completedTaskCount, and paidStageIndex are completely untouched, so
+//   no real progression (or real hatch record) is gained, lost, or faked.
+// - It is purely local React state (src/app/index.tsx) — never
+//   persisted, so a page reload always clears the preview.
+// - It forces the pet shown to Hatchling only while the preview is
+//   active, separately from (and without touching) the regular Pet Stage
+//   Preview (DEV_ENABLE_STAGE_PREVIEW above).
+// Turn this back to false (or delete this flag and the button + state in
+// src/app/index.tsx) once the hatching transition has been tested.
+export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;

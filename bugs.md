@@ -104,3 +104,36 @@ Track known bugs here. Copy the template for each new bug.
 - **Cause:** Cleanup was implemented as one dedicated button per pile rather than an interaction on the poop artwork itself.
 - **Fix:** Removed the per-pile button row entirely. Each poop pile's own artwork is now the cleanup control — click it on web, tap it on Android/iOS — with wiggle/shrink feedback on every click, a temporary "N left!" indicator for Medium/Large piles, and a sparkle-and-shrink animation on the final click. See FEATURE-036 in `features.md` for the full implementation.
 - **Test results:** Manually tested and confirmed working — poop piles can be cleaned by clicking/tapping directly on them, no separate buttons appear, and the Living Room stays uncluttered even with 5 piles active.
+
+### [BUG-009] Temporary and permanent Hatchling images overlapping during the hatching transition
+
+- **Status:** Fixed and manually tested.
+- **Date:** October 13, 2026
+- **Description:** During the 5-second hatching sequence, the original (temporary) "just hatched" Kitty picture and the new permanent Hatchling picture were both visible at once — parts of the new Kitty showed through underneath/around the original artwork.
+- **Expected behavior:** Only the temporary hatching picture should be visible for the full 5 seconds; the permanent Hatchling picture should stay completely hidden until exactly then, with the two never shown together, even briefly (a plain swap, not a crossfade).
+- **Actual behavior:** The implementation rendered two stacked `Image` elements at once — a base image always showing the new permanent Hatchling picture, with an animated overlay fading in/out the old temporary picture on top of it.
+- **Cause:** The two pictures have different real aspect ratios (the temporary picture is noticeably wider relative to its height than the permanent one). Since the shared box was sized to the permanent picture's own ratio, the temporary picture — rendered via `contentFit="contain"` inside a box shaped for a different ratio — left thin transparent letterbox gaps around its edges, through which the always-present permanent picture underneath showed through.
+- **Fix:** Switched to mutually exclusive rendering. `getStageImage` (`src/components/pet-placeholder.tsx`) now takes an `isShowingHatchIntro` flag and returns exactly ONE `{source, aspectRatio}` pair at a time; the component renders a single `Image` for whichever one was returned. The overlay `Animated.View`, its styles, and the fade/crossfade logic were removed entirely in favor of a direct swap.
+- **Test results:** Manually tested via both a real hatch and the Developer Replay Hatching Animation control — the two pictures are never visible together at any point in the 5-second sequence.
+
+### [BUG-010] Pet-needs bars shifting position when Kitty's growth stage or artwork changed
+
+- **Status:** Fixed and manually tested.
+- **Date:** October 13, 2026
+- **Description:** The Hunger, Cleanliness, Happiness, and Energy bars visibly moved up or down whenever the displayed pet image changed (e.g. switching growth stages, or during the hatching transition).
+- **Expected behavior:** The four needs bars should stay at one fixed vertical position regardless of which stage/picture Kitty is currently showing, only ever hidden (not shifted) during the Egg stage or the hatching transition.
+- **Actual behavior:** The bars' vertical position changed depending on which pet picture was being displayed.
+- **Cause:** The box around Kitty's own artwork (`petWrap` in `src/components/pet-placeholder.tsx`) had its height driven directly by `{ aspectRatio }` from `getStageImage`'s return value — each stage's own real picture ratio (Hatchling, Baby, Young, Adult, Egg, and the temporary hatching picture are all slightly different). Since the box's width was fixed but its ratio varied, its actual rendered height changed every time the picture changed, and the needs-bar row — a plain sibling laid out directly below that box — inherited the same shift.
+- **Fix:** Added a fixed `PET_ART_BOX_ASPECT_RATIO` (square) constant; `petWrap` now always uses this one ratio instead of the current picture's own ratio, completely decoupling the box's layout size from whichever stage/picture is showing. The pet's own picture still never stretches — `contentFit="contain"` already scales it using its own true intrinsic dimensions regardless of the box's shape — it just letterboxes slightly inside the box where the two ratios differ.
+- **Test results:** Manually tested across Hatchling, Baby, Young, and Adult, and throughout the 5-second hatching transition — the needs bars now stay at exactly the same position the whole time, only disappearing (not shifting) during Egg/the hatching transition.
+
+### [BUG-011] Kitty's message bubble partially cut off or covered by her own artwork
+
+- **Status:** Fixed and manually tested.
+- **Date:** October 13, 2026
+- **Description:** The speech-bubble message shown above Kitty sat too close to her artwork and could be partially covered when that artwork rendered larger or shifted upward (e.g. the enlarged Egg, or the enlarged temporary hatching picture).
+- **Expected behavior:** The message bubble and its text should always be fully visible, never overlapped by Kitty's or the Egg's own artwork, regardless of how big or how far up that artwork currently renders.
+- **Actual behavior:** Kitty's/the Egg's artwork is deliberately allowed to visually overflow above its own box when scaled up (the box itself never clips, so the art can grow in place) — because the message bubble is the next sibling rendered just before that box, the overflowing artwork could paint on top of it wherever the two visually overlapped.
+- **Cause:** The bubble had only a small, fixed gap from Kitty's own box (`styles.bubble`'s `marginBottom`) and no explicit paint-order control, so it lost to the pet artwork's overflow whenever that overflow reached far enough up.
+- **Fix:** In `src/components/pet-placeholder.tsx`, increased the bubble's `marginBottom` by 40px (more clearance from the art below it) and added `zIndex: 1`, which makes the bubble always paint on top of any overflowing artwork regardless of how big a given stage's picture renders — combined with the bubble's own solid background, it and its text now stay fully visible no matter what's behind them.
+- **Test results:** Manually tested across Egg, Hatchling, Baby, Young, Adult, and the 5-second hatching animation — the bubble remains fully visible and uncovered in every case.
