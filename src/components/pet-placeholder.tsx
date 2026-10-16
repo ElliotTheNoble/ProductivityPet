@@ -203,8 +203,10 @@ type PetPlaceholderProps = {
   // button only renders when its own handler is actually provided.
   onFeed?: () => void;
   isFeeding?: boolean;
-  onBathe?: () => void;
-  isBathing?: boolean;
+  // Bathing is no longer a Home-screen action — players now bathe Kitty
+  // via the Bathroom room page instead (see @/utils/pet-bathing.ts, still
+  // fully intact and reused from there once the real bathing sequence is
+  // built; only this button and its wiring were removed from Home).
   onPlay?: () => void;
   isPlaying?: boolean;
   onRest?: () => void;
@@ -215,7 +217,7 @@ type PetPlaceholderProps = {
   // untouched. The whole per-pile buttons section (not folded into
   // actionsRow above) only renders while `poopPiles` has at least one
   // entry AND this handler was actually provided, same "only show while
-  // the handler is provided" convention as onFeed/onBathe/onPlay/onRest.
+  // the handler is provided" convention as onFeed/onPlay/onRest.
   onCleanUpPile?: (pileId: string) => void;
 };
 
@@ -347,8 +349,6 @@ export function PetPlaceholder({
   needsBath,
   onFeed,
   isFeeding = false,
-  onBathe,
-  isBathing = false,
   onPlay,
   isPlaying = false,
   onRest,
@@ -658,12 +658,16 @@ export function PetPlaceholder({
                   marginTop: accessoryPlacement.marginTop,
                   marginLeft: accessoryPlacement.marginLeft,
                   aspectRatio: accessoryArt.cropWidth / accessoryArt.cropHeight,
-                  // scaleX (if any) listed before rotate so the horizontal
-                  // stretch happens in the accessory's own original axes,
-                  // then rotate tilts the already-stretched shape — see
-                  // AccessoryPlacement.scaleX in pet-accessory-placement.ts.
+                  // scaleX/scaleY (if any) listed before rotate so the
+                  // stretch/squash happens in the accessory's own original
+                  // axes, then rotate tilts the already-stretched shape —
+                  // see AccessoryPlacement.scaleX/scaleY in
+                  // pet-accessory-placement.ts. Order between scaleX and
+                  // scaleY doesn't matter (independent axes), only that
+                  // both come before rotate.
                   transform: [
                     ...(accessoryPlacement.scaleX !== undefined ? [{ scaleX: accessoryPlacement.scaleX }] : []),
+                    ...(accessoryPlacement.scaleY !== undefined ? [{ scaleY: accessoryPlacement.scaleY }] : []),
                     ...(accessoryPlacement.rotate ? [{ rotate: accessoryPlacement.rotate }] : []),
                   ],
                 },
@@ -897,15 +901,19 @@ export function PetPlaceholder({
       </View>
       ) : null}
 
-      {/* Basic Feed/Bath/Play/Rest interactions — call the persistent
-          feedPet()/bathePet()/playWithPet()/restPet() actions (see
-          @/utils/pet-feeding.ts, @/utils/pet-bathing.ts,
-          @/utils/pet-playing.ts, and @/utils/pet-resting.ts) via the
-          callbacks passed down from Home; this component doesn't know or
-          duplicate any of those calculations. disabled (while
-          isFeeding/isBathing/isPlaying/isResting) both greys each button
-          out and makes React Native itself ignore extra taps, so an
-          action already in flight can't be triggered again.
+      {/* Basic Feed/Play/Rest interactions — call the persistent
+          feedPet()/playWithPet()/restPet() actions (see
+          @/utils/pet-feeding.ts, @/utils/pet-playing.ts, and
+          @/utils/pet-resting.ts) via the callbacks passed down from Home;
+          this component doesn't know or duplicate any of those
+          calculations. disabled (while isFeeding/isPlaying/isResting)
+          both greys each button out and makes React Native itself ignore
+          extra taps, so an action already in flight can't be triggered
+          again.
+          Bath was removed from here — bathing is now accessed through the
+          Bathroom room page instead (its own future interactive sequence,
+          not a Home shortcut); @/utils/pet-bathing.ts itself is untouched
+          and still used from there once that's built.
           Temporary/basic — just enough to manually test the persistent
           actions. Rest is a manual Energy top-up only — it never touches
           isSleeping, which stays entirely owned by the automatic 8 PM-8 AM
@@ -921,7 +929,7 @@ export function PetPlaceholder({
           (rather than rendering them disabled) is what guarantees they
           can't be pressed during those 5 seconds — there's no Pressable
           in the tree to receive a tap/click in the first place. */}
-      {(onFeed || onBathe || onPlay || onRest) && !isShowingHatchIntro ? (
+      {(onFeed || onPlay || onRest) && !isShowingHatchIntro ? (
         <View style={styles.actionsRow}>
           {onFeed ? (
             <Pressable
@@ -932,16 +940,6 @@ export function PetPlaceholder({
                 <ThemedText type="smallBold" style={styles.feedButtonText}>
                   {isFeeding ? 'Feeding…' : 'Feed'}
                 </ThemedText>
-              </ThemedView>
-            </Pressable>
-          ) : null}
-          {onBathe ? (
-            <Pressable
-              onPress={onBathe}
-              disabled={isBathing}
-              style={({ pressed }) => [pressed && styles.pressed, isBathing && styles.actionButtonDisabled]}>
-              <ThemedView type="sky" style={styles.actionButton}>
-                <ThemedText type="smallBold">{isBathing ? 'Bathing…' : 'Bath'}</ThemedText>
               </ThemedView>
             </Pressable>
           ) : null}

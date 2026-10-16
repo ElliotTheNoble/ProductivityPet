@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DevBathingArtPreview } from '@/components/dev-bathing-art-preview';
 import { RoomPet } from '@/components/room-pet';
 import { RoomTaskPanel } from '@/components/room-task-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { DEV_ENABLE_BATHING_ART_PREVIEW } from '@/utils/dev-flags';
 import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
 import { getRenderedStage } from '@/utils/pet-growth';
 import { isPetDirty } from '@/utils/pet-needs';
@@ -101,6 +103,32 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   // yet" convention as every other petProfile?.field read in this app).
   const isDirty = petProfile ? isPetDirty(petProfile) : false;
 
+  // Simple explanation: tracks whether the player has pressed "Wash
+  // Kitty" in the Bathroom — this is step 1 of the future full bathing
+  // sequence (wash → rinse → dry). It's plain local component state, NOT
+  // saved anywhere and NOT part of the persistent Pet Profile — it only
+  // decides which PICTURE to show right now, exactly like
+  // devPreviewStageIndex above does for stage previewing. Because
+  // RoomDetailScreen remounts on every room navigation (same convention
+  // noted above for petProfile/tasks), this naturally resets to false the
+  // moment the player leaves the Bathroom — "local to the Bathroom", per
+  // instructions. Cleanliness, needsBath, and every other real pet-care
+  // value are completely untouched by this — only a later step (once
+  // rinse + dry exist too) will actually update those.
+  const [isWashing, setIsWashing] = useState(false);
+
+  // Defensive backstop, not the only thing preventing this — the "Wash
+  // Kitty" button below is already only rendered for the Bathroom while a
+  // non-Egg stage is displayed, and room-pet.tsx separately refuses to
+  // show soapy art for Egg regardless of this state. Checked against
+  // displayedStage (not realStage) since this purely visual toggle only
+  // ever matters for whatever is CURRENTLY shown, the same way isDirty
+  // above and the Stage Preview itself work.
+  function handleWashKitty() {
+    if (room.slug !== 'bathroom' || displayedStage === 'Egg') return;
+    setIsWashing(true);
+  }
+
   // This room's own tasks for today — same two-step filter Home's
   // "Today's Tasks" uses (kind === 'task' && occursOnDate), then narrowed
   // to just this room via getRoomTasks (@/utils/room-tasks.ts — the exact
@@ -160,18 +188,61 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
           </ThemedView>
         </Pressable>
 
+        {/* TEMPORARY, developer-only — see DEV_ENABLE_BATHING_ART_PREVIEW's
+            own comment in @/utils/dev-flags.ts. Only shown on the Bathroom
+            page, entirely separate from the real "Wash Kitty"
+            button/isWashing state above — this never changes what Kitty
+            actually shows for real gameplay, it's purely a visual
+            spot-check tool for the 14 bathing sprite sheets prepared in
+            @/utils/bathing-stage-art.ts. */}
+        {DEV_ENABLE_BATHING_ART_PREVIEW && room.slug === 'bathroom' ? <DevBathingArtPreview /> : null}
+
         {/* Every room now renders Kitty — Study Room/Gym/Bedroom/Kitchen
             via their own activity sprite art (see @/utils/room-pet-art.ts),
-            Bathroom via the same shared "normal" pet art Home already
-            shows (see @/components/room-pet.tsx — it has no activity
-            sheet of its own yet, bath mechanics aren't implemented).
-            Position/size for the currently-displayed stage come from
-            petPlacement, resolved above via @/utils/room-pet-placement.ts. */}
+            Bathroom via that same shared "normal"/dirty pet art Home
+            already shows, OR — while isWashing is true — her new soapy
+            picture instead (see @/components/room-pet.tsx and
+            handleWashKitty above; this is step 1 of the bathing
+            sequence, rinse/dry aren't built yet). Position/size for the
+            currently-displayed stage come from petPlacement, resolved
+            above via @/utils/room-pet-placement.ts. */}
         <View style={[styles.petArea, petPlacement.areaStyle]} pointerEvents="none">
           <View style={[styles.petBox, petPlacement.boxStyle]}>
-            <RoomPet roomSlug={room.slug} stage={displayedStage} isDirty={isDirty} />
+            <RoomPet roomSlug={room.slug} stage={displayedStage} isDirty={isDirty} isWashing={isWashing} />
           </View>
         </View>
+
+        {/* Simple explanation: a cute "Wash Kitty" button, only shown in
+            the Bathroom (never any other room) and only while a real,
+            non-Egg stage is being shown (an Egg can't be bathed yet —
+            she hasn't hatched). Pressing it shows Kitty's soapy picture
+            above and stays that way (no timer reverts it) until the next
+            bathing step (Rinse) is built later.
+            Positioned in its own full-width row, well above where
+            Kitty's box can ever reach in this room (her box tops out at
+            petPlacement's own maxWidthPx + paddingBottomPx — see
+            @/utils/room-pet-placement.ts's 'bathroom' entry — comfortably
+            less than the 380px clearance used here), and horizontally
+            centered the standard "full-width row + alignItems: center"
+            way rather than Kitty's own box position, so it reliably never
+            covers her regardless of screen size. The row itself is
+            `pointerEvents="box-none"` so only the button inside it is
+            actually tappable — the empty space around it still lets taps
+            reach whatever's beneath (consistent with petArea's own
+            pointerEvents="none" above). This also stays clear of the
+            task panel, which only ever docks to a screen EDGE (top-right
+            on desktop, bottom-right/collapsed on mobile — see
+            @/components/room-task-panel.tsx), never the horizontal
+            center this button lives in. */}
+        {room.slug === 'bathroom' && displayedStage !== 'Egg' && !isWashing ? (
+          <View style={styles.washButtonRow} pointerEvents="box-none">
+            <Pressable onPress={handleWashKitty} style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedView type="sky" style={styles.washButton}>
+                <ThemedText type="smallBold">🧼 Wash Kitty</ThemedText>
+              </ThemedView>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* Kitchen's task panel docks to the LEFT instead of the shared
             right-side default — Kitty's position there has moved
@@ -240,5 +311,23 @@ const styles = StyleSheet.create({
   // from petPlacement.boxStyle for every room.
   petBox: {
     aspectRatio: 1,
+  },
+  // Full-width row, horizontally centering the button inside it — the
+  // standard RN way to center an absolutely-positioned overlay element
+  // (an absolute child can't use alignSelf: 'center' on its own the way a
+  // normal flex child can). bottom: 380 comfortably clears the Bathroom's
+  // own Kitty box at its largest possible size — see the "Wash Kitty"
+  // comment above for the exact numbers this is checked against.
+  washButtonRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 380,
+    alignItems: 'center',
+  },
+  washButton: {
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.five,
   },
 });

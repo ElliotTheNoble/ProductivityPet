@@ -30,7 +30,6 @@ import {
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
-import { bathePet } from '@/utils/pet-bathing';
 import {
   applyAddPoopPile,
   applyCleanUpPile,
@@ -120,7 +119,6 @@ export default function HomeScreen() {
   // the user navigates back, without needing a cross-page subscription.
   const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
   const [isFeeding, setIsFeeding] = useState(false);
-  const [isBathing, setIsBathing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isResting, setIsResting] = useState(false);
   // TEMPORARY — supports the test-only Grow control in handleGrow below.
@@ -237,16 +235,11 @@ export default function HomeScreen() {
       .finally(() => setIsFeeding(false));
   }
 
-  // Same shape as handleFeed, calling the existing persistent bathePet()
-  // action (see @/utils/pet-bathing.ts) — no Cleanliness math lives here.
-  function handleBathe() {
-    if (isRealEgg || isBathing) return;
-    setIsBathing(true);
-    bathePet()
-      .then((updated) => setPetProfile(updated))
-      .catch(() => {})
-      .finally(() => setIsBathing(false));
-  }
+  // The Home "Bath" button was removed — bathing is now accessed through
+  // the Bathroom room page instead (its own future interactive sequence).
+  // bathePet() (@/utils/pet-bathing.ts) itself is untouched and still
+  // reused from there once that's built; only this Home shortcut and its
+  // local isBathing state were removed.
 
   // Play no longer directly increases Happiness here — pressing it now
   // opens the Mini-Games page (see @/components/mini-games/mini-games-screen.tsx);
@@ -668,8 +661,8 @@ export default function HomeScreen() {
   //
   // - isRealEgg (below) is the REAL saved stage — it never looks at the
   //   Pet Stage Preview. Every handler that actually WRITES to the saved
-  //   Pet Profile (handleFeed/handleBathe/handlePlay/handleRest/
-  //   handleCleanUpPile, and the dev poop-trigger handlers) is guarded by
+  //   Pet Profile (handleFeed/handlePlay/handleRest/handleCleanUpPile, and
+  //   the dev poop-trigger handlers) is guarded by
   //   this, so a real pet-care action can never mutate the profile while
   //   she's genuinely still an unhatched Egg — regardless of what's
   //   currently being previewed. This is the one that must survive a
@@ -1031,8 +1024,8 @@ export default function HomeScreen() {
                 // through and separately disabled, reusing
                 // PetRoom/PetPlaceholder's existing "only render while
                 // this prop is actually provided" convention (the same
-                // one onFeed/onBathe/onPlay/onRest/onCleanUpPile/poopPiles/
-                // etc. already follow) — no new conditional rendering logic
+                // one onFeed/onPlay/onRest/onCleanUpPile/poopPiles/ etc.
+                // already follow) — no new conditional rendering logic
                 // needed in either of those components. The handlers
                 // themselves (handleFeed etc.) also separately guard on
                 // isRealEgg — see their own comments — so a real action
@@ -1047,8 +1040,6 @@ export default function HomeScreen() {
                 needsBath={isDisplayedEgg ? undefined : petProfile?.needsBath}
                 onFeed={isDisplayedEgg ? undefined : handleFeed}
                 isFeeding={isFeeding}
-                onBathe={isDisplayedEgg ? undefined : handleBathe}
-                isBathing={isBathing}
                 onPlay={isDisplayedEgg ? undefined : handlePlay}
                 isPlaying={isPlaying}
                 onRest={isDisplayedEgg ? undefined : handleRest}
@@ -1106,8 +1097,6 @@ export default function HomeScreen() {
                 needsBath={isDisplayedEgg ? undefined : petProfile?.needsBath}
                 onFeed={isDisplayedEgg ? undefined : handleFeed}
                 isFeeding={isFeeding}
-                onBathe={isDisplayedEgg ? undefined : handleBathe}
-                isBathing={isBathing}
                 onPlay={isDisplayedEgg ? undefined : handlePlay}
                 isPlaying={isPlaying}
                 onRest={isDisplayedEgg ? undefined : handleRest}

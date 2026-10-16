@@ -20,6 +20,25 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-15]
+
+### Added
+- **Summary:** gave Hatchling Kitty her own Shop accessory placements — the shared bow spot plus all 15 currently-purchasable hats — each tuned through direct visual feedback on the real Home pet, independently of Baby's existing (untouched) placements. Added a new `scaleY` capability along the way so a hat's width and height can be stretched/squashed independently when needed. See FEATURE-040 in `features.md`.
+- Hatchling placement for the shared bow (`neckCollar`, used by all 26 bows) in `src/utils/pet-accessory-placement.ts`: finalized at `{ width: '22%', marginTop: '70%' }`, replacing the old copied-from-Baby placeholder.
+- Hatchling placements added for all 15 currently-purchasable hats in `src/utils/pet-accessories.ts`: White Cat-Ear Beanie, Black Cat-Ear Beanie, Bunny Hat, Bear Hat, Frog Hat, Duck Hat, Strawberry Hat, Bee Hat, Mushroom Hat, Witch Hat, Wizard Hat, Rainbow Party Hat, Pumpkin Hat, Reindeer Hat, and Santa Hat — each created from that hat's own Baby placement as a starting point, then independently tuned (width, horizontal/vertical position, and for some, horizontal- or vertical-only stretch).
+- New `scaleY` field on `AccessoryPlacement` (`src/utils/pet-accessory-placement.ts`), mirroring the existing `scaleX` — wired into the accessory transform array in `src/components/pet-placeholder.tsx`. Lets a hat's height be adjusted independently of its width (and vice versa via `scaleX`), on top of `width` alone (which always scales both together via the hat's own crop aspect ratio). Used by the Bear Hat and Duck Hat's Hatchling placements.
+
+### Changed
+-
+
+### Fixed
+-
+
+### Removed
+-
+
+---
+
 ## [2026-10-13]
 
 ### Added

@@ -28,6 +28,16 @@ export type AccessoryPlacement = {
   // already-stretched shape — not the other way around, which would skew
   // it along the screen's horizontal axis instead.
   scaleX?: number;
+  // Optional: the vertical twin of scaleX — a vertical-only stretch/
+  // squash (e.g. 0.9 for 10% shorter) applied as a transform, leaving
+  // horizontal size (`width`/scaleX/the crop math) untouched. Same
+  // ordering reasoning as scaleX: applied BEFORE rotate, so the squash
+  // happens in the accessory's own original axes before any tilt. This
+  // is what actually makes width and height independently adjustable —
+  // `width` alone always scales both dimensions together (height follows
+  // from the sprite's own crop aspect ratio); scaleX/scaleY are the only
+  // way to change one axis without the other.
+  scaleY?: number;
 };
 
 // A "slot" is a category of accessory. For neckCollar, every bow (very
@@ -70,13 +80,18 @@ const PLACEMENT_TABLE: PlacementTable = {
       // Only Baby has an actually-confirmed value — tuned through several
       // rounds of visual feedback on the real Home pet (24% wide, 82%
       // from the top of the pet's own box, horizontally centered) until
-      // the bow read correctly as a neck/collar accessory. The other four
-      // stages are plain copies of that same confirmed number, NOT a
+      // the bow read correctly as a neck/collar accessory. Egg/Young/
+      // Adult are still plain copies of that same confirmed number, NOT a
       // guess at what each one specifically needs — they still need their
       // own visual tuning pass later, the same way Baby got one. Nothing
       // here is a Stats placement; see the module comment on PetSurface.
       Egg: { width: '24%', marginTop: '82%' },
-      Hatchling: { width: '24%', marginTop: '82%' },
+      // Hatchling: pending visual confirmation on the real Home pet, same
+      // as Baby's own process. Width (22%) narrower than Baby's 24%.
+      // marginTop has been nudged down one small step at a time against
+      // real screenshots: 58% → 35% (overshot too high) → 45% → 50% →
+      // 55% → 60% → 65% → 70%. Still a starting guess, not yet confirmed.
+      Hatchling: { width: '22%', marginTop: '70%' },
       Baby: { width: '24%', marginTop: '82%' }, // confirmed, Home surface
       Young: { width: '24%', marginTop: '82%' },
       Adult: { width: '24%', marginTop: '82%' },

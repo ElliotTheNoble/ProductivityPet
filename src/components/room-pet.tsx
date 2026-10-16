@@ -5,7 +5,7 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { getStageImage } from '@/components/pet-placeholder';
 import { SpriteCrop } from '@/components/sprite-crop';
 import type { PetStage } from '@/utils/pet-stage';
-import { getRoomPetArt } from '@/utils/room-pet-art';
+import { getRoomPetArt, getWashingKittyArt } from '@/utils/room-pet-art';
 import type { RoomSlug } from '@/utils/rooms';
 
 type RoomPetProps = {
@@ -19,6 +19,14 @@ type RoomPetProps = {
   // get a dirty variant yet). Optional/defaulted to false so this stays a
   // no-op for any caller that doesn't pass it.
   isDirty?: boolean;
+  // Simple explanation: true while Kitty is mid-wash (the player just
+  // pressed "Wash Kitty") — shows her soapy picture instead of her
+  // normal/dirty one. Passed down from @/components/room-detail-screen.tsx,
+  // which owns this as local, Bathroom-only state (see that file). Only
+  // ever changes anything for roomSlug === 'bathroom' AND a non-Egg
+  // stage — every other room/stage combination ignores this prop
+  // entirely, same no-op-by-default convention as isDirty above.
+  isWashing?: boolean;
 };
 
 // Shows the pet in its Room detail page, at its current growth stage.
@@ -46,7 +54,7 @@ type RoomPetProps = {
 // grid (see memory-match-game.tsx's boardSurface). Both rendering paths
 // contain-fit within that box (letterboxing on whichever axis the
 // artwork's own aspect ratio doesn't fill) rather than stretching.
-export function RoomPet({ roomSlug, stage, isDirty = false }: RoomPetProps) {
+export function RoomPet({ roomSlug, stage, isDirty = false, isWashing = false }: RoomPetProps) {
   const [boxSize, setBoxSize] = useState({ width: 0, height: 0 });
 
   function handleLayout(event: LayoutChangeEvent) {
@@ -61,7 +69,18 @@ export function RoomPet({ roomSlug, stage, isDirty = false }: RoomPetProps) {
     // at all — getStageImage falls through to normal Egg art regardless —
     // and the other 3 rooms that can reach this branch via Egg shouldn't
     // show Dirty Kitty before she's even hatched).
-    const { source, aspectRatio } = getStageImage(stage, roomSlug === 'bathroom' && isDirty);
+    //
+    // Simple explanation: if we're in the Bathroom, Kitty isn't an Egg,
+    // and the player just pressed "Wash Kitty", show her soapy picture
+    // instead of her normal/dirty one — checking `stage !== 'Egg'` here
+    // (rather than only in room-detail-screen.tsx) is what guarantees the
+    // Egg can never show soapy art, even if isWashing somehow stayed true
+    // from a previous non-Egg stage (e.g. switched away via the developer
+    // Stage Preview).
+    const isShowingSoapyArt = roomSlug === 'bathroom' && isWashing && stage !== 'Egg';
+    const { source, aspectRatio } = isShowingSoapyArt
+      ? getWashingKittyArt(stage)
+      : getStageImage(stage, roomSlug === 'bathroom' && isDirty);
     return (
       <View style={styles.wrapper} onLayout={handleLayout}>
         {hasBox ? (

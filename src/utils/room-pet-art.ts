@@ -102,3 +102,37 @@ export const ROOM_PET_ART: Record<RoomPetSlug, Record<RoomPetStage, RoomPetArt>>
 export function getRoomPetArt(slug: RoomPetSlug, stage: RoomPetStage): RoomPetArt {
   return ROOM_PET_ART[slug][stage];
 }
+
+// Simple explanation: the Bathroom's "soapy Kitty" pictures, shown while
+// she's being washed — one per growth stage (never Egg, since the Egg
+// can't be washed at all). These are already-cropped standalone files
+// (not a runtime sprite crop like ROOM_PET_ART above), same approach
+// already used for pet_baby.png/pet_young.png/pet_adult.png in
+// @/components/pet-placeholder.tsx — this component is responsively
+// sized (percentage-based box, not a known fixed pixel size), so there's
+// no size to crop a runtime SpriteCrop against.
+//
+// Cropped from assets/images/pets/clean_kitty.png (2172x724, same canvas
+// size/layout convention as every other room's own activity sheet above —
+// 4 poses, Hatchling/Baby/Young/Adult left to right) via the same
+// alpha-channel bounding-box scan + small safety margin + drawn
+// verification boxes, visually checked before cropping, as every other
+// sprite sheet in this project. clean_kitty.png itself was only read, never
+// modified.
+const WASHING_HATCHLING_SOURCE = require('@/assets/images/pets/washing_hatchling.png');
+const WASHING_BABY_SOURCE = require('@/assets/images/pets/washing_baby.png');
+const WASHING_YOUNG_SOURCE = require('@/assets/images/pets/washing_young.png');
+const WASHING_ADULT_SOURCE = require('@/assets/images/pets/washing_adult.png');
+
+type WashingKittyArt = { source: number; aspectRatio: number };
+
+const WASHING_KITTY_ART: Record<RoomPetStage, WashingKittyArt> = {
+  Hatchling: { source: WASHING_HATCHLING_SOURCE, aspectRatio: 402 / 428 },
+  Baby: { source: WASHING_BABY_SOURCE, aspectRatio: 483 / 357 },
+  Young: { source: WASHING_YOUNG_SOURCE, aspectRatio: 507 / 476 },
+  Adult: { source: WASHING_ADULT_SOURCE, aspectRatio: 505 / 542 },
+};
+
+export function getWashingKittyArt(stage: RoomPetStage): WashingKittyArt {
+  return WASHING_KITTY_ART[stage];
+}

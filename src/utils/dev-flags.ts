@@ -139,3 +139,26 @@ export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;
 // Turn this back to false (or delete this flag and the button + state in
 // src/app/index.tsx) once the hatching transition has been tested.
 export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;
+
+// When true, shows a TEMPORARY "🧪 Dev: Bathing Art Preview" toggle on the
+// Bathroom room page — lets any Soap/Rinse/Dry picture, at any numbered
+// step and any growth stage, be displayed large via the existing
+// SpriteCrop component and getBathingStepArt() (see
+// @/utils/bathing-stage-art.ts), purely so all 14 bathing sprite sheets'
+// crop rectangles can be visually spot-checked (no cut-off Kitty, no
+// neighboring pose showing) without having to build the real interactive
+// washing/rinsing/drying sequence first.
+//
+// What this flag does NOT do, by design:
+// - It never writes to the real saved Pet Profile — Cleanliness,
+//   needsBath, and growth progression are completely untouched.
+// - It is purely local React state (@/components/dev-bathing-art-preview.tsx)
+//   — never persisted, so leaving/reopening the Bathroom always resets it.
+// - It is entirely separate from the real "Wash Kitty" button/isWashing
+//   state in @/components/room-detail-screen.tsx — selecting artwork here
+//   never changes what Kitty actually shows for real gameplay.
+// Turn this back to false (or delete this flag and
+// @/components/dev-bathing-art-preview.tsx, plus the one line that renders
+// it in room-detail-screen.tsx) once all 14 bathing sheets have been
+// visually spot-checked.
+export const DEV_ENABLE_BATHING_ART_PREVIEW = true;

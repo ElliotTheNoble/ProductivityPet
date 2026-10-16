@@ -36,14 +36,13 @@ type PetRoomProps = {
   // @/utils/pet-needs.ts's isPetDirty.
   needsBath?: boolean;
   // Passed straight through to PetPlaceholder, which renders the
-  // Feed/Bath/Play/Rest buttons only when their own handler is provided —
-  // see that component. Optional so the room-detail screens (which also
+  // Feed/Play/Rest buttons only when their own handler is provided — see
+  // that component. Optional so the room-detail screens (which also
   // render PetRoom, but shouldn't get these buttons) keep working
-  // unchanged.
+  // unchanged. Bath was removed from here — see PetPlaceholder's own
+  // comment; bathing is now accessed through the Bathroom room page.
   onFeed?: () => void;
   isFeeding?: boolean;
-  onBathe?: () => void;
-  isBathing?: boolean;
   onPlay?: () => void;
   isPlaying?: boolean;
   onRest?: () => void;
@@ -74,8 +73,6 @@ export function PetRoom({
   needsBath,
   onFeed,
   isFeeding,
-  onBathe,
-  isBathing,
   onPlay,
   isPlaying,
   onRest,
@@ -98,8 +95,6 @@ export function PetRoom({
         needsBath={needsBath}
         onFeed={onFeed}
         isFeeding={isFeeding}
-        onBathe={onBathe}
-        isBathing={isBathing}
         onPlay={onPlay}
         isPlaying={isPlaying}
         onRest={onRest}
