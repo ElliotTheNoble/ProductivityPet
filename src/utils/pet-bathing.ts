@@ -57,3 +57,56 @@ export async function bathePet(now: Date = new Date()): Promise<PetProfile> {
   }
   return bathed;
 }
+
+// How long (in ms) Kitty keeps showing her final Dry pose after a real
+// bath finishes, before reverting to her normal picture. Shared by
+// @/components/pet-placeholder.tsx (Home) and @/components/room-pet.tsx
+// (the Bathroom) so both compare elapsed time against this exact same
+// window — see PetProfile.lastBathCompletedAt's own comment in
+// @/utils/pet-profile.ts. Was 30 seconds (30_000); bumped to 30 minutes
+// per later instructions.
+export const BATH_DRY_HOLD_MS = 30 * 60 * 1000;
+
+// Simple explanation: true if Kitty should still be showing her final Dry
+// picture right now, because she finished a real bath less than
+// BATH_DRY_HOLD_MS ago.
+// Pure function of a stored timestamp and the current time — never a
+// running timer itself, so it gives the right answer immediately after an
+// app restart or navigating back to a screen, exactly like
+// isShowingHatchIntro's own elapsed-time check in pet-placeholder.tsx.
+// '' (never bathed, or bathed before this field existed) always reads as
+// false.
+export function isShowingBathDryHold(lastBathCompletedAt: string | undefined, now: Date = new Date()): boolean {
+  if (!lastBathCompletedAt) return false;
+  const completedAtMs = new Date(lastBathCompletedAt).getTime();
+  if (Number.isNaN(completedAtMs)) return false;
+  const elapsedMs = now.getTime() - completedAtMs;
+  return elapsedMs >= 0 && elapsedMs < BATH_DRY_HOLD_MS;
+}
+
+// The real "a full bath just finished" event — what the Bathroom's
+// animated Soap→Rinse→Dry sequence (@/components/room-detail-screen.tsx)
+// calls the moment it reaches its last Dry frame. Deliberately separate
+// from applyBathing/bathePet above (which only ever add a flat +25 top-up,
+// e.g. for a future quicker partial action) — finishing the REAL sequence
+// restores Cleanliness all the way to 100, same as a proper bath actually
+// should, and ALSO clears needsBath (bathePet/applyBathing never touch
+// needsBath at all — see its own comment in @/utils/pet-profile.ts) and
+// stamps lastBathCompletedAt so the final Dry picture keeps showing for
+// BATH_DRY_HOLD_MS afterward. Same load-first-then-save shape as every
+// other persistent pet-care action in this app (loadPetProfileWithNeedsUpdate
+// first, so real elapsed decay is caught up and saved before this runs),
+// but — unlike bathePet — always saves, since lastBathCompletedAt always
+// changes even on the rare occasion Cleanliness/needsBath already happened
+// to be at their finished values.
+export async function completeBathing(now: Date = new Date()): Promise<PetProfile> {
+  const profile = await loadPetProfileWithNeedsUpdate(now);
+  const completed: PetProfile = {
+    ...profile,
+    cleanliness: clampNeedValue(100),
+    needsBath: false,
+    lastBathCompletedAt: now.toISOString(),
+  };
+  savePetProfile(completed);
+  return completed;
+}

@@ -107,7 +107,7 @@ export type PetProfile = {
   nextPoopEventAt: string;
   // Simple explanation: true means "Kitty still needs a bath." Cleaning
   // up the poop on the floor does NOT turn this back to false — only a
-  // real bath will (bathing isn't built yet).
+  // completed Bathroom wash/rinse/dry sequence does.
   // True once ANY poop pile has ever appeared since Kitty was last fully
   // bathed, independent of poopPiles itself — poopPiles is just "what's
   // on the floor right now" (cleared pile-by-pile by the Clean Up
@@ -115,12 +115,13 @@ export type PetProfile = {
   // herself been dirtied by a poop event and still needs an actual
   // bath", independent of Cleanliness. Set true the moment the FIRST
   // pile of a mess appears; NOT cleared by cleaning up any/all piles,
-  // and NOT cleared by restoring Cleanliness (bathePet in
-  // @/utils/pet-bathing.ts only ever raises cleanliness, never touches
-  // this) — only a completed Bathroom washing/drying sequence will clear
-  // it, once that's implemented. See isPetDirty in @/utils/pet-needs.ts,
-  // which treats this exactly like poopPiles/low-Cleanliness for
-  // deciding whether Dirty Kitty art should show.
+  // and NOT cleared by bathePet()'s own partial +25 top-up
+  // (@/utils/pet-bathing.ts, which only ever raises cleanliness, never
+  // touches this) — only completeBathing() (same file), called once the
+  // real animated Soap→Rinse→Dry sequence in the Bathroom finishes,
+  // clears it. See isPetDirty in @/utils/pet-needs.ts, which treats this
+  // exactly like poopPiles/low-Cleanliness for deciding whether Dirty
+  // Kitty art should show.
   needsBath: boolean;
   // Highest pet-stage index (see @/utils/pet-stage.ts's PET_STAGES) ever
   // unlocked via a PAID growth upgrade (see @/utils/pet-growth.ts) — 0
@@ -149,6 +150,23 @@ export type PetProfile = {
   // correctly resumes as "already past the 5 seconds" rather than
   // replaying it.
   hatchedAt: string;
+  // Simple explanation: the exact moment Kitty's last real bath finished
+  // (reached her final Dry pose), used to keep showing that Dry picture
+  // for a short window afterward instead of snapping straight back to her
+  // normal picture.
+  //
+  // ISO datetime set ONCE per bath, by completeBathing()
+  // (@/utils/pet-bathing.ts), the moment the real animated Soap→Rinse→Dry
+  // sequence in the Bathroom actually finishes — '' means "never bathed
+  // (yet), or bathed before this field existed," which correctly never
+  // shows the Dry hold. @/components/pet-placeholder.tsx and
+  // @/components/room-pet.tsx both compare real elapsed time since this
+  // timestamp against BATH_DRY_HOLD_MS (same file) to decide whether to
+  // still show the final Dry picture — the same "compare elapsed real
+  // time against a stored timestamp" approach hatchedAt above already
+  // uses, so closing/reopening the app or navigating away and back mid-
+  // hold correctly resumes rather than restarting or losing the hold.
+  lastBathCompletedAt: string;
 };
 
 // Same key-prefix convention as the rest of the app's AsyncStorage keys
@@ -184,6 +202,7 @@ function createDefaultPetProfile(): PetProfile {
     needsBath: false,
     paidStageIndex: 0,
     hatchedAt: '',
+    lastBathCompletedAt: '',
   };
 }
 
@@ -329,6 +348,10 @@ export function normalizePetProfile(raw: unknown): PetProfile {
     // deliberately NOT backfilled to "now" or any other guessed date, so
     // an existing Hatchling-or-later pet never wrongly replays the intro.
     hatchedAt: typeof value.hatchedAt === 'string' ? value.hatchedAt : '',
+    // Same reasoning as hatchedAt just above — a profile saved before this
+    // field existed normalizes to '' (no active Dry hold), never
+    // backfilled to "now" or any other guessed timestamp.
+    lastBathCompletedAt: typeof value.lastBathCompletedAt === 'string' ? value.lastBathCompletedAt : '',
   };
 }
 

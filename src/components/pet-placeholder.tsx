@@ -1,11 +1,14 @@
 import { Image } from 'expo-image';
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
+import { SpriteCrop } from '@/components/sprite-crop';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { BATH_DRY_HOLD_MS, isShowingBathDryHold as getIsShowingBathDryHold } from '@/utils/pet-bathing';
+import { getBathingStepArt } from '@/utils/bathing-stage-art';
 import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP, DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT } from '@/utils/dev-flags';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import { getAccessoryPlacement } from '@/utils/pet-accessory-placement';
@@ -94,6 +97,21 @@ const HATCHLING_INTRO_SCALE = 1.69;
 // the permanent Hatchling picture (each has its own, separately-
 // controlled scale/size).
 const EGG_SCALE = 1.625;
+
+// How much bigger (as a multiplier) the Young-stage Kitty picture
+// (pet_young.png) renders on Home, compared to its own natural size — per
+// direct visual feedback that Young looked too small next to the other
+// stages. Was 1.1 (10% bigger); bumped to 1.21 — another 10% bigger on top
+// of that already-enlarged 1.1 size (1.1 * 1.1 = 1.21), per the later
+// request to enlarge it further. Same technique as EGG_SCALE/
+// HATCHLING_INTRO_SCALE above: a `transform: scale` only, never a change to
+// petWrap's own box size, so Young grows visually in place around its own
+// center (staying centered, contentFit="contain" keeps its aspect ratio)
+// without moving or resizing the box itself — and since petWrap
+// deliberately never clips its contents (see its own style comment below),
+// the enlarged picture is never cut off. Only applies to stage === 'Young';
+// every other stage's own scale (hatchIntroScale/eggScale) is unaffected.
+const YOUNG_SCALE = 1.21;
 
 // The pet artwork's own display area (petWrap, the box immediately
 // around Kitty/the Egg's picture) always reserves exactly this much
@@ -193,20 +211,32 @@ type PetPlaceholderProps = {
   // The real petProfile.needsBath value, passed down from Home — true
   // means Kitty herself still needs an actual bath after a past poop
   // event, independent of poopPiles (the floor mess) and Cleanliness.
-  // Keeps Dirty Kitty showing after every pile is cleaned up and after
-  // Cleanliness is restored, until a completed Bathroom wash/dry
-  // sequence clears it (not implemented yet). Does NOT affect the floor
-  // artwork/Clean Up buttons — those are driven by poopPiles alone.
+  // Keeps Dirty Kitty showing after every pile is cleaned up, until
+  // completeBathing() (@/utils/pet-bathing.ts), once the real Soap→
+  // Rinse→Blow Dry mini-game in the Bathroom finishes, clears it. Does
+  // NOT affect the floor artwork/Clean Up buttons — those are driven by
+  // poopPiles alone.
   needsBath?: boolean;
+  // The real petProfile.lastBathCompletedAt value, passed down from Home —
+  // when set and still within BATH_DRY_HOLD_MS (@/utils/pet-bathing.ts),
+  // keeps showing Kitty's final Dry bathing picture instead of her normal
+  // one. Only takes effect while needsBath (above) is ALSO false — a NEW
+  // poop accident during this window makes Kitty immediately look dirty
+  // again instead of misleadingly still looking freshly bathed (see the
+  // render branch using isShowingBathDryHold further down for why
+  // needsBath specifically, not the broader isDirty, is what's checked
+  // there). undefined/'' means "no active Dry hold," same convention as
+  // hatchedAt above.
+  lastBathCompletedAt?: string;
   // All optional so every existing caller (e.g. the Rooms hub's pet
   // preview, if any) keeps working unchanged without passing these — each
   // button only renders when its own handler is actually provided.
   onFeed?: () => void;
   isFeeding?: boolean;
   // Bathing is no longer a Home-screen action — players now bathe Kitty
-  // via the Bathroom room page instead (see @/utils/pet-bathing.ts, still
-  // fully intact and reused from there once the real bathing sequence is
-  // built; only this button and its wiring were removed from Home).
+  // via the Bathroom room page instead (see @/components/room-detail-screen.tsx
+  // and completeBathing() in @/utils/pet-bathing.ts, the real wash/rinse/
+  // dry sequence; only this button and its wiring were removed from Home).
   onPlay?: () => void;
   isPlaying?: boolean;
   onRest?: () => void;
@@ -356,6 +386,7 @@ export function PetPlaceholder({
   onCleanUpPile,
   hatchedAt,
   isStagePreviewActive = false,
+  lastBathCompletedAt,
 }: PetPlaceholderProps) {
   const theme = useTheme();
 
@@ -396,6 +427,42 @@ export function PetPlaceholder({
     // render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, hatchedAt, isStagePreviewActive]);
+
+  // Same "derive from the real stored timestamp on every render, then
+  // force exactly one extra re-render right when the window ends" technique
+  // as isShowingHatchIntro just above — see getIsShowingBathDryHold's own
+  // comment in @/utils/pet-bathing.ts. Computed fresh from
+  // lastBathCompletedAt/the clock every render (never from a timer that
+  // starts counting down from whenever this component happens to mount),
+  // so switching tabs/rooms and coming back, or a full app restart,
+  // correctly resumes mid-hold (or correctly shows the normal picture if
+  // the window already passed) rather than restarting it.
+  const bathDryHoldElapsedMs = lastBathCompletedAt
+    ? Date.now() - new Date(lastBathCompletedAt).getTime()
+    : Infinity;
+  const isShowingBathDryHold = stage !== 'Egg' && getIsShowingBathDryHold(lastBathCompletedAt);
+  const [, forceRerenderAfterBathDryHold] = useReducer((tick: number) => tick + 1, 0);
+  useEffect(() => {
+    if (!isShowingBathDryHold) return;
+    const remainingMs = Math.max(BATH_DRY_HOLD_MS - bathDryHoldElapsedMs, 0);
+    const timer = setTimeout(forceRerenderAfterBathDryHold, remainingMs);
+    return () => clearTimeout(timer);
+    // Deliberately keyed on the real input (lastBathCompletedAt), not on
+    // isShowingBathDryHold/bathDryHoldElapsedMs themselves — same reasoning
+    // as the hatch-intro effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastBathCompletedAt]);
+
+  // Measures petWrap's own real pixel box — only needed for the Dry-hold
+  // branch below (SpriteCrop requires known pixel dimensions, unlike the
+  // normal <Image> path which just fills '100%' of whatever size petWrap
+  // already is via CSS). Same "measure the real box via onLayout" technique
+  // already used for RoomPet (@/components/room-pet.tsx).
+  const [petBoxSize, setPetBoxSize] = useState({ width: 0, height: 0 });
+  function handlePetWrapLayout(event: LayoutChangeEvent) {
+    const { width, height } = event.nativeEvent.layout;
+    setPetBoxSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+  }
 
   // Defaults to [] so every render below can just map over `piles`
   // without a separate undefined-check at each usage site — undefined
@@ -557,6 +624,9 @@ export function PetPlaceholder({
   // is true, since that already shows a different picture (the temporary
   // hatching Kitty) at its own separate scale, not the Egg.
   const eggScale = stage === 'Egg' && !isShowingHatchIntro ? EGG_SCALE : 1;
+  // Simple explanation: the Young-stage picture itself is 10% bigger than
+  // before — see YOUNG_SCALE's own comment above.
+  const youngScale = stage === 'Young' ? YOUNG_SCALE : 1;
   const accessoryArt = equippedAccessoryId ? PET_ACCESSORY_ART[equippedAccessoryId] : undefined;
   // Stage-aware — see @/utils/pet-accessory-placement.ts. 'home' is passed
   // explicitly (not a default) because this component is specifically the
@@ -606,7 +676,7 @@ export function PetPlaceholder({
         </ThemedView>
       ) : null}
 
-      <View style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]}>
+      <View style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]} onLayout={handlePetWrapLayout}>
         {/* The ONLY pet-art Image in this box — getStageImage (above)
             already picked exactly one source to show (the temporary
             "just hatched" picture, or the normal one for whatever stage
@@ -626,18 +696,57 @@ export function PetPlaceholder({
             box size/layout is untouched, so this purely overflows
             visually around its own center rather than pushing the needs
             bars or anything else around it. The same technique makes the
-            normal Egg picture 30% bigger too (eggScale) — the two scales
-            are mutually exclusive (Egg is never shown while
-            isShowingHatchIntro is true), so multiplying them together is
-            equivalent to picking whichever one actually applies. */}
-        <Image
-          source={source}
-          style={[
-            styles.petImage,
-            { transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale }] },
-          ]}
-          contentFit="contain"
-        />
+            normal Egg picture 30% bigger too (eggScale), and the Young
+            picture 10% bigger too (youngScale) — all three scales are
+            mutually exclusive (only one stage/condition can be true at a
+            time), so multiplying them together is equivalent to picking
+            whichever one actually applies. */}
+        {isShowingBathDryHold && !needsBath && petBoxSize.width > 0 && petBoxSize.height > 0 ? (
+          // Kitty just finished a real bath (see lastBathCompletedAt's own
+          // comment above) — show her final Dry pose instead of her normal
+          // picture, for BATH_DRY_HOLD_MS. Uses the exact same bathing
+          // sprite sheets/crop data as the Bathroom's own animated
+          // sequence (@/utils/bathing-stage-art.ts, step 'dry', stepNumber
+          // 5 — the last Dry frame), via SpriteCrop instead of a plain
+          // Image, since those sheets need a crop rectangle rather than
+          // being pre-cropped standalone files like getStageImage's
+          // sources. Same transform (translateY/scale) as the normal
+          // Image below, so the swap is visually seamless — petWrap never
+          // clips its contents either way (see its own style comment
+          // below).
+          //
+          // Checks `!needsBath` specifically, NOT the broader `!isDirty`
+          // (which also includes poopPiles.length > 0 and low
+          // Cleanliness) — completeBathing() always clears needsBath AND
+          // restores Cleanliness to 100, so right after a successful
+          // bath, needsBath is reliably false regardless of anything
+          // else. isDirty, though, could still be true for a reason that
+          // PRE-DATES this bath and has nothing to do with it: an old
+          // poop pile the player simply hasn't cleaned off the floor yet
+          // (cleaning the floor and bathing Kitty are deliberately
+          // separate actions — see @/utils/pet-poop.ts). Using the full
+          // isDirty here would make that stale, unrelated mess
+          // incorrectly override a bath that genuinely just succeeded —
+          // exactly the "do not let old dirty state... override a newly
+          // completed bath" bug this guards against. needsBath only ever
+          // turns true again from a GENUINELY NEW poop event (see
+          // applyAddPoopPile/applyPoopAccumulation in @/utils/pet-poop.ts),
+          // so checking it alone is what correctly still lets a fresh
+          // accident during this same hold immediately switch back to
+          // Dirty, while an old, already-existing pile does not.
+          <View style={{ transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }] }}>
+            <SpriteCrop {...getBathingStepArt('dry', 5, stage)} width={petBoxSize.width} height={petBoxSize.height} />
+          </View>
+        ) : (
+          <Image
+            source={source}
+            style={[
+              styles.petImage,
+              { transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }] },
+            ]}
+            contentFit="contain"
+          />
+        )}
 
         {/* The equipped accessory, layered on top of the pet art itself
             (not a separate Shop-card-style image) — positioned/scaled as

@@ -54,6 +54,9 @@ type PetRoomProps = {
   // @/utils/pet-profile.ts's hatchedAt field.
   hatchedAt?: string;
   isStagePreviewActive?: boolean;
+  // Passed straight through to PetPlaceholder — see that component and
+  // @/utils/pet-profile.ts's lastBathCompletedAt field.
+  lastBathCompletedAt?: string;
 };
 
 // The living-room background now lives once, fixed behind the whole Home
@@ -80,6 +83,7 @@ export function PetRoom({
   onCleanUpPile,
   hatchedAt,
   isStagePreviewActive,
+  lastBathCompletedAt,
 }: PetRoomProps) {
   return (
     <View style={[styles.scene, spacious && styles.sceneSpacious]}>
@@ -102,6 +106,7 @@ export function PetRoom({
         onCleanUpPile={onCleanUpPile}
         hatchedAt={hatchedAt}
         isStagePreviewActive={isStagePreviewActive}
+        lastBathCompletedAt={lastBathCompletedAt}
       />
     </View>
   );

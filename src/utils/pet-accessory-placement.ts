@@ -93,7 +93,24 @@ const PLACEMENT_TABLE: PlacementTable = {
       // 55% → 60% → 65% → 70%. Still a starting guess, not yet confirmed.
       Hatchling: { width: '22%', marginTop: '70%' },
       Baby: { width: '24%', marginTop: '82%' }, // confirmed, Home surface
-      Young: { width: '24%', marginTop: '82%' },
+      // Young: still a plain copy of Baby's own confirmed number at
+      // first, then per direct visual feedback moved up 7 points
+      // (marginTop 82% → 75%) and 5 points left (marginLeft, previously
+      // centered/absent, now '-5%'). Moved up another 14 points (75% →
+      // 61%) and 5 more points left (-5% → -10%). Moved up another 7
+      // points (61% → 54%) and 5 more points left (-10% → -15%). Moved
+      // 3 more points left (-15% → -18%). Moved 5 more points left
+      // (-18% → -23%), then another 7 more points left (-23% → -30%),
+      // then another 7 more points left (-30% → -37%), then 3 more
+      // points left (-37% → -40%), then 5 more points left (-40% →
+      // -45%), then 3 more points left (-45% → -48%); width/height/
+      // marginTop unchanged. Then tilted 3 degrees clockwise (rotate,
+      // previously absent, now '3deg'), then another 3 degrees clockwise
+      // (rotate 3deg → 6deg) per direct visual feedback. Moved 2 points
+      // lower (marginTop 54% → 56%). Moved 1 more point left (marginLeft
+      // -48% → -49%); width/height/marginTop/rotate unchanged. Still
+      // pending full visual confirmation.
+      Young: { width: '24%', marginTop: '56%', marginLeft: '-49%', rotate: '6deg' },
       Adult: { width: '24%', marginTop: '82%' },
     },
     // No headHat entry here — unlike bows, hats vary too much in shape to

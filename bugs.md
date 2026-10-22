@@ -137,3 +137,58 @@ Track known bugs here. Copy the template for each new bug.
 - **Cause:** The bubble had only a small, fixed gap from Kitty's own box (`styles.bubble`'s `marginBottom`) and no explicit paint-order control, so it lost to the pet artwork's overflow whenever that overflow reached far enough up.
 - **Fix:** In `src/components/pet-placeholder.tsx`, increased the bubble's `marginBottom` by 40px (more clearance from the art below it) and added `zIndex: 1`, which makes the bubble always paint on top of any overflowing artwork regardless of how big a given stage's picture renders — combined with the bubble's own solid background, it and its text now stay fully visible no matter what's behind them.
 - **Test results:** Manually tested across Egg, Hatchling, Baby, Young, Adult, and the 5-second hatching animation — the bubble remains fully visible and uncovered in every case.
+
+### [BUG-012] Cleanliness never actually updated after bathing
+
+- **Status:** Fixed
+- **Date:** October 21, 2026
+- **Description:** Washing Kitty in the Bathroom never changed her saved Cleanliness or `needsBath` — returning to Home (or anywhere else) still showed her as dirty no matter how many times "Wash Kitty" was pressed.
+- **Expected behavior:** Finishing a real bath restores Cleanliness to 100% and clears `needsBath`, and Home reflects that immediately.
+- **Actual behavior:** The Bathroom's "Wash Kitty" button only ever swapped Kitty to a static soapy picture (`isWashing` local state) and left it there — it never called any persistence function, so Cleanliness/`needsBath` in the saved `PetProfile` never moved.
+- **Cause:** The real wash→rinse→dry sequence, and the "a bath just finished" event that should save anything, simply hadn't been built yet — `isWashing` was explicitly step 1 of a planned sequence, with no completion step wired up at all. Separately, Home's own `petProfile` state was only ever loaded once on mount, with no subscription to saves made from other screens, so even a fix on the Bathroom side alone wouldn't have reached Home.
+- **Fix:** Added `completeBathing()` (`src/utils/pet-bathing.ts`) — the real "a bath just finished" event, restoring Cleanliness to 100, clearing `needsBath`, and stamping a new `lastBathCompletedAt` timestamp (see FEATURE-041). Wired it to fire once the full interactive Soap → Rinse → Blow Dry mini-game actually completes (`src/components/room-detail-screen.tsx`). Home (`src/app/index.tsx`) now also subscribes to `subscribeToPetProfile` (`src/utils/pet-profile.ts`, an existing mechanism previously only used for the Paw Token balance) so a save made from the Bathroom is reflected on Home immediately, without needing a reload or re-navigation.
+- **Test results:** Manually tested — completing a bath now shows Cleanliness at 100% and a clean Kitty on both the Bathroom and Home screens right away.
+
+### [BUG-013] Could not bathe Kitty more than once
+
+- **Status:** Fixed
+- **Date:** October 21, 2026
+- **Description:** After successfully completing one bath, there was no way to start another — the Soap/Shower Hose/Blow Dryer buttons disappeared from the Bathroom entirely.
+- **Expected behavior:** The player can start a new bath at any time, regardless of Cleanliness, `needsBath`, or whether Kitty is currently showing her post-bath Dry pose.
+- **Actual behavior:** The whole tool-select row was hidden for the entire 30-minute post-bath Dry-pose hold.
+- **Cause:** The row's render condition in `src/components/room-detail-screen.tsx` included `&& !isShowingBathDryHold`. The moment a bath completed, `isShowingBathDryHold` became `true` for the next 30 minutes, hiding every tool button for that whole window — even though the mini-game's own progress counts were already correctly reset and ready to go.
+- **Fix:** Removed the `!isShowingBathDryHold` condition from the tool row entirely. Bathing is now always available in the Bathroom (for any real, non-Egg stage), independent of Cleanliness/`needsBath`/the Dry hold.
+- **Test results:** Manually tested — a second (and third) bath can now be started immediately after finishing the previous one, including while the Dry pose from the previous bath is still showing.
+
+### [BUG-014] Kitty's sprite incorrectly reverted to Dirty between bathing phases
+
+- **Status:** Fixed
+- **Date:** October 21, 2026
+- **Description:** Mid-bath, right after fully completing the Soap phase (or Rinse, or Blow Dry), Kitty's picture would flash back to her Dirty sprite for a moment instead of holding the last pose from the phase that just finished (`soap_4`, `rinse_5`, or `dry_5`).
+- **Expected behavior:** Kitty keeps showing the last completed phase's own sprite while waiting for the player to pick the next tool, and transitions directly to that next phase's first frame (`rinse_1`, `dry_1`) once selected — never showing Dirty mid-bath.
+- **Actual behavior:** The live sprite frame disappeared the instant each phase hit 100%, since the tool auto-deselects right then and the frame calculation only ever produces a value while a tool is both selected and not yet done.
+- **Cause:** `miniGameFrame` in `src/components/room-detail-screen.tsx` was `undefined` whenever no tool was selected or the active tool's own phase had just finished. Cleanliness/`needsBath` stay at their dirty values for the entire bath (only `completeBathing()`, at the very end, clears them) — so in that gap, `RoomPet` had nothing authoritative to show and fell through to its normal/Dirty branch, which read as Dirty for however long the gap lasted.
+- **Fix:** Added `lastBathingFrameRef`, a ref that remembers the last real frame `miniGameFrame` produced and is shown in its place (`bathingFrame = miniGameFrame ?? lastBathingFrameRef.current`) whenever `miniGameFrame` itself goes `undefined`. It's cleared only once `completeBathing()` is confirmed complete, at which point the real Dry-pose hold takes over display instead.
+- **Test results:** Manually tested — Kitty now visibly holds `soap_4`/`rinse_5`/`dry_5` between phases with no Dirty flash, and transitions cleanly to `rinse_1`/`dry_1` the moment the next tool is picked.
+
+### [BUG-015] Kitty returned to Dirty immediately after completing a full bath
+
+- **Status:** Fixed
+- **Date:** October 21, 2026
+- **Description:** Finishing all three phases (Soap, Rinse, Blow Dry) sometimes showed Kitty as Dirty right away instead of her final Dry pose, and the Soap/Rinse/Blow Dry progress bars snapped back to 0% on their own — looking like the whole bath had silently failed or restarted.
+- **Expected behavior:** A successfully completed bath shows the final Dry pose immediately and keeps the mini-game visibly in a "completed" state (100% bars) until the player explicitly chooses to bathe again.
+- **Actual behavior:** Two separate issues combined: (1) if an old, already-existing poop pile was still sitting on the floor (uncleaned) when the bath finished, Kitty still read as dirty overall, overriding the Dry pose even though she herself had genuinely just been bathed; (2) the completion effect reset all three progress counts to 0 immediately in its own `finally()`, right as the bath finished.
+- **Cause:** (1) The Dry-pose hold's render guard checked the broad `isDirty` (which also includes `poopPiles.length > 0`), not realizing a pre-existing, unrelated floor mess has nothing to do with whether Kitty herself was just bathed. (2) Nothing was wrong with the reset itself, but doing it automatically and immediately made a genuinely successful completion visually indistinguishable from the mini-game spontaneously restarting.
+- **Fix:** (1) Changed the Dry-pose hold's override guard from `!isDirty` to `!needsBath` specifically, in both `src/components/room-pet.tsx` and `src/components/pet-placeholder.tsx` — `completeBathing()` always clears `needsBath`, and it can only become `true` again from a genuinely NEW poop event, so a stale pre-existing pile no longer masks a bath that just succeeded, while a fresh accident still correctly overrides it. (2) Removed the automatic reset from the completion effect; the three progress counts now only reset when the player explicitly reselects the Soap tool to start a new bath (`handleSelectTool` in `src/components/room-detail-screen.tsx`), and the Soap button is never disabled so that click always reaches the handler.
+- **Test results:** Manually tested, including with an uncleaned poop pile left on the floor during a bath — the Dry pose now shows immediately and reliably on completion, and the progress bars stay at 100% until a new bath is explicitly started.
+
+### [BUG-016] Dirty sprite failed to appear when poop occurred during the Dry-pose hold
+
+- **Status:** Fixed
+- **Date:** October 21, 2026
+- **Description:** If a new poop accident happened while Kitty was still showing her 30-minute post-bath Dry pose, she kept showing clean/Dry instead of switching to Dirty.
+- **Expected behavior:** A genuinely new poop accident should make Kitty look dirty immediately, even mid-hold, overriding the Dry pose.
+- **Actual behavior:** The Dry pose kept showing for the rest of the 30 minutes regardless of the new poop.
+- **Cause:** The render branch for the Dry-pose hold (`src/components/room-pet.tsx`, `src/components/pet-placeholder.tsx`) originally checked only `isShowingBathDryHold`, with no awareness of Kitty's current dirty state at all.
+- **Fix:** Added a dirty-state check to that same branch so it only applies while Kitty isn't currently dirty (later refined, alongside BUG-015's fix, from a broad `isDirty` check to the more precise `!needsBath`, so an old uncleaned pile doesn't ALSO incorrectly trigger this).
+- **Test results:** Manually tested — triggering a poop event while the Dry pose is showing now switches Kitty to Dirty immediately, and the Dry pose for the bath that already finished does not reappear.

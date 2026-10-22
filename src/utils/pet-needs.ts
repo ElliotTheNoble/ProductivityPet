@@ -146,8 +146,9 @@ export function applyEnergyDecay(profile: PetProfile, now: Date = new Date()): P
 // the spec: 5 piles at once is no "dirtier" by this check than 1. needsBath
 // in particular is what keeps Dirty Kitty showing after every pile is
 // cleaned up and even after Cleanliness is restored above the threshold
-// (bathePet only raises cleanliness, it never clears needsBath) — only a
-// completed Bathroom wash/dry sequence (not implemented yet) clears it.
+// (bathePet only raises cleanliness, it never clears needsBath) — only
+// completeBathing() (@/utils/pet-bathing.ts), once the real animated
+// Soap→Rinse→Dry sequence in the Bathroom finishes, clears it.
 export const DIRTY_CLEANLINESS_THRESHOLD = 20;
 
 // Simple explanation: returns true if Kitty should look/act "dirty" —

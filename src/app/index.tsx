@@ -40,7 +40,7 @@ import { getEquippedAccessoryId } from '@/utils/pet-equipment';
 import { feedPet } from '@/utils/pet-feeding';
 import { getGrowthEligibility, getRenderedStageIndex, getRenderedStage, growPet } from '@/utils/pet-growth';
 import { restPet } from '@/utils/pet-resting';
-import { getPetProfile, savePetProfile, type PetProfile, type PoopSize } from '@/utils/pet-profile';
+import { getPetProfile, savePetProfile, subscribeToPetProfile, type PetProfile, type PoopSize } from '@/utils/pet-profile';
 import { PET_STAGES, type PetStage } from '@/utils/pet-stage';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
@@ -194,6 +194,18 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Keeps petProfile in sync with saves made from ANYWHERE else in the app
+  // — in particular, completeBathing() (@/utils/pet-bathing.ts), fired from
+  // the Bathroom room page (a separate screen/mount from this one) once the
+  // real animated Soap→Rinse→Dry sequence finishes. Without this, Home
+  // would keep showing Kitty's stale pre-bath Cleanliness/needsBath (and
+  // never pick up lastBathCompletedAt for the Dry-pose hold — see
+  // @/components/pet-placeholder.tsx) until something else happened to
+  // reload the profile. subscribeToPetProfile (@/utils/pet-profile.ts) is
+  // exactly this app's existing mechanism for this kind of cross-screen
+  // reactivity — same one the header's Paw Token balance already relies on.
+  useEffect(() => subscribeToPetProfile(setPetProfile), []);
 
   // Seed the equipped accessory id the same way — see the state
   // declaration above for why a plain mount-time read is sufficient here.
@@ -1047,6 +1059,7 @@ export default function HomeScreen() {
                 onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
                 hatchedAt={effectiveHatchedAt}
                 isStagePreviewActive={isEffectiveStagePreviewActive}
+                lastBathCompletedAt={isDisplayedEgg ? undefined : petProfile?.lastBathCompletedAt}
               />
               <View style={styles.petOverlaySpacerBottom} />
             </View>
@@ -1104,6 +1117,7 @@ export default function HomeScreen() {
                 onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
                 hatchedAt={effectiveHatchedAt}
                 isStagePreviewActive={isEffectiveStagePreviewActive}
+                lastBathCompletedAt={isDisplayedEgg ? undefined : petProfile?.lastBathCompletedAt}
               />
             </View>
             <ScrollView

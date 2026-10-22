@@ -20,6 +20,36 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-21]
+
+### Added
+- **Summary:** replaced the placeholder "Wash Kitty" button with a real interactive bathing mini-game — Soap, Rinse, and Blow Dry, each with 5 circles the player hovers-and-holds (or clicks/taps) in order, using the real existing sprite art for every growth stage. A completed bath now actually restores Cleanliness and clears `needsBath`, holds Kitty's final Dry pose for 30 minutes, and the player can bathe again at any time. See FEATURE-041 in `features.md`, and BUG-012 through BUG-016 in `bugs.md` for the bugs found and fixed along the way.
+- New `src/components/bathing-mini-game.tsx`: the interactive circle mechanic shared by all three phases. Each of the 5 circles fills over a 2-second hover-and-hold, with a pulsing glow on the one active circle, a phase-specific pastel color (pink for Soap, light blue for Rinse, soft yellow for Blow Dry), a brief checkmark celebration on completion, and a subtle water/warm-air effect while actively rinsing/drying. A single click (web) or tap (mobile) also completes the active circle instantly, as an alternative to the hold — both methods share the same completion path, so a circle can only ever be completed once per attempt.
+- Mouse and touch controls: on web, the selected tool's icon follows the mouse continuously (hover tracked via `onMouseMove`, independent of whether any button is pressed) and the real OS cursor is hidden over the play area. On Android/iOS, the tool icon follows the player's finger while touching (React Native's own `PanResponder` — no new gesture library added).
+- An instruction banner above the tool buttons ("🧼 Hover over the glowing circle to soap your kitty!" etc.) that changes wording per selected tool.
+- New `src/utils/bathing-soap.ts`: a small `SoapItem` data model (id/name/icon/price) with one free default soap, structured so a future Shop update can add real purchasable soaps without changing the mini-game itself.
+- `completeBathing()` in `src/utils/pet-bathing.ts` — the real "a bath just finished" event: restores Cleanliness to 100, clears `needsBath`, and stamps a new `PetProfile.lastBathCompletedAt` timestamp. Only ever fires once all three phases (Soap, Rinse, Blow Dry) reach 100%.
+- New `PetProfile.lastBathCompletedAt` field (`src/utils/pet-profile.ts`) and `BATH_DRY_HOLD_MS`/`isShowingBathDryHold()` (`src/utils/pet-bathing.ts`) — Kitty's final Dry sprite now stays visible for 30 minutes after a completed bath, on both Home and the Bathroom, surviving tab/room navigation and a full app restart.
+- Home (`src/app/index.tsx`) now subscribes to `subscribeToPetProfile` so a bath completed in the Bathroom is reflected on Home immediately, without needing a reload.
+
+### Changed
+- The old single-press "Wash Kitty" button and its static soapy picture are gone, replaced entirely by the tool-select row (Soap bar, Shower Hose, Blow Dryer) and the mini-game above.
+- The Bathroom's tool-select row is now always available — starting a new bath no longer depends on Cleanliness, `needsBath`, or whether the previous bath's Dry-pose hold is still active (see BUG-013).
+- `src/components/room-pet.tsx` and `src/components/pet-placeholder.tsx`: the Dry-pose hold now only yields to Kitty's Dirty appearance when `needsBath` is specifically true (a genuinely new poop event), rather than the broader `isDirty` check, which could also be true because of an old, already-cleaned-up-unrelated poop pile still sitting on the floor (see BUG-015/BUG-016).
+- Soap/Rinse/Blow Dry progress no longer resets automatically the instant a bath completes — all three stay visibly at 100% until the player explicitly reselects Soap to start a new bath (see BUG-015).
+
+### Fixed
+- BUG-012: Cleanliness/`needsBath` never actually updated after "washing" Kitty, since no real completion step existed yet.
+- BUG-013: no way to bathe Kitty a second time, since the tool row was hidden for the entire post-bath Dry-pose hold.
+- BUG-014: Kitty's sprite briefly reverted to Dirty between bathing phases instead of holding the last completed phase's pose.
+- BUG-015: Kitty could revert to Dirty immediately after a successful bath (stale floor poop overriding the Dry pose) and the progress bars reset on their own, reading as an unprompted restart.
+- BUG-016: a new poop accident during the 30-minute Dry-pose hold didn't switch Kitty back to Dirty.
+
+### Removed
+- The developer-only "🧪 Dev: Bathing Art Preview" button and its `DEV_ENABLE_BATHING_ART_PREVIEW` flag, plus `src/components/dev-bathing-art-preview.tsx` — no longer needed now that the real interactive mini-game exercises all 14 bathing sprite sheets directly. The sprite data and artwork it used to spot-check (`src/utils/bathing-stage-art.ts`, `assets/images/pets/bathing/`) are untouched and still fully in use by the real mini-game.
+
+---
+
 ## [2026-10-15]
 
 ### Added
