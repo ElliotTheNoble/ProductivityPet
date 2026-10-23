@@ -697,8 +697,31 @@ export default function HomeScreen() {
   // applyPoopAccumulation in @/utils/pet-poop.ts.
   //
   // Simple explanation: true only if the pet's REAL saved stage is Egg
-  // (ignores any preview).
-  const isRealEgg = petStage === 'Egg';
+  // (ignores any preview) AND she has never actually hatched before.
+  //
+  // Two conditions beyond a plain `petStage === 'Egg'` check, both fixing
+  // BUG-017 (see bugs.md): `tasks` starts as `[]` and `petProfile` starts
+  // as `null` (their own useState defaults above) before either has
+  // actually finished loading — plugged into completedTaskCount/
+  // getRenderedStage, those "nothing loaded yet" placeholders are
+  // mathematically indistinguishable from "genuinely 0 completed tasks,
+  // no paid upgrade," so petStage can misread as 'Egg' for a pet at ANY
+  // real stage for as long as this runs before both loads resolve.
+  // `isHydrated` (tasks' own real "finished loading" flag, also used by
+  // the save/sync effect further below) and `petProfile !== null`
+  // together require real, loaded data before isRealEgg can ever be
+  // true, so it can no longer be fooled by either value's own temporary
+  // unloaded default. `!petProfile.hatchedAt` is a second, independent
+  // floor: once a real hatch has ever been recorded (hatchedAt is set
+  // exactly once and never cleared — see @/utils/pet-profile.ts),
+  // isRealEgg stays permanently false regardless of what petStage itself
+  // computes — the same "once true, never revert" protection
+  // paidStageIndex already gives Young/Adult (see getRenderedStageIndex
+  // in @/utils/pet-growth.ts), just keyed off the free hatch event
+  // instead of a paid one. A pet that has genuinely never hatched
+  // (hatchedAt === '') is unaffected by either addition — isRealEgg
+  // still correctly requires loaded data confirming petStage === 'Egg'.
+  const isRealEgg = isHydrated && petProfile !== null && petStage === 'Egg' && !petProfile.hatchedAt;
   // TEMPORARY — when a Pet Stage Preview is active (selected directly on
   // PetProgress's own stage icons — see @/components/pet-progress.tsx),
   // this is what's actually passed to <PetRoom> instead of petStage —

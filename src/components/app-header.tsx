@@ -44,11 +44,11 @@ export function AppHeader() {
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  // Home, Tasks, Stats, Mini-Games, and each individual Room detail page
-  // each render their own full-screen background behind this header (see
-  // src/app/_layout.tsx) — transparent here lets it show through instead
-  // of the usual solid header fill. Every other route (including the
-  // Rooms hub list itself, /rooms with no slug) is unaffected. The
+  // Home, Tasks, Stats, Mini-Games, Shop, and each individual Room detail
+  // page each render their own full-screen background behind this header
+  // (see src/app/_layout.tsx) — transparent here lets it show through
+  // instead of the usual solid header fill. Every other route (including
+  // the Rooms hub list itself, /rooms with no slug) is unaffected. The
   // logo/tagline keep their own translucent backdrop (brandBackdrop below)
   // and the nav pills already have their own opaque fill regardless of
   // this flag, so both stay readable over any background.
@@ -58,6 +58,7 @@ export function AppHeader() {
     pathname === '/tasks' ||
     pathname === '/stats' ||
     pathname === '/mini-games' ||
+    pathname === '/shop' ||
     (roomDetailSlug !== null && isRoomSlug(roomDetailSlug));
 
   // The real pawTokens value from the persistent Pet Profile (see

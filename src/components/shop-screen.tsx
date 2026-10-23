@@ -1,19 +1,29 @@
+import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PawTokenCoin } from '@/components/paw-token-coin';
+import { PetAvatar } from '@/components/pet-avatar';
 import { SpriteCrop } from '@/components/sprite-crop';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP } from '@/utils/dev-flags';
+import {
+  getDevPreviewStageIndex,
+  subscribeToDevPreviewStageIndex,
+} from '@/utils/dev-stage-preview';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import type { AccessorySlot } from '@/utils/pet-accessory-placement';
 import { equipAccessory, getEquippedAccessoryId, unequipAccessory } from '@/utils/pet-equipment';
+import { getRenderedStage } from '@/utils/pet-growth';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
+import { PET_STAGES } from '@/utils/pet-stage';
 import { getOwnedShopItemIds, purchaseShopItem } from '@/utils/shop-inventory';
+import { getCachedTasks } from '@/utils/task-storage';
+import { getCompletedTaskCount, type Task } from '@/utils/tasks';
 
 // How long the "Not enough Paw Tokens!" message stays visible on a card
 // before clearing itself — same idea as Home's TEMPORARY_MESSAGE_DURATION_MS.
@@ -43,13 +53,64 @@ const EQUIPPED_BUTTON_HOVER_COLOR = '#B299DF';
 // more saturated blue, playing the same role Buy/Equipped's border colors
 // already do.
 const EQUIP_BUTTON_HOVER_BORDER = '#4FB3DB';
+// The illustrated banner (title, subtitle, and an empty "Your Balance"
+// card with a Paw Token coin already drawn in) replaces the old plain
+// ThemedView hero entirely — see bannerWrap/bannerBalanceOverlay below.
+// Its real pixel dimensions (2170x725) give the exact aspect ratio the
+// responsive wrapper is locked to, so the banner can stretch to fill the
+// available width at any screen size without ever cropping or stretching
+// out of proportion.
+const SHOP_BANNER = require('@/assets/images/shop/Shop_Banner.png');
+const SHOP_BANNER_ASPECT_RATIO = 2170 / 725;
+// Where the empty space beside the coin sits, as a fraction of the
+// banner's own width/height — measured directly off Shop_Banner.png.
+// Deliberately generous (taller/wider than the coin alone) so the number
+// stays comfortably clear of the coin and the card's rounded right edge
+// even for a 4-digit balance, and recenters itself correctly at every
+// banner size since it's computed from the same measured bannerWidth the
+// Image itself renders at (see the onLayout handler below) rather than a
+// fixed pixel position.
+const BANNER_BALANCE_LEFT_FRACTION = 0.87;
+const BANNER_BALANCE_TOP_FRACTION = 0.47;
+const BANNER_BALANCE_WIDTH_FRACTION = 0.115;
+const BANNER_BALANCE_HEIGHT_FRACTION = 0.2;
+// Dark purple matching the "Your Balance" label already painted into the
+// banner art, so the overlaid number reads as part of the same design
+// rather than a mismatched patch.
+const BANNER_BALANCE_TEXT_COLOR = '#6D4C91';
 
-// Wider than the app's usual MaxContentWidth (800) — the 4-column item
-// grid and the wide hero banner both need more breathing room than a
-// single reading-width column gives, same reasoning RoomHubScreen uses
-// for its own, similarly wide ROOMS_MAX_WIDTH.
+// Wider than the app's usual MaxContentWidth (800) — the item grid and
+// the wide banner both need more breathing room than a single reading-
+// width column gives, same reasoning RoomHubScreen uses for its own,
+// similarly wide ROOMS_MAX_WIDTH.
 const SHOP_MAX_WIDTH = 1180;
-const CARD_WIDTH = 246;
+// Narrowed from 246 so 3 cards fit per row (up from 2) within
+// mainColumn's own width, now that the Kitty Preview sidebar
+// (PREVIEW_PANEL_WIDTH) shares the row with the grid — comfortably at
+// mainColumn's typical/maximum width (~768px, i.e. most real desktop
+// windows, which are wider than SHOP_MAX_WIDTH and so keep mainColumn
+// pinned at its cap); a desktop browser window narrower than roughly
+// 1050px may still wrap to 2, the same kind of responsive reflow every
+// grid on this page already does at small sizes.
+const CARD_WIDTH = 228;
+// Below this width (web only — see isDesktopPreview below), the Kitty
+// Preview becomes a collapsible inline section instead of a docked
+// sidebar, same "desktop two-column vs. stacked" boundary idea as
+// DESKTOP_MIN_WIDTH in room-hub-screen.tsx/stats-screen.tsx, just a touch
+// wider since this page also needs room for a sidebar (PREVIEW_PANEL_WIDTH,
+// below) next to the item grid, not just more grid columns.
+const DESKTOP_PREVIEW_BREAKPOINT = 900;
+// Widened from 280 to comfortably fit PREVIEW_KITTY_SIZE (315 — see
+// below) plus a little breathing room on each side, now that the Kitty
+// is wider than the old sidebar column; previewKittyFrame has no
+// overflow: 'hidden' of its own, so a column narrower than the frame
+// would let it visibly spill out toward the product grid/screen edge.
+const PREVIEW_PANEL_WIDTH = 340;
+// Large enough that a worn hat/bow's shape and color actually read
+// clearly (unlike the old 76px header circle, which only needed to
+// confirm an accessory was equipped, not show it off). 180 * 1.75 = 315,
+// per the player's explicit "75% bigger" request.
+const PREVIEW_KITTY_SIZE = 315;
 // The art-placeholder square's actual pixel size — CARD_WIDTH minus the
 // card's own left+right padding (Spacing.two each side) — so SpriteCrop
 // (which needs a concrete size, not a percentage) fills exactly the same
@@ -80,8 +141,9 @@ const SHOP_CATEGORIES: { name: ShopCategory; icon: string; color: ThemeColor }[]
 // Visual placeholders only, for judging layout — not real items, not
 // persisted anywhere, and never read or written by the Paw Token system
 // (see @/utils/paw-tokens.ts). Purchasing, ownership, and equipping are
-// explicitly out of scope for this step. Exactly 8 per category so the
-// 4-column grid shows two full rows with nothing left dangling.
+// explicitly out of scope for this step. Exactly 8 per category, purely
+// for a tidy placeholder count — unlike Pet Accessories below, this isn't
+// tuned to any particular column count.
 //
 // Pet Accessories is the first category with real artwork and the first
 // with real purchasing/equipping wired up. Every bow, hat, and bandana
@@ -420,29 +482,125 @@ const SAMPLE_ITEMS: Record<ShopCategory, SampleShopItem[]> = {
   ],
 };
 
+// --- How this screen fits together (plain-language overview) ---
+// - Background & banner: the Shop's pastel background and illustrated
+//   banner are just images layered behind/above the page's own content —
+//   see shop_background.png (rendered in src/app/_layout.tsx, the same
+//   way every other screen's background works) and SHOP_BANNER
+//   (bannerWrap/bannerImage below). Title/subtitle/"Your Balance" are
+//   painted directly into the banner picture, not separate text.
+// - Live balance: a small number is drawn on top of the banner, in the
+//   empty spot next to the coin art, showing the real pawTokens value
+//   (bannerBalanceOverlay/bannerBalanceNumber below).
+// - Kitty preview: a big picture of the player's actual pet (PetAvatar),
+//   shown on the right side of the page. It always matches whatever
+//   stage/accessory is really saved — see displayedStage and
+//   previewDisplayAccessoryId below for exactly how.
+// - Try-on: tapping an accessory's picture in the grid shows it on the
+//   preview Kitty temporarily, without buying or equipping it — see
+//   previewAccessoryId.
+// - Staying in view while scrolling: on a wide screen, the Kitty preview
+//   uses CSS "sticky" positioning so it stays on screen as the player
+//   scrolls past the long item grid — see previewPanelSticky.
+// - The accessory grid: cards wrap onto new rows automatically based on
+//   how many fit — narrowing/widening CARD_WIDTH is what changes how
+//   many columns show.
 export function ShopScreen() {
   const theme = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<ShopCategory>('Pet Accessories');
+
+  // The banner's own actually-rendered width (it's width: '100%' of
+  // mainColumn, so this varies with screen size/sidebar presence) — used
+  // to compute both the balance-number overlay's position and its font
+  // size as fractions of this real measured value (see
+  // BANNER_BALANCE_*_FRACTION above and bannerBalanceOverlay's inline
+  // style below), so the overlay tracks the image exactly at every size
+  // instead of a fixed-pixel position/font that would drift out of place
+  // the moment the banner itself scales up or down.
+  const [bannerWidth, setBannerWidth] = useState(0);
 
   // The real pawTokens value from the persistent Pet Profile (see
   // @/utils/pet-profile.ts) — same reactive pattern AppHeader uses, so
   // this stays current without polling or a page refresh. Purely a
   // display here; nothing on this page reads or writes it otherwise.
   const [pawTokens, setPawTokens] = useState<number | null>(null);
+  // paidStageIndex from that same profile — needed, together with tasks
+  // below, to compute the pet's real growth stage for the header mascot
+  // (see petStage/PetAvatar further down). Same "once true, never revert"
+  // floor Home itself reads this for (see getRenderedStage in
+  // @/utils/pet-growth.ts); defaults to 0 (no paid upgrade) until the
+  // real profile loads, exactly like Home's own `petProfile?.paidStageIndex
+  // ?? 0` fallback.
+  const [paidStageIndex, setPaidStageIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     getPetProfile().then((profile) => {
-      if (!cancelled) setPawTokens(profile.pawTokens);
+      if (!cancelled) {
+        setPawTokens(profile.pawTokens);
+        setPaidStageIndex(profile.paidStageIndex);
+      }
     });
     const unsubscribe = subscribeToPetProfile((profile) => {
-      if (!cancelled) setPawTokens(profile.pawTokens);
+      if (!cancelled) {
+        setPawTokens(profile.pawTokens);
+        setPaidStageIndex(profile.paidStageIndex);
+      }
     });
     return () => {
       cancelled = true;
       unsubscribe();
     };
   }, []);
+
+  // The same task list Home reads completedTaskCount from (see
+  // @/utils/task-storage.ts's shared in-memory cache) — loaded here purely
+  // to compute the mascot's real growth stage below; this screen doesn't
+  // otherwise read or write tasks at all.
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCachedTasks().then((cached) => {
+      if (!cancelled) setTasks(cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The pet's real, saved growth stage — identical computation to Home's
+  // own petStage (see src/app/index.tsx) — so the Shop preview is never a
+  // separate guess at progression. NOT what gets rendered directly below
+  // though — see displayedStage.
+  const completedTaskCount = getCompletedTaskCount(tasks);
+  const petStage = getRenderedStage(completedTaskCount, paidStageIndex);
+
+  // Pet Stage Preview (see @/utils/dev-stage-preview.ts) — a shared,
+  // in-memory (never persisted) override set from Home's Pet Progress
+  // panel, specifically so it survives navigating to a different
+  // route/component (plain component-local state can't, since Home
+  // itself unmounts on navigation) — this is the exact same module Home
+  // reads from for its own displayedStage, imported directly rather than
+  // reimplemented, so Shop can never drift out of sync with whatever
+  // Home is actually showing. BUG-FIX: previously Shop only ever read
+  // petStage (the real stage), so it kept showing the real stage (Adult,
+  // for the player who reported this) regardless of an active preview —
+  // this subscription is what was missing.
+  const [devPreviewStageIndex, setDevPreviewStageIndexState] = useState<number | null>(() =>
+    getDevPreviewStageIndex()
+  );
+  useEffect(() => subscribeToDevPreviewStageIndex(setDevPreviewStageIndexState), []);
+
+  // What actually gets rendered on the preview Kitty — identical formula
+  // to Home's own displayedStage (src/app/index.tsx): the previewed stage
+  // when one is active, the real stage otherwise. Deliberately does NOT
+  // account for Home's separate "Dev: Replay Hatching Animation" feature
+  // (devHatchReplayShowingEgg/devHatchIntroPreviewAt in index.tsx) — that
+  // one simulates a real hatch event in progress and is scoped tightly to
+  // Home's own hatch-intro animation, not a general stage preview, so it
+  // isn't part of what the player asked Shop to reuse here.
+  const displayedStage = devPreviewStageIndex !== null ? PET_STAGES[devPreviewStageIndex] : petStage;
 
   // Which items are already owned (see @/utils/shop-inventory.ts) —
   // loaded once on mount so a purchase made in an earlier session still
@@ -559,42 +717,147 @@ export function ShopScreen() {
   // just hovering the card around it.
   const [hoveredButtonId, setHoveredButtonId] = useState<string | null>(null);
 
+  // Desktop browsers only (native Android/iOS always gets the compact
+  // collapsible treatment below, regardless of device/tablet width) — see
+  // DESKTOP_PREVIEW_BREAKPOINT above. `position: 'sticky'` (used by
+  // previewPanelSticky further down) is a web-only CSS feature with no
+  // native equivalent, so gating on Platform.OS here keeps native from
+  // ever receiving it.
+  const { width } = useWindowDimensions();
+  const isDesktopPreview = Platform.OS === 'web' && width >= DESKTOP_PREVIEW_BREAKPOINT;
+  // Mobile/narrow only — starts collapsed so the preview never covers the
+  // item grid by default (see requirement in the panel's own JSX below).
+  const [isMobilePreviewExpanded, setIsMobilePreviewExpanded] = useState(false);
+
+  // Which accessory (if any) is being temporarily "tried on" the preview
+  // kitty instead of its real equippedId — set by tapping an item's own
+  // artwork thumbnail below, never persisted and never equips/purchases
+  // anything by itself (see handleEquipToggle/handlePurchase above, both
+  // completely separate actions). Cleared by the "Remove Preview" button,
+  // or automatically on a category switch (a previewed accessory from a
+  // tab that's no longer showing would otherwise linger invisibly).
+  const [previewAccessoryId, setPreviewAccessoryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreviewAccessoryId(null);
+  }, [selectedCategory]);
+
+  // What the preview kitty actually shows right now: the tried-on item if
+  // one is active, otherwise whatever's really equipped — same Egg-stage
+  // "no accessories" rule as the rest of the app (see BUG-006 in bugs.md
+  // and PetAvatar's own equippedAccessoryId doc comment). Gated on
+  // displayedStage (not petStage) — same reasoning as Home's own
+  // isDisplayedEgg (src/app/index.tsx): while a Pet Stage Preview is
+  // showing Egg, accessories should hide here too, even if the REAL
+  // stage (petStage) is already past Egg.
+  const previewDisplayAccessoryId = displayedStage === 'Egg' ? null : previewAccessoryId ?? equippedId;
+
   const items = SAMPLE_ITEMS[selectedCategory];
+
+  // Shared between the desktop sticky sidebar and the mobile collapsible
+  // section below so the two never drift into two different-looking
+  // previews — only their surrounding container/trigger differs. Just the
+  // Kitty sprite itself now — no card background/border, title, or
+  // instruction text (removed per the player's request; the old "Remove
+  // Preview" button is gone too, replaced by tapping the Kitty itself —
+  // see the Pressable below — so there's no extra UI chrome, just the
+  // sprite). PetAvatar is pointerEvents="none" by design (it's meant to
+  // be purely decorative everywhere else it's used, e.g. the Shop
+  // header's old mascot slot), so the tap target here is this wrapping
+  // Pressable, not PetAvatar itself — disabled whenever there's nothing
+  // to clear, so it's inert (not just invisibly clickable) once the
+  // preview already matches the real equipped accessory.
+  const previewPanelContent = (
+    <Pressable
+      disabled={!previewAccessoryId}
+      onPress={() => setPreviewAccessoryId(null)}
+      style={styles.previewKittyFrame}>
+      <PetAvatar stage={displayedStage} equippedAccessoryId={previewDisplayAccessoryId} size={PREVIEW_KITTY_SIZE} />
+    </Pressable>
+  );
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Hero banner — a flat pastel stand-in for the final illustrated
-              shopfront scene (awning, shelves, window, mascot) shown in
-              shop_reference.png; assets/images/shop_reference.png is a
-              design reference only and is never rendered here. The circle
-              on the left marks where the mascot illustration will go. */}
-          <ThemedView type="peachOverlay" style={styles.hero}>
-            <View style={styles.heroMascotPlaceholder}>
-              <ThemedText style={styles.heroMascotEmoji}>🐱</ThemedText>
-            </View>
-
-            <View style={styles.heroText}>
-              <View style={styles.heroTitleRow}>
-                <ThemedText style={styles.heroTitle}>Pet Shop</ThemedText>
-                <ThemedText style={styles.heroTitlePaw}>🐾</ThemedText>
-              </View>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.heroSubtitle}>
-                Use your Paw Tokens to get cute items for your pet, rooms, and more!
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, isDesktopPreview && styles.scrollContentRow]}
+          showsVerticalScrollIndicator={false}>
+          {/* Everything except the preview sidebar — on desktop this is the
+              flex:1 left column (see mainColumnDesktop) that scrolls
+              underneath the sticky sidebar to its right; on mobile it's
+              simply the whole page, full width. */}
+          <View style={[styles.mainColumn, isDesktopPreview && styles.mainColumnDesktop]}>
+          {/* Illustrated banner — replaces the old plain pastel hero
+              entirely (title, subtitle, and the "Your Balance" card are
+              all painted into Shop_Banner.png itself now). width: '100%'
+              of mainColumn + a fixed aspectRatio (the image's own real
+              2170x725 proportions) is what lets this fill the available
+              column width at any screen size with zero cropping/
+              distortion or overflow — it can never be wider than its own
+              parent, so it's always fully visible and correctly centered
+              by construction. contentFit="contain" is a second guarantee
+              of the same "never crop/distort" rule, though with the
+              aspect ratio already matched exactly it never actually needs
+              to add letterboxing. (A previous version of this tried to
+              enlarge the banner past 100% via a negative left margin —
+              reverted: the ScrollView clips horizontal overflow, so that
+              bled portion was actually just getting cut off rather than
+              rendered, which is what cropped the kitty on the left.) The
+              real pet used to live in a small circle in the old hero; it
+              now has its own much larger "Try It On!" preview panel (see
+              previewPanelContent above and its desktop/mobile placement
+              below) so its accessories can actually be seen clearly. */}
+          <View style={styles.bannerWrap} onLayout={(e) => setBannerWidth(e.nativeEvent.layout.width)}>
+            <Image source={SHOP_BANNER} style={styles.bannerImage} contentFit="contain" />
+            {/* The banner art already draws the coin and the empty card
+                around it — this only adds the live number beside it, kept
+                in sync with the real pawTokens state above (same source
+                AppHeader's own balance pill reads from). Position/size are
+                both computed from the real measured bannerWidth (not a
+                fixed pixel guess) so the number tracks the coin exactly
+                as the banner itself scales up or down. */}
+            <View
+              pointerEvents="none"
+              style={[
+                styles.bannerBalanceOverlay,
+                {
+                  left: bannerWidth * BANNER_BALANCE_LEFT_FRACTION,
+                  top: (bannerWidth / SHOP_BANNER_ASPECT_RATIO) * BANNER_BALANCE_TOP_FRACTION,
+                  width: bannerWidth * BANNER_BALANCE_WIDTH_FRACTION,
+                  height: (bannerWidth / SHOP_BANNER_ASPECT_RATIO) * BANNER_BALANCE_HEIGHT_FRACTION,
+                },
+              ]}>
+              <ThemedText
+                numberOfLines={1}
+                style={[styles.bannerBalanceNumber, { fontSize: Math.max(14, bannerWidth * 0.032) }]}>
+                {pawTokens ?? '—'}
               </ThemedText>
             </View>
+          </View>
 
-            <View style={[styles.balanceCard, { borderColor: theme.purple }]}>
-              <ThemedText type="smallBold" themeColor="purple">
-                Your Balance
-              </ThemedText>
-              <View style={styles.balanceRow}>
-                <PawTokenCoin size={32} />
-                <ThemedText style={styles.balanceNumber}>{pawTokens ?? '—'}</ThemedText>
-              </View>
-            </View>
-          </ThemedView>
+          {!isDesktopPreview ? (
+            <>
+              <Pressable
+                onPress={() => setIsMobilePreviewExpanded((prev) => !prev)}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedView type="backgroundSelected" style={styles.mobilePreviewToggle}>
+                  <ThemedText type="smallBold">
+                    🐾 Kitty Preview {isMobilePreviewExpanded ? '▾' : '▸'}
+                  </ThemedText>
+                </ThemedView>
+              </Pressable>
+              {/* No card background here (per the player's request — see
+                  previewPanelContent's own comment) — a plain View purely
+                  for layout (centers the Kitty), the toggle pill above it
+                  is still the only visible "chrome" on mobile. The
+                  bottom-anchored sticky treatment below is desktop-only
+                  (see previewPanelSticky) — mobile's Kitty just sits at
+                  its natural position inside this expanded section. */}
+              {isMobilePreviewExpanded ? (
+                <View style={styles.mobilePreviewPanel}>{previewPanelContent}</View>
+              ) : null}
+            </>
+          ) : null}
 
           <View style={styles.categoryRow}>
             {SHOP_CATEGORIES.map(({ name, icon, color }) => {
@@ -635,7 +898,22 @@ export function ShopScreen() {
                     { borderColor: theme.backgroundSelected },
                     hoveredItemId === item.id && [styles.cardHovered, { borderColor: theme.accent }],
                   ]}>
-                  <View style={styles.artPlaceholder}>
+                  {/* Tapping the artwork itself (separate from Buy/Equip
+                      below) temporarily previews this accessory on the
+                      Kitty Preview panel — see previewAccessoryId above.
+                      Only wired for equippable items; Room Decor/
+                      Backgrounds items don't render on the pet at all, so
+                      pressing theirs would do nothing anyway. */}
+                  <Pressable
+                    disabled={!item.equippable}
+                    onPress={() => setPreviewAccessoryId(item.id)}
+                    style={[
+                      styles.artPlaceholder,
+                      item.equippable && previewAccessoryId === item.id && [
+                        styles.artPlaceholderPreviewing,
+                        { borderColor: theme.accent },
+                      ],
+                    ]}>
                     {item.art ? (
                       <SpriteCrop
                         source={item.art.source}
@@ -650,7 +928,7 @@ export function ShopScreen() {
                     ) : (
                       <ThemedText style={styles.artEmoji}>{item.emoji}</ThemedText>
                     )}
-                  </View>
+                  </Pressable>
                   <ThemedText type="smallBold" style={styles.itemName}>
                     {item.name}
                   </ThemedText>
@@ -772,6 +1050,24 @@ export function ShopScreen() {
               </Pressable>
             ))}
           </View>
+          </View>
+
+          {isDesktopPreview ? (
+            // position: 'sticky' — see previewPanelSticky's own comment for
+            // why this needs a type cast, and why it's safe to apply
+            // unconditionally here (isDesktopPreview already guarantees
+            // Platform.OS === 'web'). Sticks within THIS ScrollView's own
+            // scroll container (not the whole window), per the "within the
+            // actual Shop scrolling container" requirement — anchored to
+            // `bottom` now (see previewPanelSticky), so the Kitty sits low
+            // in the viewport, near the bottom-right, instead of near the
+            // top — alignSelf: 'flex-start' (on previewPanel) keeps it
+            // from being stretched to mainColumn's full height, which
+            // would otherwise throw off that bottom anchoring.
+            <View style={[styles.previewPanel, styles.previewPanelSticky]}>
+              {previewPanelContent}
+            </View>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -779,9 +1075,16 @@ export function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Transparent so the shared Shop background rendered in
+  // src/app/_layout.tsx (behind the now-transparent header too — see
+  // app-header.tsx's isImmersiveRoute) shows through as one continuous
+  // image, instead of ThemedView's own default opaque fill (theme.background,
+  // applied whenever no `type` prop is given) hiding it. Same technique
+  // Home/Tasks/Stats/Mini-Games already use for their own backgrounds.
   container: {
     flex: 1,
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   safeArea: {
     flex: 1,
@@ -790,77 +1093,162 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
+    // No top padding — keeps the banner as close to the navigation header
+    // as this layout can safely get it without a negative margin (an
+    // earlier attempt at pulling it up further, past this, via a negative
+    // marginTop on bannerWrap was reverted along with the equivalent
+    // horizontal version — see bannerWrap's own comment). The banner's
+    // own art still has some transparent padding baked into the top of
+    // the image itself, which this can't remove — only trimming the
+    // source PNG could do that.
+    paddingTop: 0,
     paddingBottom: Spacing.four,
-    gap: Spacing.three,
   },
-  hero: {
+  // Desktop only (see isDesktopPreview) — turns the ScrollView's content
+  // into a row of two columns (mainColumn + the sticky previewPanel
+  // sibling added in the JSX) instead of one stacked column. alignItems:
+  // 'flex-start' keeps the sticky sidebar from being stretched to
+  // mainColumn's full height.
+  scrollContentRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    borderRadius: Spacing.five,
-    paddingHorizontal: Spacing.five,
-    paddingVertical: Spacing.four,
+    alignItems: 'flex-start',
     gap: Spacing.four,
   },
-  heroMascotPlaceholder: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+  // The vertical gap between hero/the mobile preview toggle/categoryRow/
+  // grid now lives here (moved off scrollContent above) so it applies the
+  // same way whether mainColumn is the page's only column (mobile) or the
+  // left column of a desktop row (mainColumnDesktop below).
+  mainColumn: {
+    width: '100%',
+    gap: Spacing.three,
+  },
+  // minWidth: 0 matters on web: a flex: 1 row child otherwise refuses to
+  // shrink below its content's intrinsic width (the grid's natural
+  // width), which would push the sticky sidebar out past the row's own
+  // bounds at in-between window sizes instead of letting the grid reflow
+  // to fewer columns first.
+  mainColumnDesktop: {
+    flex: 1,
+    minWidth: 0,
+  },
+  // Locked to the banner art's own real aspect ratio (see
+  // SHOP_BANNER_ASPECT_RATIO) so width: '100%' scales it to fill
+  // mainColumn at any screen size with the height following
+  // proportionally — never cropped, never stretched out of shape.
+  // position: 'relative' is what lets bannerBalanceOverlay below position
+  // itself against this box specifically, not the whole page.
+  // Deliberately no margin/left offset of any kind: width: '100%' always
+  // exactly fills mainColumn (never more, never bled past it), which both
+  // guarantees the whole image stays visible — it's physically impossible
+  // for a 100%-of-parent box to overflow its own parent — and centers it
+  // correctly for free, since mainColumn itself is already centered on
+  // the page. aspectRatio (the image's own real 2170x725 proportions) is
+  // what turns that one width into the correct height automatically, so
+  // it's never stretched or distorted either.
+  bannerWrap: {
+    width: '100%',
+    aspectRatio: SHOP_BANNER_ASPECT_RATIO,
+    position: 'relative',
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  // Positioned/sized via inline style (computed from the real measured
+  // bannerWidth — see the JSX above), not here; this just supplies the
+  // parts that don't change with that measurement.
+  bannerBalanceOverlay: {
+    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroMascotEmoji: {
-    fontSize: 44,
-  },
-  heroText: {
-    flex: 1,
-    minWidth: 220,
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  heroTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  heroTitle: {
-    fontSize: 36,
-    lineHeight: 42,
+  bannerBalanceNumber: {
+    color: BANNER_BALANCE_TEXT_COLOR,
     fontWeight: '700',
-    color: '#B983CC',
-  },
-  heroTitlePaw: {
-    fontSize: 26,
-  },
-  heroSubtitle: {
     textAlign: 'center',
-    maxWidth: 360,
   },
-  balanceCard: {
+  // Desktop sticky sidebar (see isDesktopPreview/scrollContentRow above).
+  // alignSelf: 'flex-start' is the other half of scrollContentRow's own
+  // alignItems: 'flex-start' — without both, this panel would stretch to
+  // match mainColumn's full height, which would throw off the bottom
+  // anchoring below (a stretched box's own bottom edge sits at the very
+  // end of that huge height, not snugly around the Kitty). No background/
+  // border/shadow/padding (removed per the player's request — see
+  // previewPanelContent's own comment) — purely a positioning box: fixed
+  // width so the sticky sidebar has a stable column to sit in,
+  // alignItems: 'center' to center the Kitty inside it (unchanged by the
+  // marginTop below, so the Kitty's horizontal position doesn't move).
+  //
+  // marginTop — this panel's own un-stuck/static position starts at the
+  // very top of the row (same y as the banner, next to mainColumn); this
+  // pushes that static starting point down before anything else
+  // (previewPanelSticky's own bottom offset, computed independently) gets
+  // applied on top of it, so the Kitty ends up visibly lower regardless
+  // of how sticky's own threshold math resolves — not dependent on the
+  // ScrollView's scroll position, and not something any surrounding
+  // container clips: nothing between this panel and the ScrollView sets
+  // overflow: 'hidden' or a fixed/max height that would cut it off (the
+  // row's own height is governed by mainColumn, which is far taller than
+  // this panel either way), and mainColumn/scrollContentRow are confirmed
+  // not to.
+  //
+  // Was 500 (tuned for the old 180px Kitty, paws landing on the rug).
+  // previewKittyFrame grows straight down from this same top-anchored
+  // point (normal flow — height added below the top, not above it), so
+  // growing the Kitty to 315px (+135 — see PREVIEW_KITTY_SIZE) would have
+  // pushed its paws 135px further down than before, off the rug, if this
+  // weren't reduced by that same 135 (500 - 135 = 365) to compensate —
+  // keeping the Kitty's BOTTOM edge (where the paws are) anchored at the
+  // same vertical position as before, with the extra height added above
+  // it instead of below.
+  previewPanel: {
+    width: PREVIEW_PANEL_WIDTH,
+    alignSelf: 'flex-start',
     alignItems: 'center',
-    gap: Spacing.one,
-    backgroundColor: '#FFFFFF',
-    borderRadius: Spacing.four,
-    borderWidth: 2,
-    paddingHorizontal: Spacing.five,
-    paddingVertical: Spacing.three,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
+    marginTop: 365,
   },
-  balanceRow: {
-    flexDirection: 'row',
+  // position: 'sticky' is a web-only CSS value (react-native-web passes
+  // it straight through to the DOM) with no equivalent in React Native's
+  // own ViewStyle type (which only allows 'absolute' | 'relative' |
+  // 'static') — the `as any` is scoped to just this one literal so it
+  // doesn't weaken type-checking anywhere else. Only ever applied when
+  // isDesktopPreview is true, which already requires Platform.OS ===
+  // 'web', so this never reaches native.
+  //
+  // `bottom` instead of `top`: standard CSS sticky lets an element anchor
+  // to either edge of its scroll container's viewport. Since this panel's
+  // own normal (non-sticky) position is short and near the top of a much
+  // taller page (the product grid below it), a bottom anchor keeps it
+  // pinned low in the visible Shop area — "sitting on the rug" near the
+  // bottom-right — from the moment the page loads and all the way through
+  // scrolling, rather than pinned near the top the way `top` would.
+  previewPanelSticky: {
+    position: 'sticky' as any,
+    bottom: Spacing.four,
+  },
+  previewKittyFrame: {
+    width: PREVIEW_KITTY_SIZE,
+    height: PREVIEW_KITTY_SIZE,
     alignItems: 'center',
-    gap: Spacing.two,
+    justifyContent: 'center',
   },
-  balanceNumber: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
+  // Mobile/narrow only (see isMobilePreviewExpanded above) — a small,
+  // tappable pill rather than the full panel, so the collapsed state
+  // takes almost no vertical space and never crowds the item grid below.
+  mobilePreviewToggle: {
+    borderRadius: Spacing.five,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.two,
+    alignSelf: 'flex-start',
+  },
+  // The expanded mobile panel sits inline in normal document flow (not
+  // absolutely positioned/floating) specifically so it can never overlap
+  // the item grid below it — expanding it simply pushes the grid further
+  // down the page, exactly like any other section on this screen. No
+  // background/border/padding anymore (see previewPanel's own comment) —
+  // just centers the Kitty.
+  mobilePreviewPanel: {
+    alignItems: 'center',
   },
   categoryRow: {
     flexDirection: 'row',
@@ -944,6 +1332,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Highlights whichever item's artwork is the one currently "tried on"
+  // the Kitty Preview panel (see previewAccessoryId) — borderColor is set
+  // inline (theme.accent), same pattern as every other hover/active state
+  // on this screen.
+  artPlaceholderPreviewing: {
+    borderWidth: 3,
   },
   artEmoji: {
     fontSize: 52,

@@ -676,7 +676,19 @@ export function PetPlaceholder({
         </ThemedView>
       ) : null}
 
-      <View style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]} onLayout={handlePetWrapLayout}>
+      <View
+        style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]}
+        onLayout={handlePetWrapLayout}
+        // `box-none`: this box itself never responds to a touch (it has
+        // no onPress of its own), but its real interactive children — the
+        // poop piles' own Pressables — still can. Belt-and-suspenders
+        // alongside petImage/the Dry-hold SpriteCrop's own
+        // `pointerEvents="none"` wrapping Views and actionsRow's own
+        // zIndex below: this box can visually overflow its own bounds (by
+        // design, for the Egg/hatch-intro/Young scale effects), so this
+        // makes sure it never has a stray hit area of its own out there
+        // either, regardless of what's rendered inside it.
+        pointerEvents="box-none">
         {/* The ONLY pet-art Image in this box — getStageImage (above)
             already picked exactly one source to show (the temporary
             "just hatched" picture, or the normal one for whatever stage
@@ -697,10 +709,39 @@ export function PetPlaceholder({
             visually around its own center rather than pushing the needs
             bars or anything else around it. The same technique makes the
             normal Egg picture 30% bigger too (eggScale), and the Young
-            picture 10% bigger too (youngScale) — all three scales are
+            picture 21% bigger too (youngScale) — all three scales are
             mutually exclusive (only one stage/condition can be true at a
             time), so multiplying them together is equivalent to picking
-            whichever one actually applies. */}
+            whichever one actually applies.
+
+            BUG FIX: both this picture and its Dry-hold SpriteCrop sibling
+            below are now non-interactive — this artwork is purely
+            decorative (same as the equipped-accessory overlay just below,
+            which already worked this way), but it hadn't needed to be
+            explicitly marked that way before now, since nothing
+            previously made it overflow far enough past petWrap's own box
+            to reach anything interactive underneath. youngScale (21%
+            bigger, added in a later round) changed that: at the Young
+            growth stage, where Feed/Play/Rest buttons are always on
+            screen (unlike Egg, where they're hidden, or the 5-second
+            Hatchling intro, which is too brief to matter), the enlarged
+            picture's overflow — which, like any transform, also enlarges
+            its HIT-TESTING area, not just what's visually drawn — could
+            reach down far enough to intercept taps meant for those
+            buttons underneath it, especially Play.
+            A first attempt at this fix added `pointerEvents="none"`
+            directly to the `<Image>` prop below — this compiled fine
+            (expo-image's `ImageProps` type structurally inherits
+            `pointerEvents` from `ViewProps`) but had NO real effect,
+            because expo-image's own implementation never actually reads
+            or forwards that prop anywhere (confirmed by grepping its
+            compiled source — zero matches). The real fix wraps the Image
+            in a plain React Native `View` instead, and puts
+            `pointerEvents="none"` on THAT — a `View` does genuinely
+            implement it, which is exactly why the Dry-hold branch below
+            (already a `View` wrapping a `SpriteCrop`) was unaffected by
+            this gap, while the bare `<Image>` in the far more common
+            normal-picture branch was the one actually swallowing taps. */}
         {isShowingBathDryHold && !needsBath && petBoxSize.width > 0 && petBoxSize.height > 0 ? (
           // Kitty just finished a real bath (see lastBathCompletedAt's own
           // comment above) — show her final Dry pose instead of her normal
@@ -734,18 +775,42 @@ export function PetPlaceholder({
           // so checking it alone is what correctly still lets a fresh
           // accident during this same hold immediately switch back to
           // Dirty, while an old, already-existing pile does not.
-          <View style={{ transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }] }}>
+          <View
+            pointerEvents="none"
+            style={{ transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }] }}>
             <SpriteCrop {...getBathingStepArt('dry', 5, stage)} width={petBoxSize.width} height={petBoxSize.height} />
           </View>
         ) : (
-          <Image
-            source={source}
-            style={[
-              styles.petImage,
-              { transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }] },
-            ]}
-            contentFit="contain"
-          />
+          // REAL FIX (see the BUG FIX note above for the full root-cause
+          // writeup): a `pointerEvents` PROP passed directly to expo-image's own
+          // `<Image>` is silently inert — confirmed by inspecting
+          // expo-image's compiled source (node_modules/expo-image/build),
+          // which has ZERO references to `pointerEvents` anywhere; its own
+          // `ImageProps` type only ever INHERITS the prop structurally
+          // (via `extends Omit<ViewProps, ...>`), so TypeScript accepts it
+          // without error, but nothing in expo-image's own implementation
+          // ever reads or forwards it to the underlying native/DOM view.
+          // That's why adding `pointerEvents="none"` directly to this
+          // Image (an earlier attempt) compiled fine but had NO real
+          // effect on hit-testing. A plain React Native `View`, unlike
+          // expo-image's `Image`, DOES correctly implement `pointerEvents`
+          // (confirmed by the fact that the accessory overlay a little
+          // further down — a real `View` — already uses this exact prop
+          // successfully) — so this wraps the Image in one, moving
+          // `pointerEvents="none"` onto the `View` instead of the `Image`,
+          // the same way the Dry-hold `SpriteCrop` branch above already
+          // (correctly) does it.
+          <View pointerEvents="none" style={styles.petImage}>
+            <Image
+              source={source}
+              style={{
+                width: '100%',
+                height: '100%',
+                transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }],
+              }}
+              contentFit="contain"
+            />
+          </View>
         )}
 
         {/* The equipped accessory, layered on top of the pet art itself
@@ -1238,7 +1303,19 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: Spacing.two,
-    marginTop: Spacing.two,
+    // Was Spacing.two (8px); bumped by +40px (to 48px) per instructions,
+    // moving Feed/Play/Rest 40px lower than before — horizontal
+    // centering/spacing/colors/sizes are all untouched, this only adds
+    // more vertical clearance above the row. zIndex makes this row
+    // always paint (and hit-test) above whatever decorative content from
+    // petWrap/the needs bars might visually overflow near it, the same
+    // technique the message bubble above already uses for the same
+    // reason (see its own `zIndex: 1` comment) — belt-and-suspenders on
+    // top of petImage/the Dry-hold SpriteCrop already being wrapped in
+    // their own `pointerEvents="none"` Views, in case anything else ever
+    // overlaps this row in the future.
+    zIndex: 1,
+    marginTop: Spacing.two + 40,
   },
   actionButton: {
     paddingHorizontal: Spacing.three,

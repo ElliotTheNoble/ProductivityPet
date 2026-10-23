@@ -22,6 +22,7 @@ const LIVING_ROOM_NORMAL = require('@/assets/images/rooms/living-room.png');
 const TASKS_NORMAL = require('@/assets/images/rooms/backgrounds/Task_Background.png');
 const STATS_BACKGROUND = require('@/assets/images/stats/stats_background.png');
 const MINI_GAMES_BACKGROUND = require('@/assets/images/mini-games/mini_games_background.png');
+const SHOP_BACKGROUND = require('@/assets/images/shop/shop_background.png');
 
 // Mounted once, for the lifetime of the app (RootLayout itself never
 // remounts on navigation — only the routed screen inside <Slot/> swaps), so
@@ -60,6 +61,7 @@ export default function RootLayout() {
   const isTasks = pathname === '/tasks';
   const isStats = pathname === '/stats';
   const isMiniGames = pathname === '/mini-games';
+  const isShop = pathname === '/shop';
   // The 5 individual Room detail pages (/rooms/study-room, /rooms/gym,
   // ...) — a dynamic route, so this parses the slug straight out of the
   // pathname rather than a fixed string match. The Rooms hub itself
@@ -174,6 +176,13 @@ export default function RootLayout() {
           contentFit="cover"
           cachePolicy="memory-disk"
         />
+      ) : null}
+      {/* Shop's own background (shop_background.png) — same single-
+          static-image, full-bleed "cover" treatment as Stats'/Mini-Games'
+          above (no stretching/distortion, no gaps, stays centered and
+          crops instead of letterboxing at any window size). */}
+      {isShop ? (
+        <Image source={SHOP_BACKGROUND} style={styles.homeBackground} contentFit="cover" cachePolicy="memory-disk" />
       ) : null}
       {/* Individual Room detail pages — same full-bleed "cover" treatment,
           resolved per-room (with the same birthday-override priority list)

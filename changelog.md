@@ -20,6 +20,49 @@ Track notable changes to the project here. Newest entries at the top.
 
 ---
 
+## [2026-10-23]
+
+### Added
+- Code comments throughout `src/components/shop-screen.tsx` and `src/components/pet-avatar.tsx` explaining how the Shop background/banner render, the live balance overlay, the Kitty preview (including growth-stage sync and accessory try-on), its sticky right-side positioning, and the 3-column accessory grid — see FEATURE-042 in `features.md` for the full write-up.
+- BUG-018 and BUG-019 documented in `bugs.md` (BUG-019's fix actually landed the previous day, alongside the rest of the Shop redesign, but was undocumented until now).
+
+### Changed
+- The Kitty preview is now noticeably larger — about 75% bigger (`PREVIEW_KITTY_SIZE` 180 → 315px) — with its vertical position adjusted so her paws stay anchored on the pink rug instead of sinking as she grew, and the sidebar widened (`PREVIEW_PANEL_WIDTH` 280 → 340px) so the larger Kitty no longer spills past her column.
+- The Kitty preview moved further down the page (`previewPanel`'s `marginTop` 500 → 365, adjusted alongside the size change above) so she sits on the rug near the bottom of the Shop background rather than near the top.
+- The Pet Accessories grid now shows 3 columns instead of 2 (`CARD_WIDTH` 246 → 228) at typical desktop widths, by request — a desktop window narrower than roughly 1050px may still show 2, the same responsive reflow every grid in the app already does at smaller sizes.
+
+### Fixed
+- BUG-018: the Shop's Kitty preview always showed the pet's real saved growth stage, ignoring an active Pet Stage Preview set from Home. `src/components/shop-screen.tsx` now subscribes to the same shared `@/utils/dev-stage-preview` module Home reads from, instead of computing its own real-stage-only value.
+
+---
+
+## [2026-10-22]
+
+### Added
+- **Summary:** redesigned the Shop page — a custom pastel background and illustrated banner, a live Kitty preview with accessory try-on, and a redesigned "Your Balance" display. See FEATURE-042 in `features.md`, and BUG-019 below for a bug found and fixed along the way.
+- `assets/images/shop/shop_background.png`, displayed full-bleed behind the Shop page the same way Home/Tasks/Stats/Mini-Games already display their own backgrounds (`src/app/_layout.tsx`, `src/components/app-header.tsx`'s `isImmersiveRoute`).
+- A new reusable `src/components/pet-avatar.tsx` (`PetAvatar`) — a small, display-only portrait of the player's real pet, reusing Home's own body-art lookup (`getStageImage`) and equipped-accessory data (`PET_ACCESSORY_ART`, `getAccessoryPlacement`) rather than a separate copy of either. Originally used to replace the Shop header's cat emoji with the real Kitty; later became the basis for the larger Kitty preview below.
+- `assets/images/shop/Shop_Banner.png` now replaces the old plain pastel hero banner entirely (title, subtitle, and the "Your Balance" card are all painted into the image) — `src/components/shop-screen.tsx`'s `bannerWrap`/`bannerImage`, sized via `width: '100%'` plus the image's real aspect ratio so it's never cropped or distorted.
+- A live Paw Token number overlaid on the banner's "Your Balance" card, positioned/sized as fractions of the banner's own measured width so it tracks correctly at any screen size, reading from the same `pawTokens` state (`subscribeToPetProfile`) the rest of the app already uses.
+- A Kitty preview on the right side of the Shop — a large (`PetAvatar`), transparent-background rendering of the player's real Kitty, at her real growth stage with her real equipped accessories. Desktop: a sticky sidebar next to the item grid. Mobile/narrow: a collapsible "🐾 Kitty Preview" section so it never covers the product grid.
+- Accessory try-on: tapping an item's artwork in the grid temporarily previews it on the Kitty preview (`previewAccessoryId`, local-only — never equips or purchases anything); tapping the Kitty again clears the preview back to whatever's actually equipped.
+- The Pet Accessories grid now shows real artwork (via the existing `PET_ACCESSORY_ART`/`SpriteCrop`) for every bow and hat instead of emoji placeholders, with working Buy/Equip controls.
+
+### Changed
+- The Shop header's "Your Balance" card moved from the left (next to the old mascot circle) to the right side of the banner area, with a darker-pink heading pill behind the label and a larger Paw Token icon — later superseded by the illustrated banner above, which paints "Your Balance" directly into the art.
+- `grid`'s card width (`CARD_WIDTH`) was later narrowed to fit the Kitty preview sidebar alongside the item grid without the two overlapping.
+
+### Fixed
+- BUG-017: the Home screen's Play button (and, sharing the exact same guard, Feed/Rest/Clean Up) stopped responding on an already-hatched pet — confirmed on a Young-stage pet. Root cause: `isRealEgg` read the pet's stage before `tasks`/`petProfile` had actually finished loading, and those "not loaded yet" defaults were mathematically indistinguishable from a genuine Egg. `src/app/index.tsx`'s `isRealEgg` now also requires `isHydrated && petProfile !== null` (real, loaded data) and is additionally floored permanently false once `petProfile.hatchedAt` is ever set, mirroring the existing `paidStageIndex` floor for Young/Adult. A genuinely unhatched Egg is unaffected.
+- Related defensive hardening found while investigating (not the actual cause, but a real gap): `src/components/pet-placeholder.tsx`'s own pet picture is now wrapped in a plain `View` with `pointerEvents="none"` instead of passing that prop straight to `expo-image`'s `<Image>`, which silently ignores it; `petWrap` now has `pointerEvents="box-none"`; the Feed/Play/Rest row was moved 40px lower with an explicit `zIndex` so it reliably paints/hit-tests above anything that might ever overlap it.
+- BUG-019: the Shop banner's left edge (including Kitty's own art painted into it) got cropped during an attempt to enlarge it via a negative `marginLeft` bleed, because the Shop's `ScrollView` clips horizontal overflow. Reverted to a plain `width: '100%'` banner, which can't overflow its container at all.
+
+### Removed
+- The temporary `console.log` debug statements (and their accompanying debugging comments) added to `handlePlay()` while diagnosing BUG-017, now that the fix is confirmed.
+- The Kitty preview's purple/lavender card background, border, "✨ Try It On! ✨" title, and "Tap an accessory below to try it on!" hint text — now just the Kitty sprite itself, per direct player feedback.
+
+---
+
 ## [2026-10-21]
 
 ### Added
