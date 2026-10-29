@@ -627,3 +627,11 @@ Still open or unverified (not marked fixed): BUG-024 (investigating), BUG-026 (r
 ## Status summary (2026-10-29): Pet Pawadise
 
 Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox hopping), BUG-061 (nested button on gallery cards). Unresolved or unverified: BUG-062 (barcode-detector / 12000 ms timeout; cause unknown, stopped after restarting Expo) and the earlier open items in the 2026-10-28 summary (BUG-024, BUG-026, BUG-029). Pawadise behaviour on real phones (finger swipe, double-tap timing) has not been separately verified.
+
+### [BUG-063] Missing hover highlighting in portrait mode (cause: Chrome's mobile touch emulation); controls that had no hover styling were improved
+
+- **Status:** Resolved (2026-10-29). `npx tsc --noEmit` passes. The player confirmed that the hover highlighting missing in portrait mode was caused by Chrome's mobile (touch) emulation, NOT by a portrait layout defect in the app. With touch emulation the browser reports touch instead of a mouse, so no page can show hover.
+- **Investigation:** a scripted real-mouse hover test (computed-style change under the pointer) at 1280x800, 390x844, 360x800 and 844x390 showed every existing hover effect (Stats cards, room cards, Shop item cards and Buy buttons, Pet Album tabs and cards, supply and toy cards, farewell buttons) behaving identically at every size; no width, orientation or `Platform.OS` condition surrounds any of them.
+- **Separate finding (kept as a record):** some controls had no hover styling at ANY size, only pressed feedback: the header navigation pills and alerts bell, the pet chips and "Adopt an egg", the Shop category tabs and Feed/Play/Rest.
+- **Improvement:** those controls now lift on mouse hover using one shared look (`src/constants/hover.ts`, also used by the Pet Album tabs and Shop cards). Selected or active ones (current page, selected pet chip, selected Shop tab, disabled care buttons) don't lift; pressed feedback is unchanged; the effect only responds to a real mouse so touch taps can't leave a control stuck highlighted. Verified at the four sizes above.
+- **Not tested:** a real touchscreen.

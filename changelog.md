@@ -2,6 +2,37 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-10-29] — Milestone: Pet Pawadise farewell experience
+
+Summary of the approved farewell work (details in the entries below, features.md FEATURE-080 to FEATURE-082 and bugs.md BUG-063).
+
+### Added
+- **Farewell scene:** after a successful retirement a cat gets a full-screen farewell: the Pawadise entrance background with the separate transparent Kitty_farewell artwork centred in front, and three different random messages in a speech bubble beside her head.
+- **Controls:** a "Tap to Continue" button (hover and pressed feedback, one message per press, "1 of 3" counter) and a larger Skip button; reduced-motion support.
+- **Departure:** a gentle fade to the Kitty_leaves scene shown for about five seconds, then an automatic return to Pet Album -> Pet Pawadise. Portrait screens frame the departure picture farther left through their own setting.
+
+### Changed
+- Header tabs, the alerts bell, pet chips, "Adopt an egg", Shop category tabs and Feed/Play/Rest lift on mouse hover (selected ones don't).
+
+### Fixed / clarified
+- The missing hover seen in portrait mode was Chrome's mobile touch emulation, not an app layout defect (BUG-063).
+
+## [2026-10-29] — Hover feedback and portrait departure framing
+
+### Changed
+- Header tabs, the alerts bell, pet chips, "Adopt an egg", Shop category tabs and Feed/Play/Rest now lift on mouse hover at every screen size (selected ones don't), matching the existing hover look. Existing hover effects were unchanged (BUG-063).
+- On portrait screens the farewell's "Kitty leaves" picture is framed farther left (own setting `FAREWELL_DEPARTURE_FOCUS_X.portrait`, 33% -> 46%, about 109 px at 360 px wide); landscape and desktop are unchanged.
+
+## [2026-10-29] — Farewell polish
+
+### Changed
+- The farewell kitty is centred on her visible artwork, the speech bubble sits beside her head, "Tap to Continue" is a real button (hover and pressed feedback, one message per press), the Skip button is bigger, and the departure scene lasts about five seconds.
+
+## [2026-10-29] — Pet Pawadise farewell
+
+### Added
+- After a pet is sent to Pawadise, a full-screen farewell plays: the Pawadise entrance picture as the background with a separate transparent farewell kitty in front (lower left), three different random messages (tap to continue, Skip button), then a gentle fade to the "Kitty leaves" scene, then back to Pet Album -> Pet Pawadise. Only for cats; skipped if retirement fails; reduced motion supported. `Kitty_says_bye.png` is no longer used. The farewell kitty is the same for every cat.
+
 ## [2026-10-29] — Milestone: Pet Pawadise
 
 Summary of Pet Pawadise as built and player-tested (details in the entries below, features.md FEATURE-077 to FEATURE-079 and bugs.md BUG-058 to BUG-062). It supersedes the earlier note that Pet Pawadise was a future feature.

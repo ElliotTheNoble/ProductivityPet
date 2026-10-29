@@ -11,8 +11,10 @@ import { Spacing } from '@/constants/theme';
 import { usePetFamily } from '@/hooks/use-pet-family';
 import { buildAlbumEntries, type PetAlbumEntry } from '@/utils/pet-album';
 import { MAX_LIVING_PETS, canAdoptMore, retirePet, returnPetHome, type PawadiseResult } from '@/utils/pet-family';
+import { PawadiseFarewell } from '@/components/pawadise-farewell';
 import { PawadisePetPage } from '@/components/pawadise-pet-page';
 import { formatDate, speciesLabel } from '@/components/pawadise-postcard-views';
+import { getFarewellScenes } from '@/utils/pawadise-farewell';
 import { PAWADISE_SCENE, PAWADISE_SCENE_ASPECT_RATIO } from '@/utils/pawadise-art';
 
 // The "Pet Pawadise" section of the Pet Album: a peaceful resort where HEALTHY pets can retire. A retired
@@ -59,12 +61,16 @@ export function PawadiseSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The farewell scene (species of the pet that just retired) while it is showing.
+  const [farewell, setFarewell] = useState<string | null>(null);
   if (!family) return null;
 
   const entries = buildAlbumEntries(family);
   const retired = entries.filter((e) => e.isRetired);
   const active = entries.filter((e) => e.isActive);
   const slotFree = canAdoptMore(family);
+  // The farewell sits above everything; when it ends we are right back here, on the Pet Pawadise tab.
+  const farewellNode = farewell ? <PawadiseFarewell species={farewell} onDone={() => setFarewell(null)} /> : null;
   const viewingEntry = viewing ? (entries.find((e) => e.id === viewing) ?? null) : null;
   // One pet's own Pawadise page (with only its postcards), inside the Pet Pawadise tab.
   if (viewingEntry) return <PawadisePetPage entry={viewingEntry} onBack={() => setViewing(null)} />;
@@ -82,6 +88,8 @@ export function PawadiseSection() {
           : `${pending.entry.label} is home again!`
       );
       setPending(null);
+      // Only after a SUCCESSFUL retirement, and only for species that have a farewell scene (cats).
+      if (pending.kind === 'retire' && getFarewellScenes(pending.entry.species)) setFarewell(pending.entry.species);
       return;
     }
     setError(pawadiseError(result));
@@ -89,6 +97,7 @@ export function PawadiseSection() {
 
   return (
     <View style={styles.wrap}>
+      {farewellNode}
       {/* Resort scene (the player's own artwork, shown whole at its real proportions). */}
       <View style={styles.scene}>
         <Image source={PAWADISE_SCENE} contentFit="cover" style={styles.sceneImage} accessibilityLabel="Pet Pawadise resort" />

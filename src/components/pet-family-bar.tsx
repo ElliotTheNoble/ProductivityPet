@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { hoverLift } from '@/constants/hover';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ConfirmModal } from '@/components/confirm-modal';
@@ -171,7 +172,7 @@ export function PetFamilyBar() {
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
               accessibilityLabel={`${getPetLabel(pet, family.pets)}, ${pet.lifecycle.state}`}
-              style={({ pressed }) => pressed && styles.pressed}>
+              style={(state) => [state.pressed && styles.pressed, hoverLift(state, !isSelected)]}>
               <ThemedView
                 type="backgroundElementOverlay"
                 style={[
@@ -206,7 +207,7 @@ export function PetFamilyBar() {
             }}
             accessibilityRole="button"
             accessibilityLabel="Adopt a new egg"
-            style={({ pressed }) => pressed && styles.pressed}>
+            style={(state) => [state.pressed && styles.pressed, hoverLift(state)]}>
             <ThemedView type="mint" style={[styles.adoptChip, styles.pointer]}>
               <ThemedText type="smallBold">＋ Adopt an egg</ThemedText>
             </ThemedView>

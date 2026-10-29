@@ -14,6 +14,7 @@ import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import { getHealthAccessoryTransform, getHealthArt } from '@/utils/pet-health-art';
 import { MEMORIAL_TOMBSTONE_SOURCE } from '@/utils/resurrection-art';
 import { getAccessoryPlacement, getPlacementStageForArtwork } from '@/utils/pet-accessory-placement';
+import { hoverLift } from '@/constants/hover';
 import { ToyFloorItem } from '@/components/toy-floor-item';
 import { DIRTY_CLEANLINESS_THRESHOLD } from '@/utils/pet-needs';
 import type { PoopPile, PoopSize } from '@/utils/pet-profile';
@@ -1252,7 +1253,7 @@ export function PetPlaceholder({
             <Pressable
               onPress={onFeed}
               disabled={isFeeding}
-              style={({ pressed }) => [pressed && styles.pressed, isFeeding && styles.actionButtonDisabled]}>
+              style={(state) => [state.pressed && styles.pressed, isFeeding && styles.actionButtonDisabled, hoverLift(state, !isFeeding)]}>
               <ThemedView type="accent" style={styles.actionButton}>
                 <ThemedText type="smallBold" style={styles.feedButtonText}>
                   {isFeeding ? 'Feeding…' : 'Feed'}
@@ -1264,7 +1265,7 @@ export function PetPlaceholder({
             <Pressable
               onPress={onPlay}
               disabled={isPlaying}
-              style={({ pressed }) => [pressed && styles.pressed, isPlaying && styles.actionButtonDisabled]}>
+              style={(state) => [state.pressed && styles.pressed, isPlaying && styles.actionButtonDisabled, hoverLift(state, !isPlaying)]}>
               <ThemedView type="mint" style={styles.actionButton}>
                 <ThemedText type="smallBold">{isPlaying ? 'Playing…' : 'Play'}</ThemedText>
               </ThemedView>
@@ -1274,7 +1275,7 @@ export function PetPlaceholder({
             <Pressable
               onPress={onRest}
               disabled={isResting}
-              style={({ pressed }) => [pressed && styles.pressed, isResting && styles.actionButtonDisabled]}>
+              style={(state) => [state.pressed && styles.pressed, isResting && styles.actionButtonDisabled, hoverLift(state, !isResting)]}>
               <ThemedView type="backgroundSelected" style={styles.actionButton}>
                 <ThemedText type="smallBold">{isResting ? 'Resting…' : 'Rest'}</ThemedText>
               </ThemedView>

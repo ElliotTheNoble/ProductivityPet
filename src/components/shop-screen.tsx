@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CareSuppliesSection } from '@/components/care-supplies-section';
 import { ToyShopSection } from '@/components/toy-shop-section';
+import { hoverLift } from '@/constants/hover';
 import { PawTokenCoin } from '@/components/paw-token-coin';
 import { RESURRECTION_COST } from '@/utils/pet-family-config';
 import { PetAvatar } from '@/components/pet-avatar';
@@ -1030,7 +1031,7 @@ export function ShopScreen() {
                 <Pressable
                   key={name}
                   onPress={() => setSelectedCategory(name)}
-                  style={({ pressed }) => [styles.categoryTabWrap, pressed && styles.pressed]}>
+                  style={(state) => [styles.categoryTabWrap, state.pressed && styles.pressed, hoverLift(state, !isSelected)]}>
                   <View
                     style={[
                       styles.categoryTab,

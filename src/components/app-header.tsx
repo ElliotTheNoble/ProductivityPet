@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { hoverLift } from '@/constants/hover';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -140,7 +141,7 @@ export function AppHeader() {
               <Pressable
                 key={item.label}
                 onPress={() => router.replace(item.href)}
-                style={({ pressed }) => pressed && styles.pressed}>
+                style={(state) => [state.pressed && styles.pressed, hoverLift(state, !isActive)]}>
                 <View
                   style={[
                     styles.navPill,
@@ -166,7 +167,7 @@ export function AppHeader() {
               accessibilityRole="button"
               accessibilityLabel="Pet Care & Alerts"
               accessibilityState={{ selected: pathname === '/pet-alerts' }}
-              style={({ pressed }) => pressed && styles.pressed}>
+              style={(state) => [state.pressed && styles.pressed, hoverLift(state, pathname !== '/pet-alerts')]}>
               <View
                 style={[
                   styles.navPill,
