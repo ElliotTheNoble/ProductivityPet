@@ -1,5 +1,6 @@
 import {
   getPetLabel,
+  getPetSpecies,
   isLiving,
   type FamilyState,
   type LifeState,
@@ -29,6 +30,11 @@ export type PetAlbumEntry = {
   isActive: boolean;
   lifeState: LifeState;
   isSelected: boolean;
+  // Retired in Pet Pawadise (alive and kept safe, but frozen and off the active slots).
+  isRetired: boolean;
+  retiredAt: string | null;
+  // 'cat' for every pet so far (see PetRecord.species).
+  species: string;
   // Highest stage / level it has reached.
   stage: PetStage;
   highestLevel: number;
@@ -55,6 +61,9 @@ export function buildAlbumEntries(family: FamilyState): PetAlbumEntry[] {
       isActive: isLiving(pet),
       lifeState: pet.lifecycle.state,
       isSelected: pet.id === family.selectedPetId,
+      isRetired: !!pet.retired,
+      retiredAt: pet.retired?.since ?? null,
+      species: getPetSpecies(pet),
       stage: PET_STAGES[Math.min(peakIndex, PET_STAGES.length - 1)],
       highestLevel: pet.peak.level,
       createdAt: pet.createdAt || null,
@@ -73,10 +82,13 @@ export function buildAlbumEntries(family: FamilyState): PetAlbumEntry[] {
   const living = entries
     .filter((e) => e.isActive)
     .sort((a, b) => (a.createdAt ?? '') < (b.createdAt ?? '') ? -1 : 1);
+  const retired = entries
+    .filter((e) => e.isRetired)
+    .sort((a, b) => ((a.retiredAt ?? '') < (b.retiredAt ?? '') ? 1 : -1));
   const passed = entries
-    .filter((e) => !e.isActive)
+    .filter((e) => !e.isActive && !e.isRetired)
     .sort((a, b) => ((a.diedAt ?? '') < (b.diedAt ?? '') ? 1 : -1));
-  return [...living, ...passed];
+  return [...living, ...retired, ...passed];
 }
 
 export const EVENT_LABELS: Record<PetEvent['type'], string> = {
@@ -87,4 +99,6 @@ export const EVENT_LABELS: Record<PetEvent['type'], string> = {
   recovered: 'Recovered',
   died: 'Passed away',
   resurrected: 'Came back',
+  retired: 'Retired to Pet Pawadise',
+  returned: 'Came home from Pet Pawadise',
 };

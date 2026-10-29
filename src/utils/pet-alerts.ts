@@ -266,7 +266,7 @@ async function handleLifecycleNotice(notice: { petId: string; type: string; at: 
   const pet = family?.pets.find((p) => p.id === notice.petId);
   if (!family || !pet) return;
 
-  if (notice.type === 'recovered' || notice.type === 'died' || notice.type === 'resurrected') {
+  if (notice.type === 'recovered' || notice.type === 'died' || notice.type === 'resurrected' || notice.type === 'retired') {
     void dismissPresentedFor(pet.id);
     return;
   }

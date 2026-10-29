@@ -17,6 +17,7 @@ import { getTokenHistory } from '@/utils/token-history';
 import { advanceAllPets } from '@/utils/pet-family';
 import { getRenderedStage } from '@/utils/pet-growth';
 import { startPetAlerts } from '@/utils/pet-alerts';
+import { startPawadiseMail } from '@/utils/pawadise-mail';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import { ROOMS, isRoomSlug } from '@/utils/rooms';
@@ -152,6 +153,10 @@ export default function RootLayout() {
   // Health alerts: phone notifications scheduled ahead from the sickness
   // clocks, plus the live critical signal (see @/utils/pet-alerts.ts).
   useEffect(() => startPetAlerts(), []);
+
+  // Surprise postcards from retired pets (see @/utils/pawadise-mail.ts): checks what is due at launch, on
+  // returning to the app and once a minute; the schedule itself is saved, so it doesn't need the app open.
+  useEffect(() => startPawadiseMail(), []);
 
   // Starts the Paw Token earnings history (@/utils/token-history.ts) at app
   // launch, so its recorded start date is when tracking really began — not

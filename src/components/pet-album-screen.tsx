@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { DetailEmptyState, DetailPageShell, DetailPanel, DetailTitleCard } from '@/components/detail-page-parts';
+import { PetPostcards } from '@/components/pawadise-postcard-views';
+import { PawadiseSection } from '@/components/pawadise-section';
 import { PetAvatar } from '@/components/pet-avatar';
 import { ResurrectControl } from '@/components/resurrect-control';
 import { ThemedText } from '@/components/themed-text';
@@ -50,6 +52,7 @@ function accessoryIdsFor(entry: PetAlbumEntry): string[] {
 }
 
 function statusText(entry: PetAlbumEntry): string {
+  if (entry.isRetired) return '🌴 Retired in Pawadise';
   if (entry.lifeState === 'deceased') return '🌈 Passed away';
   if (entry.lifeState === 'critical') return '🚨 Critical';
   if (entry.lifeState === 'sick') return '🤒 Sick';
@@ -58,7 +61,7 @@ function statusText(entry: PetAlbumEntry): string {
 
 function StatusBadge({ entry }: { entry: PetAlbumEntry }) {
   return (
-    <ThemedView type={entry.isActive ? 'mint' : 'backgroundSelected'} style={styles.badge}>
+    <ThemedView type={entry.isActive || entry.isRetired ? 'mint' : 'backgroundSelected'} style={styles.badge}>
       <ThemedText type="smallBold" style={styles.badgeText}>
         {statusText(entry)}
       </ThemedText>
@@ -80,7 +83,7 @@ function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
       style={({ pressed }) => [
         styles.card,
         styles.cardInteractive,
-        !entry.isActive && styles.cardDeceased,
+        !entry.isActive && !entry.isRetired && styles.cardDeceased,
         hovered && [styles.cardHovered, { borderColor: theme.accent }],
         pressed && styles.cardPressed,
       ]}>
@@ -106,9 +109,52 @@ function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
   );
 }
 
+type AlbumTab = 'memories' | 'pawadise';
+const ALBUM_TABS: { key: AlbumTab; label: string; icon: string }[] = [
+  { key: 'memories', label: 'Pet Memories', icon: '📖' },
+  { key: 'pawadise', label: 'Pet Pawadise', icon: '🌴' },
+];
+
+// The two tabs INSIDE the Pet Album (not part of the main navigation). Switching is just local state, so
+// it is immediate; each tab's content is rendered only while it is selected, so nothing is duplicated.
+function AlbumTabs({ value, onChange }: { value: AlbumTab; onChange: (tab: AlbumTab) => void }) {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState<AlbumTab | null>(null);
+  return (
+    <View style={styles.tabRow} accessibilityRole="tablist">
+      {ALBUM_TABS.map((tab) => {
+        const selected = tab.key === value;
+        return (
+          <Pressable
+            key={tab.key}
+            onPress={() => onChange(tab.key)}
+            onHoverIn={() => setHovered(tab.key)}
+            onHoverOut={() => setHovered(null)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            style={({ pressed }) => [styles.tabWrap, pressed && styles.cardPressed]}>
+            <View
+              style={[
+                styles.tab,
+                { backgroundColor: selected ? theme.purple : theme.backgroundSelected },
+                !selected && hovered === tab.key && styles.tabHovered,
+              ]}>
+              <ThemedText style={styles.tabIcon}>{tab.icon}</ThemedText>
+              <ThemedText type="smallBold" style={selected ? styles.tabLabelActive : undefined}>
+                {tab.label}
+              </ThemedText>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function PetAlbumScreen() {
   const family = usePetFamily();
   const entries = family ? buildAlbumEntries(family) : null;
+  const [tab, setTab] = useState<AlbumTab>('memories');
   return (
     <DetailPageShell>
       <DetailTitleCard
@@ -116,6 +162,11 @@ export function PetAlbumScreen() {
         title="Pet Album"
         backgroundColor={ALBUM_BACKGROUND}
       />
+      <AlbumTabs value={tab} onChange={setTab} />
+
+      {tab === 'pawadise' ? (
+        <PawadiseSection />
+      ) : (
       <DetailPanel title="📖 Every kitty you've raised">
         {entries === null ? null : entries.length === 0 ? (
           <DetailEmptyState
@@ -131,6 +182,7 @@ export function PetAlbumScreen() {
           </View>
         )}
       </DetailPanel>
+      )}
     </DetailPageShell>
   );
 }
@@ -199,7 +251,9 @@ export function PetAlbumDetailScreen({ petId }: { petId: string }) {
 
       <View style={[styles.memory, { backgroundColor: MEMORY_BACKGROUND }]}>
         <ThemedText style={styles.memoryText}>
-          {entry.lifeState === 'deceased'
+          {entry.isRetired
+            ? 'This kitty is relaxing in Pet Pawadise. Everything about them is safe, and you can bring them home for free from the Pet Pawadise tab of the Pet Album. 🌴'
+            : entry.lifeState === 'deceased'
             ? `${MEMORIAL_MESSAGE} 🌈`
             : entry.lifeState === 'critical'
               ? 'This kitty is in critical condition and needs care right away. It is free — feed, bathe or play until all three needs are at 50 or more. 💗'
@@ -216,6 +270,11 @@ export function PetAlbumDetailScreen({ petId }: { petId: string }) {
           </Pressable>
         ) : null}
       </View>
+
+      {/* The pet's Pawadise scrapbook: only ITS postcards, kept forever (even when it is home again). */}
+      <DetailPanel title="💌 Pawadise scrapbook">
+        <PetPostcards petId={entry.id} petLabel={entry.label} />
+      </DetailPanel>
 
       <DetailPanel title="🕰️ History">
         {entry.events.length === 0 ? (
@@ -240,6 +299,21 @@ export function PetAlbumDetailScreen({ petId }: { petId: string }) {
 const styles = StyleSheet.create({
   titleEmoji: { fontSize: 48, lineHeight: 56 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, justifyContent: 'center' },
+  tabRow: { flexDirection: 'row', gap: Spacing.two, width: '100%' },
+  tabWrap: { flex: 1, minWidth: 0 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    paddingVertical: Spacing.two + 2,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Spacing.five,
+    cursor: 'pointer',
+  },
+  tabHovered: { transform: [{ scale: 1.03 }, { translateY: -2 }], opacity: 0.92 },
+  tabIcon: { fontSize: 16 },
+  tabLabelActive: { color: '#FFFFFF' },
   card: {
     width: 220,
     alignItems: 'center',

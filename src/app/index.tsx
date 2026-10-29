@@ -11,6 +11,7 @@ import { HATCHLING_INTRO_DURATION_MS } from '@/components/pet-placeholder';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
 import { SlideOutPanel } from '@/components/slide-out-panel';
+import { PawadiseMailbox } from '@/components/pawadise-mailbox';
 import { ToyPlayCard } from '@/components/toy-play-card';
 import { useToySession } from '@/utils/pet-toy-session';
 import { TaskCard } from '@/components/task-card';
@@ -83,6 +84,17 @@ const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 // as a real hatch genuinely starting from Egg art. Not a real pet-care
 // timing value; nothing else in the app reads this.
 const DEV_HATCH_REPLAY_EGG_HOLD_MS = 1200;
+
+// How wide the kitty actually LOOKS compared with the box the pet picture sits in (Young is drawn scaled up,
+// the others fill less of their box). Only used to size the Pawadise mailbox next to her; it does not
+// change the kitty.
+const KITTY_VISIBLE_PER_BOX: Partial<Record<string, number>> = {
+  Egg: 0.8,
+  Hatchling: 0.72,
+  Baby: 0.75,
+  Young: 1.15,
+  Adult: 0.95,
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -886,6 +898,13 @@ export default function HomeScreen() {
           <TodayMood mood={mood} message={moodMessage} onSelectMood={handleSelectMood} />
           {!isPortrait ? <RoomsCard /> : null}
         </SlideOutPanel>
+
+        {/* A postcard from Pawadise has arrived: the mailbox drifts around until tapped. */}
+        <PawadiseMailbox
+          kittyVisiblePx={
+            Math.min(260, Math.max(150, 0.46 * (width - 2 * Spacing.five))) * petFitScale * (KITTY_VISIBLE_PER_BOX[effectiveDisplayedStage] ?? 0.9)
+          }
+        />
       </SafeAreaView>
 
       {/* Full-screen, non-interactive celebration layer — sits above every

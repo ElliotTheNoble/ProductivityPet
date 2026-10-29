@@ -1,3 +1,4 @@
+import { devDeliverPawadiseMailNow } from '@/utils/pawadise-mail';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
@@ -191,6 +192,7 @@ function DeveloperTools({
     (selected.lifecycle.state as DevHealthState) ?? 'healthy'
   );
   const [healthResult, setHealthResult] = useState<string | null>(null);
+  const [mailResult, setMailResult] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,6 +461,17 @@ function DeveloperTools({
             Paw Token testing is switched off (DEV_ENABLE_TEST_PAW_TOKEN_GRANT).
           </ThemedText>
         )}
+      </Collapsible>
+
+      <Collapsible title="Pet Pawadise Testing" icon="mail-outline">
+        <ThemedText type="small" style={styles.mutedText}>
+          Makes a postcard arrive from every pet that is retired in Pawadise right now (they then wait on Home as a
+          mailbox). Real deliveries come 2-5 days apart; this skips the wait.
+        </ThemedText>
+        <View style={styles.buttonRow}>
+          <SmallButton label="Dev: Deliver Pawadise postcards now" onPress={() => void devDeliverPawadiseMailNow().then(setMailResult)} />
+        </View>
+        {mailResult ? <ThemedText type="small">{mailResult}</ThemedText> : null}
       </Collapsible>
 
       <Collapsible title="Hatching and Animation Testing" icon="egg-outline">

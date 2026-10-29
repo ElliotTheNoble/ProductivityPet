@@ -594,3 +594,36 @@ Track known bugs here. Copy the template for each new bug.
 Fixed this milestone (see each entry for the solution): BUG-049 and BUG-050 (Shop layout and the unwell-pet Shop), BUG-051 (memorial message), BUG-052 (health warning text), BUG-053 (Gentle Wipe-Down only when Cleanliness is below 50), BUG-054 (toy stayed visible after its session), BUG-055 (clipped toy art), BUG-056 (Buy/Play stacking in portrait, confirmed by the player), BUG-057 (clipped Paw Token prices).
 
 Still open or unverified (not marked fixed): BUG-024 (investigating), BUG-026 (release checklist: turn developer flags off), BUG-029 (pet family / alerts / flashlight testing on a real device), and the "not yet manually verified" notes on older entries.
+
+### [BUG-058] Swiping the postcard with a mouse did nothing (the browser dragged the picture instead)
+
+- **Status:** Fixed in code (2026-10-29); verified with a scripted mouse drag.
+- **Cause:** the browser's own image drag cancelled the swipe.
+- **Fix:** the picture ignores pointer events; the swipe area underneath receives them.
+
+### [BUG-059] Pawadise mailbox appeared too small on Home
+
+- **Status:** Fixed in code (2026-10-29); `npx tsc --noEmit` passes. Looked at in a web run at 360, 844x390 and 1280 px (Young kitty; Adult checked at 1280 px). The player tested and approved the result.
+- **Cause:** the mailbox used a fixed 76-92 px width, far smaller than the kitty.
+- **Fix:** `pawadise-mailbox.tsx` sizes it from the kitty's visible size (passed from Home, using a per-stage estimate) and the mailbox picture's own ~93% visible area, about 5% bigger than the kitty, within limits. The Hatchling and Baby ratios are estimates and were not separately checked.
+
+### [BUG-060] Pawadise mailbox slid around instead of hopping
+
+- **Status:** Changed in code (2026-10-29) (a requested behaviour change, not a crash); `npx tsc --noEmit` passes. Measured in a web run: three hops in six seconds, 58-86 px of vertical travel, still after one tap. The player tested and approved it.
+- **Fix:** the slide was replaced with a hop cycle (crouch, arc jump with sideways movement only in the air, landing bounce, rest). During testing the top of a jump could rise above the Home area; resting spots now start one jump-height down so the whole arc stays inside it.
+
+### [BUG-061] Nested button warning on the Pawadise gallery cards
+
+- **Status:** Fixed in code (2026-10-29); found by the developer while building the pet pages, and the warning was gone in a later web run.
+- **Cause:** the whole retired-pet card was a button that contained the Bring Home button (a button inside a button, which the browser reports as an error).
+- **Fix:** only the picture and facts open the pet's page; Bring Home is a separate sibling button.
+
+### [BUG-062] Expo web: `barcode-detector` Metro error and "12000ms timeout exceeded" (CAUSE NOT ESTABLISHED)
+
+- **Status:** Open / unresolved cause. The player's Expo web stopped loading with a Metro error for `node_modules/barcode-detector/dist/es/index.js` ("none of the expected files exist") and a browser "Uncaught Error: 12000ms timeout exceeded". After restarting Expo it stopped occurring. This is NOT confirmed as permanently fixed.
+- **What was checked (2026-10-29):** `barcode-detector` 3.2.3 is a dependency of `expo-camera` 57.0.6 only, the files existed on disk, and a fresh `npx expo start -c` plus `npx expo export --platform web` bundled without error. No code or dependency was changed.
+- **Hypothesis (unproven):** a stale Metro cache or file index, or a second running Expo server. If it returns, stop all Expo servers, run `npx expo start -c`, confirm the file exists, and record the exact terminal output.
+
+## Status summary (2026-10-29): Pet Pawadise
+
+Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox hopping), BUG-061 (nested button on gallery cards). Unresolved or unverified: BUG-062 (barcode-detector / 12000 ms timeout; cause unknown, stopped after restarting Expo) and the earlier open items in the 2026-10-28 summary (BUG-024, BUG-026, BUG-029). Pawadise behaviour on real phones (finger swipe, double-tap timing) has not been separately verified.

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { getToySession, startToySession } from '@/utils/pet-toy-session';
+import { endToySession, getToySession, startToySession } from '@/utils/pet-toy-session';
 import { getToy } from '@/utils/toys/toy-catalog';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import {
@@ -90,8 +90,24 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+// Retired in Pet Pawadise (frozen, off the active slots; see PetRecord.retired).
+export function isRetired(pet: PetRecord): boolean {
+  return !!pet.retired;
+}
+
+// "Living" = an ACTIVE pet at home: not passed away and not retired in Pawadise. This is what counts
+// toward the three-pet limit, grows from tasks, decays and can get sick. A retired pet is alive but
+// deliberately NOT included, so every rule written for living pets leaves it frozen.
 export function isLiving(pet: PetRecord): boolean {
-  return pet.lifecycle.state !== 'deceased';
+  return pet.lifecycle.state !== 'deceased' && !pet.retired;
+}
+
+export function getRetiredPets(s: FamilyState): PetRecord[] {
+  return s.pets.filter((p) => isRetired(p) && p.lifecycle.state !== 'deceased');
+}
+
+export function getPetSpecies(pet: PetRecord): string {
+  return pet.species ?? 'cat';
 }
 
 export function getLivingPets(s: FamilyState): PetRecord[] {
@@ -264,6 +280,11 @@ function normalizePet(raw: unknown): PetRecord | null {
       level: isFiniteNumber(peakRaw.level) ? peakRaw.level : getPeakFor(units, profile.paidStageIndex).level,
     },
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : profile.adoptionDate,
+    species: typeof r.species === 'string' && r.species ? r.species : undefined,
+    retired:
+      r.retired && typeof (r.retired as { since?: unknown }).since === 'string' && normalizeLifecycle(r.lifecycle).state !== 'deceased'
+        ? { since: (r.retired as { since: string }).since }
+        : undefined,
     revival:
       revivalRaw && typeof revivalRaw.startedAt === 'string'
         ? { startedAt: revivalRaw.startedAt, done: revivalRaw.done === true }
@@ -287,7 +308,7 @@ function normalizeFamily(raw: unknown): FamilyState | null {
   const selected =
     typeof r.selectedPetId === 'string' && pets.some((p) => p.id === r.selectedPetId)
       ? r.selectedPetId
-      : (pets.find(isLiving) ?? pets[0]).id;
+      : (pets.find(isLiving) ?? pets.find((p) => !p.retired) ?? pets[0]).id;
   return {
     version: 1,
     selectedPetId: selected,
@@ -544,7 +565,10 @@ export function savePetProfileForSelectedPet(profile: PetProfile): void {
 // ----- selection, equipment -----
 
 export function selectPet(petId: string): void {
-  if (!state || state.selectedPetId === petId || !state.pets.some((p) => p.id === petId)) return;
+  if (!state || state.selectedPetId === petId) return;
+  // A pet retired in Pawadise can't be selected: it is frozen until it is brought home.
+  const target = state.pets.find((p) => p.id === petId);
+  if (!target || target.retired) return;
   setState({ ...state, selectedPetId: petId });
 }
 
@@ -772,6 +796,103 @@ export function completeRevivalAnimation(petId: string): void {
     ...state,
     pets: state.pets.map((p) => (p.id === petId ? { ...p, revival: { ...pet.revival!, done: true } } : p)),
   });
+}
+
+// ----- Pet Pawadise: retiring a pet and bringing it home -----
+
+export type PawadiseResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'busy' | 'not-found' | 'not-healthy' | 'egg' | 'last-pet' | 'already-retired' | 'not-retired' | 'no-slot' | 'storage';
+    };
+
+const pawadiseBusy = new Set<string>();
+
+// Sends a HEALTHY, hatched pet to Pet Pawadise. It only sets a flag and adds a history event: the pet's
+// identity, species, name, stage, accessories, growth, needs and history stay on the same record, so
+// nothing can be duplicated or lost, and everything is ONE atomic save (rolled back if storage fails).
+// While retired the pet is frozen (see PetRecord.retired) and its active slot is freed. The player must
+// keep at least one other active pet at home so Home always has a pet to show.
+export async function retirePet(petId: string): Promise<PawadiseResult> {
+  if (pawadiseBusy.has(petId)) return { ok: false, reason: 'busy' };
+  pawadiseBusy.add(petId);
+  try {
+    const before = await ensureFamilyLoaded();
+    const current = state ?? before;
+    const found = current.pets.find((p) => p.id === petId);
+    if (!found) return { ok: false, reason: 'not-found' };
+    if (found.retired) return { ok: false, reason: 'already-retired' };
+    if (found.revival && !found.revival.done) return { ok: false, reason: 'busy' };
+    const now = new Date();
+    // Settle the pet at this exact moment first, so "healthy" really is healthy right now.
+    const pet = advancePet(found, now);
+    if (pet.lifecycle.state !== 'healthy') return { ok: false, reason: 'not-healthy' };
+    if (!isPetHatched(pet)) return { ok: false, reason: 'egg' };
+    const others = current.pets.filter((p) => p.id !== petId && isLiving(p));
+    if (others.length === 0) return { ok: false, reason: 'last-pet' };
+
+    const stamp = now.toISOString();
+    const retired = addEvents({ ...pet, retired: { since: stamp } }, [makeEvent('retired', stamp)]);
+    const previous = current;
+    state = {
+      ...current,
+      selectedPetId: current.selectedPetId === petId ? others[0].id : current.selectedPetId,
+      pets: current.pets.map((p) => (p.id === petId ? retired : p)),
+    };
+    const saved = await persistNow();
+    if (!saved) {
+      state = previous;
+      notify();
+      return { ok: false, reason: 'storage' };
+    }
+    endToySession(petId);
+    emitNotices([found], [retired], true);
+    notify();
+    return { ok: true };
+  } finally {
+    pawadiseBusy.delete(petId);
+  }
+}
+
+// Brings a retired pet home for free when an active slot is free. Timers resume from the preserved
+// state: the time spent in Pawadise is never counted (needs and health clocks restart at this moment,
+// and the poop schedule is re-rolled), and the pet is selected so the player sees it.
+export async function returnPetHome(petId: string): Promise<PawadiseResult> {
+  if (pawadiseBusy.has(petId)) return { ok: false, reason: 'busy' };
+  pawadiseBusy.add(petId);
+  try {
+    const before = await ensureFamilyLoaded();
+    const current = state ?? before;
+    const pet = current.pets.find((p) => p.id === petId);
+    if (!pet) return { ok: false, reason: 'not-found' };
+    if (!pet.retired) return { ok: false, reason: 'not-retired' };
+    if (!canAdoptMore(current)) return { ok: false, reason: 'no-slot' };
+
+    const stamp = nowIso();
+    const { retired: _retired, ...rest } = pet;
+    const home: PetRecord = addEvents(
+      {
+        ...rest,
+        profile: { ...pet.profile, lastUpdatedAt: stamp, nextPoopEventAt: '' },
+        lifecycle: { ...pet.lifecycle, lastEvaluatedAt: stamp },
+      },
+      [makeEvent('returned', stamp)]
+    );
+    const previous = current;
+    state = { ...current, selectedPetId: petId, pets: current.pets.map((p) => (p.id === petId ? home : p)) };
+    const saved = await persistNow();
+    if (!saved) {
+      state = previous;
+      notify();
+      return { ok: false, reason: 'storage' };
+    }
+    emitNotices([pet], [home], true);
+    notify();
+    return { ok: true };
+  } finally {
+    pawadiseBusy.delete(petId);
+  }
 }
 
 // ----- alert bookkeeping (see pet-alerts.ts) -----

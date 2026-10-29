@@ -2,6 +2,65 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-10-29] — Milestone: Pet Pawadise
+
+Summary of Pet Pawadise as built and player-tested (details in the entries below, features.md FEATURE-077 to FEATURE-079 and bugs.md BUG-058 to BUG-062). It supersedes the earlier note that Pet Pawadise was a future feature.
+
+### Added
+- **Retirement and homecoming:** Healthy, hatched pets can retire (with confirmation), freeing an active slot; they keep their identity, species, name, stage, accessories, needs, growth and history, are frozen while away (no decay, growth, sickness or death) and come home for free when a slot is free.
+- **Pet Album tab:** Pet Pawadise is its own tab beside Pet Memories, with the resort picture, the gallery of retired pets (Bring Home), "Send a pet to Pawadise" and empty states.
+- **Pet scrapbooks:** each retired pet has its own Pawadise page with only its postcards; the scrapbook also appears on its Album profile and is kept forever, even after it comes home.
+- **Postcard deliveries:** retired pets send surprise postcards every 2-5 days (saved schedule, checked at launch and resume, no backlog, ten cat designs without repeats until all are used); unopened mail is saved across restarts; opened postcards are stored permanently with no duplicates.
+- **Hopping mailbox:** a mailbox about the size of the kitty hops around Home; tap to stop, double-tap to open.
+- **Envelope and postcards:** a double-tap envelope reveals a two-sided postcard that flips by swipe or drag (or a Flip button); accessible Open/Later/Flip controls and reduced-motion handling; a developer button to deliver postcards on demand.
+
+### Changed
+- The mailbox was enlarged to match the kitty and changed from sliding to hopping.
+
+### Fixed
+- Mouse-swiping the postcard (BUG-058), the too-small mailbox (BUG-059), the sliding mailbox (BUG-060) and a nested button on the gallery cards (BUG-061).
+
+### Known / open
+- The Expo web `barcode-detector` error and 12000 ms timeout stopped after restarting Expo, but the cause was not established (BUG-062).
+
+### Responsive layout
+- The Pawadise tab, pet pages, mailbox and postcard viewer were checked at 360 px, landscape and desktop widths in a web run (the viewer places the card beside its buttons in a short landscape window).
+
+## [2026-10-29] — Bigger, hopping Pawadise mailbox
+
+### Changed
+- The mailbox is about as big as the Home kitty (slightly bigger) and hops around (crouch, jump in an arc, landing bounce, short rest) instead of sliding. One tap stops it still; everything else about postcards is unchanged.
+
+## [2026-10-29] — Surprise postcards from Pet Pawadise
+
+### Added
+- Retired pets send surprise postcards every 2-5 days (saved schedule, checked at launch/resume, no backlog after long absences, designs not repeated until all ten are used, per-species design lists).
+- A mailbox (your `maill_box.png`) drifts around Home when mail arrives: tap to stop it, double-tap to open; then your envelope; double-tap (or Open) to reveal the postcard. Closing keeps the mail waiting; several postcards queue behind one mailbox.
+- A two-sided postcard viewer (kitty_card_1-10): front first, swipe/drag or press Flip to see the back. Used from the mail and from each pet's Pawadise page and Pet Album scrapbook.
+- Accessible Open / Later / Flip controls, reduced-motion handling, and a developer button to deliver postcards on demand.
+
+### Fixed
+- Mouse-dragging the postcard didn't flip it because the browser started dragging the picture (BUG-058).
+
+## [2026-10-29] — Pawadise postcards organised per pet
+
+### Changed
+- Removed the shared "Postcards from Pawadise" list from the Pet Pawadise tab. Tapping a retired pet opens its own Pawadise page (picture, name, species, growth stage, its postcards, Back button); tapping a postcard opens a larger view.
+- Each pet's Pet Album profile gets a "Pawadise scrapbook" with only that pet's postcards, kept forever, even after the pet comes home. Empty pets show "No postcards yet!".
+- Bring Home is a separate button on the gallery card (no nested buttons).
+
+## [2026-10-29] — Pet Album tabs: Pet Memories and Pet Pawadise
+
+### Changed
+- The Pet Album has two tabs inside it: Pet Memories (the existing album) and Pet Pawadise (resort picture, retired pets with Bring Home, Send a pet to Pawadise, Postcards from Pawadise). Pawadise no longer sits at the top of the album. No rule, data or artwork changes.
+
+## [2026-10-29] — Pet Pawadise (retirement resort)
+
+### Added
+- Pet Pawadise section in the Pet Album: resort picture, a gallery of retired pets (name, species, artwork, growth stage, Bring Home), a "Send a pet to Pawadise" list with confirmation, and a "Postcards from Pawadise" collection.
+- Healthy, hatched pets can retire; retired pets are frozen (needs, growth, health and timers paused), free one of the three pet slots and return home for free when a slot is free, resuming from where they left off.
+- Permanent postcard data structure (unique id, pet id, image reference, title, message, received date); empty for now. No postcard scheduling or artwork yet.
+
 ## [2026-10-28] — Milestone: pet care, health, Shop and the full Cat Toys collection
 
 Summary of the work finished and player-tested in this milestone (details are in the entries below, in features.md FEATURE-059 to FEATURE-076 and in bugs.md). Pet Pawadise is a separate future feature and is not part of it.

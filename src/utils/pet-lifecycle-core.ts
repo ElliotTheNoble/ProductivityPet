@@ -47,7 +47,16 @@ export type PetLifecycle = {
   lastEvaluatedAt: string;
 };
 
-export type PetEventType = 'adopted' | 'hatched' | 'sick' | 'critical' | 'recovered' | 'died' | 'resurrected';
+export type PetEventType =
+  | 'adopted'
+  | 'hatched'
+  | 'sick'
+  | 'critical'
+  | 'recovered'
+  | 'died'
+  | 'resurrected'
+  | 'retired'
+  | 'returned';
 
 // One entry of a pet's permanent history. `id` is deterministic (type + time)
 // so the same event can never be recorded twice.
@@ -70,6 +79,14 @@ export type PetRecord = {
   // Highest stage / level ever reached (never lowered).
   peak: { stageIndex: number; level: number };
   createdAt: string;
+  // Species of the pet. Missing = 'cat' (every pet so far is a kitty); kept so future species can be
+  // told apart without changing saved pets.
+  species?: string;
+  // Set while the pet is retired in Pet Pawadise. A retired pet is frozen: its needs, sickness, growth
+  // and every other timer are paused (advancePet / reevaluatePet / evaluateLifecycle return it
+  // unchanged), it can't get sick or die, and it doesn't use one of the active-pet slots. Everything
+  // else on the record (identity, name, stage, accessories, growth, history) is kept as it was.
+  retired?: { since: string };
   // Set while a resurrection animation is still to be shown/finished. The
   // payment and the revival itself are already complete when this is set.
   revival?: { startedAt: string; done: boolean };
@@ -208,7 +225,7 @@ export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: numbe
   const events: PetEvent[] = [];
   let recovered = false;
 
-  if (lifecycle.state === 'deceased') return pet;
+  if (lifecycle.state === 'deceased' || pet.retired) return pet;
 
   if (lifecycle.state === 'healthy') {
     if (anyNeedZero(pet.profile)) {
@@ -258,7 +275,7 @@ export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: numbe
 // already 0 starts its sickness clock at `now`, so nothing can die on the
 // first launch.
 export function advancePet(pet: PetRecord, now: Date, grace = false): PetRecord {
-  if (pet.lifecycle.state === 'deceased') return pet;
+  if (pet.lifecycle.state === 'deceased' || pet.retired) return pet;
 
   const lastEvaluated = ms(pet.lifecycle.lastEvaluatedAt);
   const nowMs = Math.max(now.getTime(), Number.isNaN(lastEvaluated) ? 0 : lastEvaluated);
@@ -296,7 +313,7 @@ export function advancePet(pet: PetRecord, now: Date, grace = false): PetRecord 
 
 // Evaluates the health rules after a care action saved new needs (no decay).
 export function reevaluatePet(pet: PetRecord, now: Date): PetRecord {
-  if (pet.lifecycle.state === 'deceased') return pet;
+  if (pet.lifecycle.state === 'deceased' || pet.retired) return pet;
   const last = ms(pet.lifecycle.lastEvaluatedAt);
   const nowMs = Math.max(now.getTime(), Number.isNaN(last) ? 0 : last);
   if (isEggStage(pet.growthUnits)) return pet;

@@ -161,7 +161,7 @@ export function PetFamilyBar() {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        {family.pets.map((pet) => {
+        {family.pets.filter((pet) => !pet.retired).map((pet) => {
           const isSelected = pet.id === family.selectedPetId;
           const stage = petStage(pet);
           return (
