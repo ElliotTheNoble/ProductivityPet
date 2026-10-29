@@ -1,4 +1,5 @@
 import { DEV_BYPASS_GROWTH_TASK_REQUIREMENT } from '@/utils/dev-flags';
+import { refreshPeak } from '@/utils/pet-family';
 import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 import { PET_STAGES, TASKS_PER_STAGE, getPetStageIndex, type PetStage, type StageProgress } from '@/utils/pet-stage';
 
@@ -116,8 +117,15 @@ export function growPet(completedTaskCount: number): Promise<GrowResult> {
 
 async function runGrowPet(completedTaskCount: number): Promise<GrowResult> {
   const profile = await getPetProfile();
-  const renderedStageIndex = getRenderedStageIndex(completedTaskCount, profile.paidStageIndex);
-  const eligibility = getGrowthEligibility(renderedStageIndex, completedTaskCount);
+  // Growth is paused while a pet is sick, critical or deceased.
+  if (profile.lifeState && profile.lifeState !== 'healthy') {
+    return { success: false, reason: 'not-eligible' };
+  }
+  // The pet's OWN growth credit decides its stage (growth is shared between
+  // living pets); the passed-in task count is only a fallback.
+  const growthCount = profile.growthCredit !== undefined ? Math.floor(profile.growthCredit) : completedTaskCount;
+  const renderedStageIndex = getRenderedStageIndex(growthCount, profile.paidStageIndex);
+  const eligibility = getGrowthEligibility(renderedStageIndex, growthCount);
   if (!eligibility.canGrow) {
     return { success: false, reason: 'not-eligible' };
   }
@@ -135,6 +143,7 @@ async function runGrowPet(completedTaskCount: number): Promise<GrowResult> {
     paidStageIndex: renderedStageIndex + 1,
   };
   savePetProfile(updated);
+  if (profile.petId) refreshPeak(profile.petId);
 
   return { success: true, newStage: eligibility.nextStage, profile: updated };
 }

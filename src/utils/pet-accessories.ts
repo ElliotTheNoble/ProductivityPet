@@ -263,7 +263,7 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
       // another 2 points (-23% → -25%); width/marginLeft/rotate
       // unchanged. Still pending full visual confirmation.
       Young: { width: '93.67578%', marginTop: '-25%', marginLeft: '-30%', rotate: '10deg' },
-      Adult: { width: '34%', marginTop: '2%' },
+      Adult: { width: '81.3702%', marginTop: '-15.6868%', marginLeft: '-25.3968%', rotate: '5deg' },
     },
   }),
   // Approved Baby placement, reached through several rounds of visual
@@ -281,6 +281,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '46%', marginTop: '-6%', marginLeft: '8%', rotate: '6deg' },
       Baby: { width: '46%', marginTop: '14%', marginLeft: '10%', rotate: '6deg' },
+      // Young (see hat-3's own comment in this file for the shared
+      // derivations): width 56.698496%/marginTop -24%/rotate 10deg
+      // unchanged this round. marginLeft 10% → -7% (rotation round) →
+      // -19.7% (this round's shared ~40px leftward shift).
+      Young: { width: '56.698496%', marginTop: '-24%', marginLeft: '-21.6048%', rotate: '10deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '47.2243%', marginTop: '-19.9787%', marginLeft: '-11.873%', rotate: '10deg' },
     },
   }),
   // Baby placementOverride: starting from hat-1's approved placement
@@ -292,10 +299,22 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
   // current (several-rounds-tuned) Hatchling placement verbatim, as an
   // initial starting point — not yet independently visually confirmed
   // for hat-2 specifically.
+  //
+  // Young placementOverride (continuing BUG-021's fix — see bugs.md): no
+  // entry existed yet, which is what left this hat invisible on the Young
+  // Kitty (no 'headHat' item renders at all without one — see
+  // pet-avatar.tsx/pet-placeholder.tsx's own fallback comments). Copied
+  // verbatim from hat-1's own approved Young placement, same "essentially
+  // the same shape" reasoning already used for this hat's Baby/Hatchling
+  // entries above — not yet independently visually confirmed for hat-2
+  // specifically.
   'hat-2': hatArt(409, 83, 320, 242, {
     home: {
       Hatchling: { width: '86%', marginTop: '-15%' },
       Baby: { width: '76%', marginTop: '13%', marginLeft: '4%', rotate: '2deg' },
+      Young: { width: '93.67578%', marginTop: '-25%', marginLeft: '-30%', rotate: '10deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '79.8%', marginTop: '-17.0083%', marginLeft: '-18.2222%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -318,10 +337,81 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
   // (marginLeft: none → '-2%') — width/marginTop/rotate all unchanged
   // from that starting point. Pending further visual confirmation, same
   // as every other Hatchling hat so far.
+  //
+  // Young placementOverride (continuing BUG-021's fix — see bugs.md): no
+  // entry existed yet for this hat, or any hat below other than hat-1/hat-2, so
+  // every one of them was simply invisible on the Young Kitty (not
+  // positioned incorrectly — a 'headHat' item with no placement for the
+  // current surface/stage renders nothing at all, same fallback rule
+  // used throughout this file). Every Young entry from here through
+  // hat2-13 below uses the SAME derivation, a shared baseline from the
+  // one hat that already had a real, visually-approved Young placement
+  // (hat-1, the White Cat-Ear Beanie): comparing hat-1's own Baby
+  // (76%/13%) and Young (93.67578%/-25%) values gives a width ratio of
+  // ×1.232576 and a marginTop shift of -38 points. Applied to each hat's
+  // OWN Baby width/marginTop below (not hat-1's), since a hat's size
+  // relative to its own crop is specific to that hat, not generic —
+  // exactly the same "derive from hat-1's own Baby-to-later-stage ratio,
+  // applied to THIS hat's own Baby values" technique already used
+  // throughout this file for the first-pass Hatchling placements above.
+  // scaleX/scaleY are each kept exactly as that hat's own Baby value —
+  // not stage-dependent, purely intrinsic to that hat's own shape
+  // correction. marginLeft/rotate originally followed the same "kept at
+  // Baby's own value" rule, deliberately NOT shifted by hat-1's own full
+  // Young marginLeft/rotate (-30%/10deg) — forcing that specific amount
+  // onto every differently-shaped hat was explicitly asked against. A
+  // follow-up round then asked for a smaller, conservative nudge in that
+  // same direction, since the Young Kitty's head is noticeably tilted
+  // right and most hats' Baby-derived rotation (mostly 2deg, a few at
+  // 4/6/8deg) didn't follow it. Rather than jump every hat straight to
+  // hat-1/hat-2's own full 10deg (which WOULD force one identical value
+  // onto every hat, explicitly ruled out again), each hat below gets a
+  // uniform +4deg rotate ADDED to its own existing value — half of the
+  // +8deg hat-1 itself needed (Baby 2deg → Young 10deg) — so hats keep
+  // their relative differences from each other (a beret that was already
+  // more tilted than a witch hat stays more tilted after this too), just
+  // all nudged partway toward the reference head angle rather than
+  // forced onto it. marginLeft gets a matching proportional nudge: -17
+  // points, half of hat-1's own -34 point shift (4% → -30%, needed for
+  // hat-1's full +8deg) — this compensates for the added rotation
+  // visually shifting each hat's silhouette, the same relationship
+  // hat-1's own numbers already demonstrate. marginTop/width are
+  // untouched by that round — it was specifically about rotation/tilt,
+  // not vertical position or size.
+  //
+  // A THIRD follow-up round then asked for a uniform ~40px leftward shift
+  // on top of all that (hat-1/hat-2, the beanies, explicitly excluded —
+  // still completely untouched), since most hats still read as too far
+  // right after the rotation nudge above. marginLeft is a percentage of
+  // the pet's own responsive box, which doesn't have one single pixel
+  // size (Home's petWrap is 150-260px depending on screen width; the
+  // Shop's own preview avatar is a fixed 315px — see PREVIEW_KITTY_SIZE
+  // in shop-screen.tsx) — converted using the Shop's 315px box
+  // specifically (40 / 315 = 12.69841%, rounded to 12.7), since that's
+  // the larger, fixed-size, easier-to-visually-judge-exact-pixels view
+  // the request was almost certainly checked against. Each hat below gets
+  // a further -12.7 points of marginLeft, subtracted from whatever this
+  // file already had it at after the rotation-nudge round (preserving
+  // each hat's own already-individual offset, not resetting it to a
+  // shared baseline) — width/marginTop/rotate/scaleX untouched by this
+  // round, same reasoning as the rotation-only round before it. On Home's
+  // own smaller/variable box this same percentage reads as a somewhat
+  // smaller absolute pixel shift than 40px, but still clearly left, in
+  // the same direction, from the same shared value. None of this is
+  // visually confirmed yet for any individual hat below — same "pending
+  // visual confirmation" status every first-pass placement in this file
+  // already carries.
   'hat-3': hatArt(764, 88, 396, 242, {
     home: {
       Hatchling: { width: '136%', marginTop: '-21%', marginLeft: '-2%' },
       Baby: { width: '120%', marginTop: '7%', marginLeft: '4%', rotate: '2deg' },
+      // Young: width 147.90912%/marginTop -31%/rotate 6deg (all
+      // unchanged this round — see the shared comments above for their
+      // own derivations). marginLeft -13% - 12.7 = -25.7% (the shared
+      // ~40px leftward shift).
+      Young: { width: '140.513664%', marginTop: '-36.6768%', marginLeft: '-27.6048%', rotate: '11deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then sized up 5% (centred) and moved 10px up.
+      Adult: { width: '101.8473%', marginTop: '-15.6293%', marginLeft: '-19.7977%', rotate: '7deg', scaleX: 1.175666 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -355,6 +445,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '95%', marginTop: '-11%', scaleX: 1.05, scaleY: 0.9 },
       Baby: { width: '84%', marginTop: '13%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 103.536384%/marginTop -25%/rotate 6deg unchanged this round.
+      // marginLeft 4% → -13% (rotation round) → -25.7% (this round's
+      // shared ~40px leftward shift).
+      Young: { width: '108.713203%', marginTop: '-31.6322%', marginLeft: '-25.7%', rotate: '11deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '87.9795%', marginTop: '-18.1187%', marginLeft: '-24.595%', rotate: '7deg', scaleX: 1.036084 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -380,6 +477,26 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '84%', marginTop: '5%', marginLeft: '6%', rotate: '4deg', scaleX: 1.0418 },
       Baby: { width: '76%', marginTop: '20%', marginLeft: '6%', rotate: '4deg' },
+      // Young (see hat-3's own comment for the Baby→Young width/marginTop
+      // derivation): width 93.675776%/rotate 8deg unchanged since that
+      // round. A follow-up round singled out this specific hat (along
+      // with 9 others: hat-6/7/8/9, hat2-1/2/10/12/13) for a -25px
+      // horizontal/-20px vertical nudge from each one's own then-current
+      // position, then a FURTHER follow-up nudged those same 10 hats
+      // another -10px lower still — every conversion uses the same
+      // 315px Shop-preview-box pixel reference (25 / 315 = 7.94 points;
+      // 20 / 315 = 6.35 points; 10 / 315 = 3.17 points) — every OTHER
+      // hat not in that list of 10 is untouched by either of these two
+      // rounds. marginLeft -11% → -23.7% (shared ~40px round) → -31.64%
+      // (the -25px/-20px round, -7.94) — unchanged by this latest -10px-
+      // lower round, which only touches marginTop. marginTop -18%
+      // (unchanged since the Baby→Young derivation) → -24.35% (the
+      // -25px/-20px round, -6.35) → -21.18% (this round, +3.17 — "lower"
+      // means a LESS negative marginTop, not more).
+      Young: { width: '98.359565%', marginTop: '-14.5668%', marginLeft: '-34.8146%', rotate: '8deg' },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '79.0704%', marginTop: '-4.004%', marginLeft: '-24.5694%', rotate: '2deg', scaleX: 1.04015 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -427,6 +544,25 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
         scaleY: 1.05,
       },
       Baby: { width: '81%', marginTop: '13%', marginLeft: '8%', rotate: '4deg' },
+      // Young (see hat-5's own comment for the shared -25px/-20px and
+      // -10px-lower derivations): width 99.838656%/rotate 8deg/marginLeft
+      // -29.64% unchanged since the -25px/-20px round. A further round
+      // then nudged 7 of these 10 hats (this one, plus hat-7/8/9, hat2-1/
+      // 2/10) 5px higher still — Dino/Unicorn/Frog (hat2-12/hat2-13/
+      // hat-5) explicitly excluded, left exactly at their -10px-lower
+      // round values. Same 315px pixel reference (5 / 315 = 1.59 points).
+      // marginTop -25% (Baby→Young) → -31.35% (-25px/-20px round) →
+      // -28.18% (-10px-lower round) → -29.77% (-5px-higher round,
+      // unchanged since). A final round then rotated those SAME 7 hats
+      // +3deg clockwise from each one's own current rotation (position/
+      // size untouched) — this hat's own Baby rotate (4deg) was already
+      // doubled to 8deg in the earlier rotation round, so it's now 11deg
+      // (8 + 3), one notch past the other 6's 6deg → 9deg, since it
+      // started from a different base.
+      Young: { width: '99.838656%', marginTop: '-29.4671%', marginLeft: '-26.5237%', rotate: '11deg', scaleX: 0.968203 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '85.4658%', marginTop: '-19.3888%', marginLeft: '-21.3968%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -458,6 +594,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '96.05%', marginTop: '-9%', marginLeft: '4%', rotate: '2deg', scaleX: 1.02 },
       Baby: { width: '84%', marginTop: '16%', marginLeft: '5%', rotate: '2deg' },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 103.536384%/marginLeft
+      // -32.64% unchanged since the -25px/-20px round. marginTop -22%
+      // (Baby→Young) → -28.35% (-25px/-20px round) → -25.18%
+      // (-10px-lower round) → -26.77% (-5px-higher round, unchanged
+      // since). rotate 2deg (Baby) → 6deg (rotation round) → 9deg (this
+      // round, +3).
+      Young: { width: '103.536384%', marginTop: '-26.5217%', marginLeft: '-29.5045%', rotate: '9deg', scaleX: 0.969338 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '87.9795%', marginTop: '-16.7832%', marginLeft: '-21.3968%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -478,6 +625,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '88%', marginTop: '-10%', marginLeft: '4%', rotate: '2deg' },
       Baby: { width: '80%', marginTop: '10%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 98.60608%/marginLeft -33.64%
+      // unchanged since the -25px/-20px round. marginTop -28%
+      // (Baby→Young) → -34.35% (-25px/-20px round) → -31.18%
+      // (-10px-lower round) → -32.77% (-5px-higher round, unchanged
+      // since). rotate 2deg (Baby) → 6deg (rotation round) → 9deg (this
+      // round, +3).
+      Young: { width: '98.60608%', marginTop: '-32.5217%', marginLeft: '-30.5045%', rotate: '9deg', scaleX: 0.967805 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '83.79%', marginTop: '-22.0328%', marginLeft: '-21.3968%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -501,6 +659,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '93.5%', marginTop: '-1%', marginLeft: '1%', rotate: '2deg', scaleX: 1.0404 },
       Baby: { width: '85%', marginTop: '22%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 104.76896%/marginLeft -33.64%
+      // unchanged since the -25px/-20px round. marginTop -16%
+      // (Baby→Young) → -22.35% (-25px/-20px round) → -19.18%
+      // (-10px-lower round) → -20.77% (-5px-higher round, unchanged
+      // since). rotate 2deg (Baby) → 6deg (rotation round) → 9deg (this
+      // round, +3).
+      Young: { width: '110.00741%', marginTop: '-21.1943%', marginLeft: '-26.7166%', rotate: '15deg', scaleX: 0.888897 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '90.5309%', marginTop: '-12.2462%', marginLeft: '-19.829%', rotate: '9deg', scaleX: 0.982467 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -520,6 +689,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '76%', marginTop: '-2%', marginLeft: '8%', rotate: '2deg', scaleX: 1.03 },
       Baby: { width: '76%', marginTop: '13%', marginLeft: '8%', rotate: '2deg' },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -25%/rotate 6deg unchanged this round.
+      // marginLeft 8% → -9% (rotation round) → -21.7% (this round's
+      // shared ~40px leftward shift).
+      Young: { width: '93.675776%', marginTop: '-25%', marginLeft: '-21.7%', rotate: '6deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '79.8%', marginTop: '-13.6599%', marginLeft: '-18.2222%', rotate: '2deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -541,6 +717,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '76%', marginTop: '-4%', marginLeft: '8%', rotate: '2deg', scaleX: 1.2155 },
       Baby: { width: '76%', marginTop: '13%', marginLeft: '8%', rotate: '2deg' },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -25%/rotate 6deg unchanged this round.
+      // marginLeft 8% → -9% (rotation round) → -21.7% (this round's
+      // shared ~40px leftward shift).
+      Young: { width: '93.675776%', marginTop: '-25%', marginLeft: '-21.7%', rotate: '6deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '79.8%', marginTop: '-16.9088%', marginLeft: '-18.2222%', rotate: '2deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -564,6 +747,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '98.18%', marginTop: '-14%', marginLeft: '4%', rotate: '2deg' },
       Baby: { width: '85%', marginTop: '11%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 104.76896%/marginLeft -33.64%
+      // unchanged since the -25px/-20px round. marginTop -27%
+      // (Baby→Young) → -33.35% (-25px/-20px round) → -30.18%
+      // (-10px-lower round) → -31.77% (-5px-higher round, unchanged
+      // since). rotate 2deg (Baby) → 6deg (rotation round) → 9deg (this
+      // round, +3).
+      Young: { width: '104.76896%', marginTop: '-31.5217%', marginLeft: '-30.5045%', rotate: '9deg', scaleX: 0.969699 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '92.3785%', marginTop: '-23.2456%', marginLeft: '-21.3968%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -584,6 +778,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '105.6%', marginTop: '-9%', marginLeft: '4%', rotate: '2deg' },
       Baby: { width: '96%', marginTop: '11%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 118.327296%/marginLeft
+      // -33.64% unchanged since the -25px/-20px round. marginTop -27%
+      // (Baby→Young) → -33.35% (-25px/-20px round) → -30.18%
+      // (-10px-lower round) → -31.77% (-5px-higher round, unchanged
+      // since). rotate 2deg (Baby) → 6deg (rotation round) → 9deg (this
+      // round, +3).
+      Young: { width: '118.327296%', marginTop: '-31.5217%', marginLeft: '-30.5045%', rotate: '9deg', scaleX: 0.973171 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '101.8473%', marginTop: '-22.5757%', marginLeft: '-21.3968%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -628,6 +833,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '105.6%', marginTop: '-11%', marginLeft: '27%', rotate: '2deg', scaleX: 1.2505 },
       Baby: { width: '96%', marginTop: '14%', marginLeft: '19%', rotate: '2deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 118.327296%/marginTop -24%/rotate 6deg/scaleX 1.08 unchanged this
+      // round. marginLeft 19% → 2% (rotation round) → -10.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '112.410931%', marginTop: '-23.7102%', marginLeft: '-4.3508%', rotate: '11deg', scaleX: 1.1907 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then sized up 5% (centred) and moved 10px up.
+      Adult: { width: '96.9974%', marginTop: '-15.8842%', marginLeft: '-2.3492%', rotate: '7deg', scaleX: 1.157625 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -663,6 +875,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '98%', marginTop: '-12%', marginLeft: '7%', rotate: '2deg', scaleX: 1.08 },
       Baby: { width: '76%', marginTop: '13%', marginLeft: '7%', rotate: '2deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -25%/rotate 6deg/scaleX 1.08 unchanged this
+      // round. marginLeft 7% → -10% (rotation round) → -22.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '103.277543%', marginTop: '-28.4208%', marginLeft: '-19.5254%', rotate: '11deg', scaleX: 1.134 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '87.9795%', marginTop: '-18.252%', marginLeft: '-11.873%', rotate: '7deg', scaleX: 1.1025 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -697,6 +916,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '88.03%', marginTop: '-2%', marginLeft: '9%', rotate: '8deg', scaleX: 1.1458 },
       Baby: { width: '76%', marginTop: '17%', marginLeft: '10%', rotate: '8deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -21%/rotate 12deg/scaleX 1.08 unchanged this
+      // round. marginLeft 10% → -7% (rotation round) → -19.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '98.359565%', marginTop: '-20.8021%', marginLeft: '-19.7%', rotate: '17deg', scaleX: 1.08 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '87.9795%', marginTop: '-12.9692%', marginLeft: '-21.3732%', rotate: '7deg', scaleX: 1.036084 },
     },
   }),
   // Baby placementOverride: copied verbatim from the approved Pink Heart
@@ -733,6 +959,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '82.8944%', marginTop: '-1%', marginLeft: '9%', rotate: '8deg', scaleX: 1.18014516 },
       Baby: { width: '73%', marginTop: '19%', marginLeft: '10%', rotate: '8deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 89.978048%/marginTop -19%/rotate 12deg/scaleX 1.08 unchanged this
+      // round. marginLeft 10% → -7% (rotation round) → -19.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '94.47695%', marginTop: '-17.1577%', marginLeft: '-19.7%', rotate: '17deg', scaleX: 1.08 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '87.9795%', marginTop: '-9.5951%', marginLeft: '-21.3968%', rotate: '7deg', scaleX: 1.036084 },
     },
   }),
   // Baby placementOverride: copied verbatim from the approved Pink Heart
@@ -766,6 +999,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '85.4658%', marginTop: '2%', marginLeft: '12%', rotate: '8deg', scaleX: 1.1124 },
       Baby: { width: '76%', marginTop: '23%', marginLeft: '12%', rotate: '8deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -15%/rotate 12deg/scaleX 1.08 unchanged this
+      // round. marginLeft 12% → -5% (rotation round) → -17.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '98.359565%', marginTop: '-14.7588%', marginLeft: '-14.5254%', rotate: '17deg', scaleX: 1.08 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '87.9795%', marginTop: '-9.4904%', marginLeft: '-18.2222%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -786,6 +1026,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '79.8%', marginTop: '8%', marginLeft: '4%', rotate: '2deg' },
       Baby: { width: '76%', marginTop: '25%', marginLeft: '4%', rotate: '2deg' },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -13%/rotate 6deg unchanged this round.
+      // marginLeft 4% → -13% (rotation round) → -25.7% (this round's
+      // shared ~40px leftward shift).
+      Young: { width: '103.277543%', marginTop: '-15.4465%', marginLeft: '-25.7%', rotate: '11deg' },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '79.8%', marginTop: '-3.8412%', marginLeft: '-18.2222%', rotate: '7deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -823,6 +1070,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '87.1996146%', marginTop: '-21%', marginLeft: '4%', rotate: '2deg', scaleX: 1.145772 },
       Baby: { width: '76%', marginTop: '6%', marginLeft: '4%', rotate: '2deg', scaleX: 1.08 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 93.675776%/marginTop -32%/rotate 6deg/scaleX 1.08 unchanged this
+      // round. marginLeft 4% → -13% (rotation round) → -25.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '93.675776%', marginTop: '-36.7619%', marginLeft: '-25.7%', rotate: '11deg', scaleX: 1.08 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then moved 25px up.
+      Adult: { width: '83.79%', marginTop: '-28.2519%', marginLeft: '-22.0506%', rotate: '7deg', scaleX: 1.08031 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -859,6 +1113,17 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '106.46834562%', marginTop: '-14%', marginLeft: '3.5%', rotate: '2deg', scaleX: 1.11 },
       Baby: { width: '91%', marginTop: '13%', marginLeft: '4%', rotate: '2deg', scaleX: 1.11 },
+      // Young (see hat-6's own comment for the shared -5px-higher and
+      // +3deg-clockwise derivations): width 112.164416%/scaleX 1.11/
+      // marginLeft -33.64% unchanged since the -25px/-20px round.
+      // marginTop -25% (Baby→Young) → -31.35% (-25px/-20px round) →
+      // -28.18% (-10px-lower round) → -29.77% (-5px-higher round,
+      // unchanged since). rotate 2deg (Baby) → 6deg (rotation round) →
+      // 9deg (this round, +3).
+      Young: { width: '112.164416%', marginTop: '-29.5217%', marginLeft: '-30.5045%', rotate: '9deg', scaleX: 1.081697 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '96.9974%', marginTop: '-19.6271%', marginLeft: '-22.6902%', rotate: '7deg', scaleX: 1.065456 },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -881,6 +1146,13 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '101.2%', marginTop: '-6%', marginLeft: '4%', rotate: '2deg', scaleX: 1.15 },
       Baby: { width: '88%', marginTop: '18%', marginLeft: '4%', rotate: '2deg', scaleX: 1.15 },
+      // Young (see hat-3's own comment for the shared derivations): width
+      // 108.466688%/marginTop -20%/rotate 6deg/scaleX 1.15 unchanged this
+      // round. marginLeft 4% → -13% (rotation round) → -25.7% (this
+      // round's shared ~40px leftward shift).
+      Young: { width: '108.466688%', marginTop: '-21.133%', marginLeft: '-27.3748%', rotate: '11deg', scaleX: 1.106098 },
+      // Adult: no tuned entry existed — seeded from the dev fallback (76%/13%/4%/2deg), then sized up 5% (centred).
+      Adult: { width: '103.1999%', marginTop: '-19.9432%', marginLeft: '-24.5714%', rotate: '2deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -902,6 +1174,15 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '94.3%', marginTop: '-15%', marginLeft: '7%', rotate: '2deg' },
       Baby: { width: '82%', marginTop: '13%', marginLeft: '7%', rotate: '2deg' },
+      // Young (see hat-5's own comment for the shared -25px/-20px and
+      // -10px-lower derivations): width 101.071232%/rotate 6deg/
+      // marginLeft -30.64% unchanged since the -25px/-20px round.
+      // marginTop -25% (Baby→Young derivation) → -31.35% (-25px/-20px
+      // round) → -28.18% (this round, +3.17).
+      Young: { width: '101.071232%', marginTop: '-28.18%', marginLeft: '-30.64%', rotate: '6deg' },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '85.4658%', marginTop: '-19.2823%', marginLeft: '-21.3968%', rotate: '2deg' },
     },
   }),
   // Baby placementOverride: started from the dev-only testing fallback
@@ -926,6 +1207,15 @@ export const PET_ACCESSORY_ART: Record<string, AccessoryArt> = {
     home: {
       Hatchling: { width: '90.2%', marginTop: '-2%', marginLeft: '-1%', rotate: '2deg', scaleX: 1.071 },
       Baby: { width: '82%', marginTop: '19%', marginLeft: '1%', rotate: '2deg', scaleX: 1.05 },
+      // Young (see hat-5's own comment for the shared -25px/-20px and
+      // -10px-lower derivations): width 101.071232%/rotate 6deg/scaleX
+      // 1.05/marginLeft -36.64% unchanged since the -25px/-20px round.
+      // marginTop -19% (Baby→Young derivation) → -25.35% (-25px/-20px
+      // round) → -22.18% (this round, +3.17).
+      Young: { width: '101.071232%', marginTop: '-21.7863%', marginLeft: '-32.5889%', rotate: '11deg', scaleX: 1.009167 },
+      // Adult: no tuned entry existed — was showing the dev fallback (76%/13%/4%/2deg).
+      // Seeded from that, then moved 20px up (marginTop 13% → 6.6508%), then 10px more (→ 3.4762%), then 10px more (→ 0.3016%).
+      Adult: { width: '87.1751%', marginTop: '-13.1814%', marginLeft: '-25.8412%', rotate: '7deg' },
     },
   }),
   'bandana-1': bandanaArt(25, 113, 346, 211),

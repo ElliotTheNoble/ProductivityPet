@@ -1,6 +1,6 @@
 # Privacy Policy for ProductivityPet
 
-**Last updated: September 10, 2026**
+**Last updated: October 26, 2026**
 
 ProductivityPet is a productivity application designed to help users manage tasks and interact with a virtual pet.
 
@@ -9,6 +9,10 @@ ProductivityPet is a productivity application designed to help users manage task
 ProductivityPet does not require users to create an account or provide personal information.
 
 Task information, progress, pet progress, and other app data are stored locally on the user's device. ProductivityPet does not operate a server that receives or stores this information.
+
+## Notifications and Camera
+
+If you turn on pet health alerts, ProductivityPet schedules notifications on your device. They are created and delivered locally and are not sent through any server. If you turn on the optional flashlight alert, the app asks for camera permission only to switch the flashlight on and off; it never takes photos or video and never uses the microphone.
 
 ## How Your Data Is Used
 

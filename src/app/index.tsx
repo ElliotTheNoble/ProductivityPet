@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppointmentsCard } from '@/components/appointments-card';
@@ -10,37 +10,31 @@ import { PetProgress } from '@/components/pet-progress';
 import { HATCHLING_INTRO_DURATION_MS } from '@/components/pet-placeholder';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
+import { SlideOutPanel } from '@/components/slide-out-panel';
+import { ToyPlayCard } from '@/components/toy-play-card';
+import { useToySession } from '@/utils/pet-toy-session';
 import { TaskCard } from '@/components/task-card';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TodayMood } from '@/components/today-mood';
 import { Spacing } from '@/constants/theme';
-import {
-  DEV_DIRTY_TEST_CLEANLINESS_VALUE,
-  DEV_ENABLE_DIRTY_TEST_CONTROLS,
-  DEV_ENABLE_HATCH_INTRO_PREVIEW,
-  DEV_ENABLE_TEST_PAW_TOKEN_GRANT,
-  DEV_TEST_PAW_TOKEN_GRANT_AMOUNT,
-} from '@/utils/dev-flags';
+import { consumeDevHatchReplayRequest, subscribeToDevHatchReplayRequest } from '@/utils/dev-hatch-replay';
 import {
   getDevPreviewStageIndex,
   setDevPreviewStageIndex,
   subscribeToDevPreviewStageIndex,
 } from '@/utils/dev-stage-preview';
 import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
+import { recordMoodEntry } from '@/utils/mood-log';
+import { getPetLifeMessage } from '@/utils/pet-life-messages';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
-import {
-  applyAddPoopPile,
-  applyCleanUpPile,
-  applyClearAllPiles,
-  applyDevFastForwardAccumulation,
-} from '@/utils/pet-poop';
-import { getEquippedAccessoryId } from '@/utils/pet-equipment';
+import { isPoopPaused, applyCleanUpPile } from '@/utils/pet-poop';
+import { useSelectedPetId } from '@/hooks/use-pet-family';
+import { getEquippedAccessories, type EquippedAccessories } from '@/utils/pet-equipment';
 import { feedPet } from '@/utils/pet-feeding';
-import { getGrowthEligibility, getRenderedStageIndex, getRenderedStage, growPet } from '@/utils/pet-growth';
+import { getRenderedStage } from '@/utils/pet-growth';
 import { restPet } from '@/utils/pet-resting';
-import { getPetProfile, savePetProfile, subscribeToPetProfile, type PetProfile, type PoopSize } from '@/utils/pet-profile';
+import { getPetProfile, savePetProfile, subscribeToPetProfile, type PetProfile } from '@/utils/pet-profile';
 import { PET_STAGES, type PetStage } from '@/utils/pet-stage';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
@@ -83,10 +77,6 @@ const DEFAULT_MOOD: Mood = 'Happy';
 // navigation — see that file for details.
 const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
 
-// Below this window width, the dashboard stacks into a single column instead
-// of showing the task card and living room side by side.
-const WIDE_LAYOUT_BREAKPOINT = 700;
-
 // How long the "Dev: Replay Hatching Animation" button's simulated Egg
 // artwork briefly shows before the simulated hatch itself begins — purely
 // a dev-preview flourish so the replay reads as "before -> after," same
@@ -104,6 +94,15 @@ export default function HomeScreen() {
   const [mood, setMood] = useState<Mood>(DEFAULT_MOOD);
   const [isMoodHydrated, setIsMoodHydrated] = useState(false);
   const [moodMessage, setMoodMessage] = useState(() => getRandomMoodMessage(DEFAULT_MOOD));
+  // The Today's Mood picker's handler: updates the on-screen mood exactly as
+  // before AND appends a timestamped check-in to the mood history (see
+  // @/utils/mood-log.ts) that the Stats Mood Journey reads. Only a real
+  // player selection records an entry — loading the saved mood on startup
+  // goes through setMood directly and does not.
+  const handleSelectMood = (selected: Mood) => {
+    setMood(selected);
+    recordMoodEntry(selected).catch(() => {});
+  };
   // Local copy of the Pet Profile, used only by the Feed button below for
   // now. Seeded from getPetProfile() on mount — not
   // loadPetProfileWithNeedsUpdate() — because src/app/_layout.tsx already
@@ -112,18 +111,21 @@ export default function HomeScreen() {
   // already-current profile from its shared in-memory cache instead of
   // re-running (and potentially re-saving) that catch-up a second time.
   const [petProfile, setPetProfile] = useState<PetProfile | null>(null);
-  // The id of whatever Pet Accessory is currently equipped (see
-  // @/utils/pet-equipment.ts), loaded fresh on every mount — Home is
-  // unmounted/remounted on navigation (same as every routed screen here),
-  // so this naturally picks up a change made on the Shop page as soon as
-  // the user navigates back, without needing a cross-page subscription.
-  const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
+  // The hat and the bow that are currently equipped (one of each can be
+  // worn at once — see @/utils/pet-equipment.ts), loaded fresh on every
+  // mount — Home is unmounted/remounted on navigation (same as every routed
+  // screen here), so this naturally picks up a change made on the Shop page
+  // as soon as the user navigates back, without needing a cross-page
+  // subscription.
+  const [equippedAccessories, setEquippedAccessories] = useState<EquippedAccessories>({
+    hat: null,
+    bow: null,
+  });
+  // What the pet components actually draw (bow first, hat on top).
+  const equippedAccessoryIds = [equippedAccessories.bow, equippedAccessories.hat];
   const [isFeeding, setIsFeeding] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isResting, setIsResting] = useState(false);
-  // TEMPORARY — supports the test-only Grow control in handleGrow below.
-  const [isGrowing, setIsGrowing] = useState(false);
-  const [growResultMessage, setGrowResultMessage] = useState<string | null>(null);
   // TEMPORARY — supports the test-only Pet Stage Preview, clickable
   // directly on PetProgress's own stage icons (gated behind
   // DEV_ENABLE_STAGE_PREVIEW there — see @/components/pet-progress.tsx and
@@ -143,8 +145,21 @@ export default function HomeScreen() {
   useEffect(() => subscribeToDevPreviewStageIndex(setDevPreviewStageIndexState), []);
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { width } = useWindowDimensions();
-  const isWideLayout = width >= WIDE_LAYOUT_BREAKPOINT;
+  const { width, height } = useWindowDimensions();
+  // Portrait = taller than wide. Re-evaluated on every rotation, so switching orientation just
+  // re-lays-out Home (nothing saved changes).
+  const isPortrait = height >= width;
+  // One slide-out panel at a time: 'progress' (left), 'features' (right) or none.
+  const [openPanel, setOpenPanel] = useState<'progress' | 'features' | null>(null);
+  // Portrait phones: a panel covers most of the screen; landscape / desktop: a comfortable
+  // fixed-size sheet that leaves the kitty visible beside it.
+  // Short windows (a phone held sideways): if the pet, her bars and the care buttons are taller
+  // than the room, the whole group is scaled down to fit instead of being cut off.
+  const [overlayHeight, setOverlayHeight] = useState(0);
+  const [petGroupHeight, setPetGroupHeight] = useState(0);
+  const petFitScale =
+    overlayHeight > 0 && petGroupHeight > overlayHeight ? Math.max(0.45, overlayHeight / petGroupHeight) : 1;
+  const panelWidth = Math.min(isPortrait ? 360 : 400, Math.round(width * (isPortrait ? 0.88 : 0.5)));
 
   useEffect(() => {
     return () => {
@@ -207,19 +222,23 @@ export default function HomeScreen() {
   // reactivity — same one the header's Paw Token balance already relies on.
   useEffect(() => subscribeToPetProfile(setPetProfile), []);
 
-  // Seed the equipped accessory id the same way — see the state
+  // Seed the equipped accessories the same way — see the state
   // declaration above for why a plain mount-time read is sufficient here.
+  // Re-read whenever a different pet is selected (each pet wears its own).
+  const selectedPetId = useSelectedPetId();
+  // The temporary toy (if any) out to play with the selected pet.
+  const toySession = useToySession(selectedPetId);
   useEffect(() => {
     let cancelled = false;
-    getEquippedAccessoryId()
-      .then((id) => {
-        if (!cancelled) setEquippedAccessoryId(id);
+    getEquippedAccessories()
+      .then((equipped) => {
+        if (!cancelled) setEquippedAccessories(equipped);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedPetId]);
 
   // Feed button handler — calls the existing persistent feedPet() action
   // (see @/utils/pet-feeding.ts) and updates local state with whatever it
@@ -239,7 +258,7 @@ export default function HomeScreen() {
   // which is a separate, purely visual layer for hiding the buttons/art
   // in the first place).
   function handleFeed() {
-    if (isRealEgg || isFeeding) return;
+    if (isRealEgg || isDeceased || isFeeding) return;
     setIsFeeding(true);
     feedPet()
       .then((updated) => setPetProfile(updated))
@@ -263,7 +282,7 @@ export default function HomeScreen() {
   // so PetPlaceholder's existing onPlay/isPlaying prop contract doesn't
   // need to change.
   function handlePlay() {
-    if (isRealEgg) return;
+    if (isRealEgg || isDeceased) return;
     router.push('/mini-games');
   }
 
@@ -272,49 +291,12 @@ export default function HomeScreen() {
   // math lives here. restPet() never sets isSleeping; the automatic 8 PM-
   // 8 AM bedtime system stays entirely separate and untouched by this.
   function handleRest() {
-    if (isRealEgg || isResting) return;
+    if (isRealEgg || isDeceased || isResting) return;
     setIsResting(true);
     restPet()
       .then((updated) => setPetProfile(updated))
       .catch(() => {})
       .finally(() => setIsResting(false));
-  }
-
-  // TEMPORARY test control for the new paid Baby->Young/Young->Adult
-  // growth system (see @/utils/pet-growth.ts) — a real "grow pet" UI isn't
-  // built yet, this just exercises growPet() so the underlying logic can
-  // be verified. Re-derives eligibility fresh (not trusted from stale UI
-  // state) and growPet() itself re-validates everything again server-side
-  // against the real saved profile before spending anything.
-  function handleGrow() {
-    if (isGrowing) return;
-    setIsGrowing(true);
-    growPet(completedTaskCount)
-      .then((result) => {
-        if (result.success) setPetProfile(result.profile);
-        setGrowResultMessage(
-          result.success
-            ? `Grew to ${result.newStage}!`
-            : result.reason === 'insufficient-funds'
-              ? 'Not enough Paw Tokens.'
-              : 'Not eligible to grow yet.'
-        );
-      })
-      .catch(() => setGrowResultMessage('Something went wrong.'))
-      .finally(() => setIsGrowing(false));
-  }
-
-  // TEMPORARY, test-only — adds DEV_TEST_PAW_TOKEN_GRANT_AMOUNT Paw Tokens
-  // directly to the real saved Pet Profile (see @/utils/dev-flags.ts for
-  // exactly what this does and doesn't affect), purely so the 500/1,000
-  // token growth costs can be tested without earning that many tokens for
-  // real first. Only reachable via the button below, which only renders at
-  // all while DEV_ENABLE_TEST_PAW_TOKEN_GRANT is true.
-  function handleDevAddTestTokens() {
-    if (!petProfile) return;
-    const updated = { ...petProfile, pawTokens: petProfile.pawTokens + DEV_TEST_PAW_TOKEN_GRANT_AMOUNT };
-    savePetProfile(updated);
-    setPetProfile(updated);
   }
 
   // TEMPORARY, test-only — replays the full Egg-to-Hatchling transition
@@ -385,98 +367,6 @@ export default function HomeScreen() {
     setDevPreviewStageIndex(index);
   }
 
-  // TEMPORARY, test-only — handlers that each write to the real saved Pet
-  // Profile, so the Dirty Kitty art swap and gradual Happiness/Energy
-  // penalty (see isPetDirty/applyDirtyPenalty in @/utils/pet-needs.ts) can
-  // be tested on demand. Same read-petProfile-write-updated-save-setState
-  // shape as handleDevAddTestTokens above. Only reachable via the buttons
-  // below, which only render while DEV_ENABLE_DIRTY_TEST_CONTROLS is true.
-  function handleDevSetDirtyCleanliness() {
-    if (!petProfile) return;
-    const updated = { ...petProfile, cleanliness: DEV_DIRTY_TEST_CLEANLINESS_VALUE };
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  function handleDevRestoreCleanliness() {
-    if (!petProfile) return;
-    const updated = { ...petProfile, cleanliness: 100 };
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  // Reuses applyAddPoopPile (@/utils/pet-poop.ts) — the exact same
-  // pile-creation + needsBath + rescheduling transition a real
-  // accumulation step applies — so this button exercises real behavior
-  // instead of a simplified copy of it. Leaves `size` unset, so
-  // applyAddPoopPile rolls one at random, same as a real event. Silently
-  // a no-op once already at MAX_POOP_PILES, same as the real system.
-  // Guarded by isRealEgg — the real pet-care system never accumulates a
-  // poop pile while she's genuinely still an unhatched Egg (see
-  // applyPoopAccumulation in @/utils/pet-poop.ts), so this dev-only
-  // shortcut must not be able to force one either; it safely does nothing
-  // instead of corrupting a real Egg profile with poop state. The
-  // corresponding buttons are also hidden below while isRealEgg, so this
-  // is a backstop, not the only protection.
-  function handleDevAddPoopPile() {
-    if (!petProfile || isRealEgg) return;
-    const updated = applyAddPoopPile(petProfile, petStage);
-    if (updated === petProfile) return;
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  // Same transition, but with an explicit size — lets each of the 3
-  // cleanup difficulties (Small=1 click, Medium=2, Large=3 — see
-  // POOP_CLEANUP_ACTIONS in @/utils/pet-poop.ts) be tested on demand
-  // without waiting for a random roll to happen to land on it. Same
-  // isRealEgg guard as handleDevAddPoopPile above.
-  function handleDevAddPoopPileSize(size: PoopSize) {
-    if (!petProfile || isRealEgg) return;
-    const updated = applyAddPoopPile(petProfile, petStage, new Date(), size);
-    if (updated === petProfile) return;
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  // Simulates exactly one 2-hour accumulation tick passing (see
-  // applyDevFastForwardAccumulation's own comment in @/utils/pet-poop.ts
-  // for exactly how) — the main way to test accumulation building up to
-  // the 5-pile max without actually waiting several hours. Pressing it
-  // repeatedly adds one more pile each time, up to the max, then becomes
-  // a no-op — exactly like real elapsed time would. Needs the real
-  // petStage (defined further down) the same way the real accumulation
-  // check does, and is guarded by isRealEgg for the same reason as the
-  // other dev poop buttons (the function itself also independently
-  // refuses on a real Egg, as a backstop).
-  function handleDevFastForwardAccumulation() {
-    if (!petProfile || isRealEgg) return;
-    const updated = applyDevFastForwardAccumulation(petProfile, petStage);
-    if (updated === petProfile) return;
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  // Dev-only bulk reset — clears every active pile at once (not something
-  // the real per-pile Clean Up buttons ever do) so a test run can start
-  // from a clean floor quickly. Not guarded by isRealEgg: this is a
-  // cleanup tool, not a trigger, and stays useful for clearing stale
-  // piles left over if the pet ever reverts back to Egg (e.g. after
-  // unchecking completed tasks) — same reasoning as Clear Poop/Reset
-  // needsBath already had.
-  function handleDevClearAllPiles() {
-    if (!petProfile) return;
-    const updated = applyClearAllPiles(petProfile);
-    if (updated === petProfile) return;
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-  // Dev-only reset for needsBath — lets "Kitty still needs an actual bath"
-  // be cleared for testing without having to build the real Bathroom
-  // wash/dry sequence first (see @/utils/pet-profile.ts's needsBath field).
-  // Only ever touches needsBath; poopPiles/Cleanliness are untouched.
-  function handleDevResetNeedsBath() {
-    if (!petProfile) return;
-    const updated = { ...petProfile, needsBath: false };
-    savePetProfile(updated);
-    setPetProfile(updated);
-  }
-
   // Simple explanation: runs when the player cleans up one poop pile
   // (by clicking/tapping it — see PetPlaceholder). Updates just that one
   // pile and saves the change.
@@ -491,7 +381,7 @@ export default function HomeScreen() {
   // Deliberately never restores Cleanliness (only bathing does that) and
   // never touches needsBath.
   function handleCleanUpPile(pileId: string) {
-    if (!petProfile || isRealEgg) return;
+    if (!petProfile || isRealEgg || isPoopPaused(petProfile)) return;
     const updated = applyCleanUpPile(petProfile, pileId);
     if (updated === petProfile) return;
     savePetProfile(updated);
@@ -654,7 +544,11 @@ export default function HomeScreen() {
     setTasks((prev) => excludeDateFromTask(prev, id, todayISO()));
   }
 
-  const completedTaskCount = getCompletedTaskCount(tasks);
+  // The pet's stage comes from ITS OWN growth credit (growth is shared between
+  // living pets — see @/utils/pet-family.ts), floored to whole tasks; the global
+  // task count is only a fallback before the profile has loaded.
+  const completedTaskCount =
+    petProfile?.growthCredit !== undefined ? Math.floor(petProfile.growthCredit) : getCompletedTaskCount(tasks);
   // The pet's ACTUAL rendered stage — Egg/Hatchling/Baby still advance
   // automatically for free purely from completedTaskCount (unchanged);
   // Young/Adult only ever show once paid for via growPet() (see
@@ -755,12 +649,34 @@ export default function HomeScreen() {
   // then, so the button re-enables for another replay ("allow me to
   // replay the animation as many times as I want").
   const [devHatchReplayInProgress, setDevHatchReplayInProgress] = useState(false);
+  // Development only: Alerts -> Developer Tools -> "Replay Hatching Animation" asks Home to run
+  // the (purely visual) replay. A request made while Home wasn't open is picked up on mount.
+  const replayHatchRef = useRef<() => void>(() => {});
+  replayHatchRef.current = handleDevReplayHatchAnimation;
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (consumeDevHatchReplayRequest()) replayHatchRef.current();
+    return subscribeToDevHatchReplayRequest(() => {
+      if (consumeDevHatchReplayRequest()) replayHatchRef.current();
+    });
+  }, []);
   // Whether either replay phase is currently forcing the displayed stage
   // (used below for effectiveDisplayedStage/isEffectiveStagePreviewActive)
   // — unlike devHatchReplayInProgress above, this stays true even after
   // the sequence completes, for as long as devHatchIntroPreviewAt is left
   // set (i.e. until the next replay, or leaving Home).
   const isDevHatchReplayDisplayActive = devHatchReplayShowingEgg || devHatchIntroPreviewAt !== null;
+  // The hatching replay is a purely visual override of the pet on screen, so it
+  // must not follow the player to a different pet: switching pets cancels it.
+  useEffect(() => {
+    if (devHatchReplayTimerRef.current) {
+      clearTimeout(devHatchReplayTimerRef.current);
+      devHatchReplayTimerRef.current = null;
+    }
+    setDevHatchReplayShowingEgg(false);
+    setDevHatchIntroPreviewAt(null);
+    setDevHatchReplayInProgress(false);
+  }, [selectedPetId]);
   // While either replay phase is active, it forces the stage actually
   // shown to Egg (first) then Hatchling (next) — entirely separate from,
   // and never writing to, the real petProfile.hatchedAt/completedTaskCount
@@ -783,37 +699,27 @@ export default function HomeScreen() {
   // See the isRealEgg comment above — this is the display-only half of
   // the Egg gating, used purely to decide which props reach <PetRoom>.
   const isDisplayedEgg = effectiveDisplayedStage === 'Egg';
+  // A deceased pet keeps its picture and accessories but has no needs, piles or
+  // care buttons (see @/utils/pet-family.ts). Resurrection lives in the pet
+  // family bar.
+  const isDeceased = petProfile?.lifeState === 'deceased';
+  const hideCare = isDisplayedEgg || isDeceased;
+  // Poop clean-up is paused while this pet is Sick or Critical (its piles stay).
+  const poopPaused = petProfile ? isPoopPaused(petProfile) : false;
 
-  // Simple explanation: watches for the REAL moment the Egg hatches into a
-  // Hatchling, and saves that exact timestamp (hatchedAt) the first time
-  // it happens — this is what PetPlaceholder later compares against to
-  // decide whether to still show the temporary "just hatched" picture.
-  //
-  // Detects the crossing (not just "is currently Hatchling") by comparing
-  // petStage (the REAL stage, never the preview) against the previous
-  // render's real stage, stored in a ref — this is deliberately NOT a
-  // lazy "if Hatchling-or-later and hatchedAt is empty, backfill it now"
-  // check, since that would wrongly set hatchedAt to "now" (and replay the
-  // intro) for an existing pet that hatched long ago, before this field
-  // existed. prevRealStageRef starting at null (nothing seen yet) is what
-  // correctly skips a returning player who's already past Egg on their
-  // very first render this session — only a LIVE Egg-to-Hatchling
-  // transition, observed while the app is actually open, ever sets this.
-  const prevRealStageRef = useRef<PetStage | null>(null);
-  useEffect(() => {
-    const previous = prevRealStageRef.current;
-    prevRealStageRef.current = petStage;
-    if (!petProfile) return;
-    if (previous === 'Egg' && petStage === 'Hatchling' && !petProfile.hatchedAt) {
-      const updated = { ...petProfile, hatchedAt: new Date().toISOString() };
-      savePetProfile(updated);
-      setPetProfile(updated);
-    }
-  }, [petStage, petProfile]);
+  // The hatch date (hatchedAt) is no longer recorded here: it's saved by the
+  // shared pet family code (awardGrowthForTasks in @/utils/pet-family.ts,
+  // called when a newly completed task is rewarded) the moment a pet's
+  // growth moves it from Egg to Hatchling, whichever screen is open. This screen just reads
+  // petProfile.hatchedAt (kept current by subscribeToPetProfile) to decide
+  // whether to still show the temporary "just hatched" picture.
 
   // Reactive task messages take priority while active; otherwise the pet's
   // bubble shows the ambient mood message.
-  const displayedPetMessage = temporaryMessage ?? moodMessage;
+  // A sick, critical or deceased pet's own message comes before the usual mood line.
+  // A passed-away pet shows no speech bubble: the memorial card under the navigation already says
+  // it (and carries the resurrection button), so the same sentence above the tombstone was a duplicate.
+  const displayedPetMessage = isDeceased ? null : (temporaryMessage ?? getPetLifeMessage(petProfile) ?? moodMessage);
 
   // "Today's Tasks" and "Today's Appointments" show only what's actually
   // scheduled for today — including today's occurrence of any repeating
@@ -871,299 +777,115 @@ export default function HomeScreen() {
     />
   );
 
-  // TEMPORARY test control for the new paid growth system — see
-  // handleGrow above. Only shown once the pet is actually eligible for a
-  // paid upgrade (or while a grow attempt is in flight/just finished), so
-  // it stays out of the way for Egg/Hatchling/Baby and for an
-  // already-maxed Adult pet.
-  const renderedStageIndex = getRenderedStageIndex(completedTaskCount, petProfile?.paidStageIndex ?? 0);
-  const growthEligibility = getGrowthEligibility(renderedStageIndex, completedTaskCount);
-  const growTestControl =
-    growthEligibility.canGrow || growResultMessage || DEV_ENABLE_TEST_PAW_TOKEN_GRANT ? (
-      <ThemedView type="peachOverlay" style={styles.growTestCard}>
-        <ThemedText type="small" themeColor="textSecondary">
-          Temporary test control — paid growth system
-        </ThemedText>
-        {DEV_ENABLE_TEST_PAW_TOKEN_GRANT ? (
-          <Pressable onPress={handleDevAddTestTokens}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">{`Dev: +${DEV_TEST_PAW_TOKEN_GRANT_AMOUNT} Paw Tokens`}</ThemedText>
-            </ThemedView>
-          </Pressable>
-        ) : null}
-        {growthEligibility.canGrow ? (
-          <Pressable onPress={handleGrow} disabled={isGrowing}>
-            <ThemedView type="accent" style={styles.growTestButton}>
-              <ThemedText type="smallBold" style={styles.growTestButtonText}>
-                {isGrowing
-                  ? 'Growing…'
-                  : `Grow to ${growthEligibility.nextStage} (${growthEligibility.cost} 🐾)`}
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
-        ) : null}
-        {growResultMessage ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {growResultMessage}
-          </ThemedText>
-        ) : null}
-      </ThemedView>
-    ) : null;
-
-  // TEMPORARY test control for the Egg-to-Hatchling hatching transition —
-  // see handleDevReplayHatchAnimation above and
-  // DEV_ENABLE_HATCH_INTRO_PREVIEW in @/utils/dev-flags.ts. Entirely
-  // gated behind that one flag, same as the other dev cards here — never
-  // rendered at all while it's false, so normal players never see it.
-  // disabled (while devHatchReplayInProgress) both greys the button out
-  // and makes React Native ignore extra taps, so a replay already in
-  // progress can't be started again on top of itself — note this is
-  // specifically about the SEQUENCE still running, not about whether the
-  // resulting Hatchling artwork is still being shown afterward (see
-  // devHatchReplayInProgress's own comment above), so the button is
-  // pressable again well before the next real/regular-preview stage
-  // change would otherwise replace what's on screen.
-  const hatchReplayTestControl = DEV_ENABLE_HATCH_INTRO_PREVIEW ? (
-    <ThemedView type="peachOverlay" style={styles.growTestCard}>
-      <ThemedText type="small" themeColor="textSecondary">
-        Temporary test control — hatching transition
-      </ThemedText>
-      <Pressable onPress={handleDevReplayHatchAnimation} disabled={devHatchReplayInProgress}>
-        <ThemedView type="sky" style={styles.growTestButton}>
-          <ThemedText type="smallBold">
-            {devHatchReplayInProgress ? 'Replaying…' : 'Dev: Replay Hatching Animation'}
-          </ThemedText>
-        </ThemedView>
-      </Pressable>
-    </ThemedView>
-  ) : null;
-
-  // TEMPORARY test control for the Dirty Kitty appearance system — see the
-  // 4 handlers above and DEV_ENABLE_DIRTY_TEST_CONTROLS in
-  // @/utils/dev-flags.ts. Entirely gated behind that one flag, same as the
-  // Paw Token grant button above — never rendered at all while it's false.
-  const dirtyTestControl = DEV_ENABLE_DIRTY_TEST_CONTROLS ? (
-    <ThemedView type="peachOverlay" style={styles.growTestCard}>
-      <ThemedText type="small" themeColor="textSecondary">
-        Temporary test control — Dirty Kitty
-      </ThemedText>
-      <Pressable onPress={handleDevSetDirtyCleanliness}>
-        <ThemedView type="sky" style={styles.growTestButton}>
-          <ThemedText type="smallBold">{`Dev: Set Cleanliness to ${DEV_DIRTY_TEST_CLEANLINESS_VALUE}%`}</ThemedText>
-        </ThemedView>
-      </Pressable>
-      <Pressable onPress={handleDevRestoreCleanliness}>
-        <ThemedView type="sky" style={styles.growTestButton}>
-          <ThemedText type="smallBold">Dev: Restore Cleanliness to 100%</ThemedText>
-        </ThemedView>
-      </Pressable>
-      {/* The pile-ADDING/accumulating buttons specifically are hidden
-          while the real pet is still an Egg (isRealEgg — the real saved
-          stage, never the Stage Preview) — the real accumulation system
-          already refuses to add a pile on a real Egg (see
-          applyPoopAccumulation in @/utils/pet-poop.ts), so these dev
-          shortcuts shouldn't be able to force one either. Their handlers
-          also independently no-op in that case (see handleDevAddPoopPile/
-          handleDevAddPoopPileSize/handleDevFastForwardAccumulation above)
-          as a backstop. Clear All Piles/Reset needsBath below are
-          deliberately NOT hidden — they're cleanup tools, not triggers,
-          and stay useful for clearing stale poopPiles/needsBath left over
-          from before the pet reverted back to Egg (e.g. after unchecking
-          completed tasks). */}
-      {!isRealEgg ? (
-        <>
-          <Pressable onPress={handleDevAddPoopPile}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">Dev: Add Poop Pile (Random Size)</ThemedText>
-            </ThemedView>
-          </Pressable>
-          <Pressable onPress={() => handleDevAddPoopPileSize('small')}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">Dev: Add Small Pile (1 cleanup)</ThemedText>
-            </ThemedView>
-          </Pressable>
-          <Pressable onPress={() => handleDevAddPoopPileSize('medium')}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">Dev: Add Medium Pile (2 cleanups)</ThemedText>
-            </ThemedView>
-          </Pressable>
-          <Pressable onPress={() => handleDevAddPoopPileSize('large')}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">Dev: Add Large Pile (3 cleanups)</ThemedText>
-            </ThemedView>
-          </Pressable>
-          {/* The main way to test accumulation building up to the
-              5-pile max without actually waiting several hours — each
-              press simulates one real POOP_PILE_ACCUMULATION_INTERVAL_HOURS
-              (2h) tick passing, reusing the exact real accumulation logic
-              (see applyDevFastForwardAccumulation's comment in
-              @/utils/pet-poop.ts). Press it repeatedly to watch piles
-              build up to 5, then confirm it stops. */}
-          <Pressable onPress={handleDevFastForwardAccumulation}>
-            <ThemedView type="sky" style={styles.growTestButton}>
-              <ThemedText type="smallBold">Dev: Fast-Forward Accumulation (+2h)</ThemedText>
-            </ThemedView>
-          </Pressable>
-        </>
-      ) : (
-        <ThemedText type="small" themeColor="textSecondary">
-          Poop triggers disabled — Kitty is still an Egg
-        </ThemedText>
-      )}
-      {petProfile?.poopPiles && petProfile.poopPiles.length > 0 ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {`Active piles: ${petProfile.poopPiles.length}/5 (${petProfile.poopPiles.map((p) => p.size).join(', ')})`}
-        </ThemedText>
-      ) : null}
-      <Pressable onPress={handleDevClearAllPiles}>
-        <ThemedView type="sky" style={styles.growTestButton}>
-          <ThemedText type="smallBold">Dev: Clear All Piles</ThemedText>
-        </ThemedView>
-      </Pressable>
-      <Pressable onPress={handleDevResetNeedsBath}>
-        <ThemedView type="sky" style={styles.growTestButton}>
-          <ThemedText type="smallBold">Dev: Reset needsBath</ThemedText>
-        </ThemedView>
-      </Pressable>
-    </ThemedView>
-  ) : null;
-
   return (
     // The living-room background now renders once in src/app/_layout.tsx
     // (behind the header too, on Home), not here — this container stays
     // transparent so that shows through instead of the usual opaque fill.
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        {isWideLayout ? (
-          // Cards flank the open middle of the room: Tasks/Appointments/Mood
-          // on the left, Rooms/Pet Progress on the right, each in its own
-          // ScrollView. The pet sits in a separate, absolutely-positioned
-          // overlay in between — not inside either ScrollView, so it never
-          // moves when either side scrolls. It's rendered first so both
-          // card columns paint on top of it if they ever overlap it.
-          <View style={styles.splitRow}>
-            <View style={styles.petOverlayWide} pointerEvents="box-none">
-              <View style={styles.petOverlaySpacerTop} />
-              <PetRoom
-                stage={effectiveDisplayedStage}
-                message={displayedPetMessage}
-                // The Egg is a pre-hatching stage, not an active pet-care
-                // stage. Gated on isDisplayedEgg (what's CURRENTLY SHOWN —
-                // the real stage OR the Pet Stage Preview override, see
-                // its comment above), not isRealEgg — so previewing the
-                // Egg correctly hides these too, not just a genuinely
-                // unhatched real Egg. Every prop below that either renders
-                // a pet-care control or displays pet-care state is
-                // omitted entirely (passed undefined/null) while
-                // isDisplayedEgg is true, rather than being passed
-                // through and separately disabled, reusing
-                // PetRoom/PetPlaceholder's existing "only render while
-                // this prop is actually provided" convention (the same
-                // one onFeed/onPlay/onRest/onCleanUpPile/poopPiles/ etc.
-                // already follow) — no new conditional rendering logic
-                // needed in either of those components. The handlers
-                // themselves (handleFeed etc.) also separately guard on
-                // isRealEgg — see their own comments — so a real action
-                // can't fire even if some future change made one of these
-                // controls visible again.
-                equippedAccessoryId={isDisplayedEgg ? null : equippedAccessoryId}
-                hunger={isDisplayedEgg ? undefined : petProfile?.hunger}
-                cleanliness={isDisplayedEgg ? undefined : petProfile?.cleanliness}
-                happiness={isDisplayedEgg ? undefined : petProfile?.happiness}
-                energy={isDisplayedEgg ? undefined : petProfile?.energy}
-                poopPiles={isDisplayedEgg ? undefined : petProfile?.poopPiles}
-                needsBath={isDisplayedEgg ? undefined : petProfile?.needsBath}
-                onFeed={isDisplayedEgg ? undefined : handleFeed}
-                isFeeding={isFeeding}
-                onPlay={isDisplayedEgg ? undefined : handlePlay}
-                isPlaying={isPlaying}
-                onRest={isDisplayedEgg ? undefined : handleRest}
-                isResting={isResting}
-                onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
-                hatchedAt={effectiveHatchedAt}
-                isStagePreviewActive={isEffectiveStagePreviewActive}
-                lastBathCompletedAt={isDisplayedEgg ? undefined : petProfile?.lastBathCompletedAt}
-              />
-              <View style={styles.petOverlaySpacerBottom} />
-            </View>
-
-            <ScrollView
-              style={styles.leftScrollPane}
-              contentContainerStyle={styles.leftScrollContent}
-              showsVerticalScrollIndicator={false}>
-              {taskCard}
-              {appointmentsCard}
-              <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
-            </ScrollView>
-
-            <ScrollView
-              style={styles.rightScrollPane}
-              contentContainerStyle={styles.rightScrollContent}
-              showsVerticalScrollIndicator={false}>
-              <RoomsCard />
-              <PetProgress
-                completedTaskCount={completedTaskCount}
-                paidStageIndex={petProfile?.paidStageIndex ?? 0}
-                previewStageIndex={devPreviewStageIndex}
-                onPreviewStage={handleSetDevPreviewStage}
-                onResetPreview={() => handleSetDevPreviewStage(null)}
-              />
-              {growTestControl}
-              {hatchReplayTestControl}
-              {dirtyTestControl}
-            </ScrollView>
+        {/* The kitty is the main focus: the pet, her needs bars and the care buttons sit in
+            the open room. Everything else lives in the two slide-out panels below (their
+            tabs are the only other thing visible on the edges). The pet is in an overlay,
+            not inside any scroll view, so nothing ever moves her. */}
+        <View
+          style={styles.petOverlay}
+          pointerEvents="box-none"
+          onLayout={(event) => setOverlayHeight(event.nativeEvent.layout.height)}>
+          <View style={styles.petOverlaySpacerTop} />
+          <View
+            pointerEvents="box-none"
+            onLayout={(event) => setPetGroupHeight(event.nativeEvent.layout.height)}
+            style={petFitScale < 1 ? { transform: [{ scale: petFitScale }], transformOrigin: 'top' } : undefined}>
+          <PetRoom
+            // Phone width: a lowered Sick / Critical kitty gets real space under her (so the bars and
+            // care buttons below it move down and the group still fits); desktop keeps the visual shift.
+            reserveHealthSpace={width < 700}
+            stage={effectiveDisplayedStage}
+            message={displayedPetMessage}
+            // The Egg is a pre-hatching stage, not an active pet-care
+            // stage. Gated on isDisplayedEgg (what's CURRENTLY SHOWN —
+            // the real stage OR the Pet Stage Preview override, see
+            // its comment above), not isRealEgg — so previewing the
+            // Egg correctly hides these too, not just a genuinely
+            // unhatched real Egg. Every prop below that either renders
+            // a pet-care control or displays pet-care state is
+            // omitted entirely (passed undefined/null) while
+            // isDisplayedEgg is true, rather than being passed
+            // through and separately disabled, reusing
+            // PetRoom/PetPlaceholder's existing "only render while
+            // this prop is actually provided" convention. The handlers
+            // themselves (handleFeed etc.) also separately guard on
+            // isRealEgg — see their own comments — so a real action
+            // can't fire even if some future change made one of these
+            // controls visible again.
+            equippedAccessoryIds={isDisplayedEgg ? undefined : equippedAccessoryIds}
+            isMemorial={isDeceased}
+            healthState={petProfile?.lifeState}
+            hunger={hideCare ? undefined : petProfile?.hunger}
+            cleanliness={hideCare ? undefined : petProfile?.cleanliness}
+            happiness={hideCare ? undefined : petProfile?.happiness}
+            energy={hideCare ? undefined : petProfile?.energy}
+            poopPiles={hideCare ? undefined : petProfile?.poopPiles}
+            needsBath={hideCare ? undefined : petProfile?.needsBath}
+            onFeed={hideCare ? undefined : handleFeed}
+            isFeeding={isFeeding}
+            onPlay={hideCare ? undefined : handlePlay}
+            isPlaying={isPlaying}
+            onRest={hideCare ? undefined : handleRest}
+            isResting={isResting}
+            onCleanUpPile={hideCare || poopPaused ? undefined : handleCleanUpPile}
+            hatchedAt={effectiveHatchedAt}
+            isStagePreviewActive={isEffectiveStagePreviewActive}
+            lastBathCompletedAt={hideCare ? undefined : petProfile?.lastBathCompletedAt}
+            toyId={hideCare ? undefined : toySession?.toyId}
+          />
           </View>
-        ) : (
-          // Same idea stacked vertically: the pet sits in a fixed strip at
-          // the top, and everything else scrolls independently beneath it.
-          <View style={styles.narrowStack}>
-            <View style={[styles.fixedPetTop, isDisplayedEgg && styles.fixedPetTopEggClearance]}>
-              <PetRoom
-                stage={effectiveDisplayedStage}
-                message={displayedPetMessage}
-                // Same Egg gating as the wide-layout <PetRoom> above — see
-                // its comment there for the full isRealEgg/isDisplayedEgg
-                // explanation.
-                equippedAccessoryId={isDisplayedEgg ? null : equippedAccessoryId}
-                hunger={isDisplayedEgg ? undefined : petProfile?.hunger}
-                cleanliness={isDisplayedEgg ? undefined : petProfile?.cleanliness}
-                happiness={isDisplayedEgg ? undefined : petProfile?.happiness}
-                energy={isDisplayedEgg ? undefined : petProfile?.energy}
-                poopPiles={isDisplayedEgg ? undefined : petProfile?.poopPiles}
-                needsBath={isDisplayedEgg ? undefined : petProfile?.needsBath}
-                onFeed={isDisplayedEgg ? undefined : handleFeed}
-                isFeeding={isFeeding}
-                onPlay={isDisplayedEgg ? undefined : handlePlay}
-                isPlaying={isPlaying}
-                onRest={isDisplayedEgg ? undefined : handleRest}
-                isResting={isResting}
-                onCleanUpPile={isDisplayedEgg ? undefined : handleCleanUpPile}
-                hatchedAt={effectiveHatchedAt}
-                isStagePreviewActive={isEffectiveStagePreviewActive}
-                lastBathCompletedAt={isDisplayedEgg ? undefined : petProfile?.lastBathCompletedAt}
-              />
-            </View>
-            <ScrollView
-              style={styles.scrollPane}
-              contentContainerStyle={styles.narrowScrollContent}
-              showsVerticalScrollIndicator={false}>
-              <PetProgress
-                completedTaskCount={completedTaskCount}
-                paidStageIndex={petProfile?.paidStageIndex ?? 0}
-                previewStageIndex={devPreviewStageIndex}
-                onPreviewStage={handleSetDevPreviewStage}
-                onResetPreview={() => handleSetDevPreviewStage(null)}
-              />
-              {growTestControl}
-              {hatchReplayTestControl}
-              {dirtyTestControl}
-              {taskCard}
-              {appointmentsCard}
-              <TodayMood mood={mood} message={moodMessage} onSelectMood={setMood} />
-              <RoomsCard />
-            </ScrollView>
-          </View>
-        )}
+          <View style={styles.petOverlaySpacerBottom} />
+        </View>
+
+        {/* Left: Pet Progress (level, growth bar, tasks to the next stage, the five stages and
+            the development-only Pet Stage Preview). */}
+        <SlideOutPanel
+          side="left"
+          label="Pet Progress"
+          icon="paw"
+          tint="#DCCBF5"
+          panelBackground="#F6F0FD"
+          panelWidth={panelWidth}
+          tabTop={0.3}
+          open={openPanel === 'progress'}
+          tabHidden={openPanel === 'features'}
+          onOpen={() => setOpenPanel('progress')}
+          onClose={() => setOpenPanel((current) => (current === 'progress' ? null : current))}>
+          <PetProgress
+            completedTaskCount={completedTaskCount}
+            paidStageIndex={petProfile?.paidStageIndex ?? 0}
+            previewStageIndex={devPreviewStageIndex}
+            onPreviewStage={handleSetDevPreviewStage}
+            onResetPreview={() => handleSetDevPreviewStage(null)}
+          />
+        </SlideOutPanel>
+
+        {/* Right: Home Features (Today's Tasks, Appointments, Today's Mood and — in landscape
+            only — the Rooms shortcut; portrait already has the Rooms tab in the top navigation). */}
+        <SlideOutPanel
+          side="right"
+          label="Home Features"
+          icon="home"
+          tint="#FBC9DB"
+          panelBackground="#FFF1F6"
+          panelWidth={panelWidth}
+          tabTop={0.3}
+          open={openPanel === 'features'}
+          tabHidden={openPanel === 'progress'}
+          onOpen={() => setOpenPanel('features')}
+          onClose={() => setOpenPanel((current) => (current === 'features' ? null : current))}>
+          <ToyPlayCard />
+          {taskCard}
+          {appointmentsCard}
+          <TodayMood mood={mood} message={moodMessage} onSelectMood={handleSelectMood} />
+          {!isPortrait ? <RoomsCard /> : null}
+        </SlideOutPanel>
       </SafeAreaView>
 
       {/* Full-screen, non-interactive celebration layer — sits above every
@@ -1182,109 +904,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: 'transparent',
   },
-  // TEMPORARY — styles for the test-only Grow control (see
-  // growTestControl/handleGrow above).
-  growTestCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  growTestButton: {
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    alignItems: 'center',
-  },
-  growTestButtonText: {
-    color: '#FFFFFF',
-  },
   confettiOverlay: {
     ...StyleSheet.absoluteFill,
   },
+  // overflow hidden: a closed panel waits just off-screen, and must never make the page scroll
+  // sideways.
   safeArea: {
     flex: 1,
     width: '100%',
+    overflow: 'hidden',
   },
-  scrollPane: {
-    flex: 1,
-  },
-  // Wide/desktop: cards flank the open middle of the room (Tasks/
-  // Appointments/Mood on the left, Rooms/Pet Progress on the right), each
-  // scrolling independently, with the middle left open for the pet.
-  splitRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.four,
-  },
-  leftScrollPane: {
-    width: '24%',
-    minWidth: 270,
-    maxWidth: 320,
-  },
-  leftScrollContent: {
-    gap: Spacing.four,
-    paddingBottom: Spacing.four,
-  },
-  rightScrollPane: {
-    width: '26%',
-    minWidth: 240,
-    maxWidth: 340,
-  },
-  rightScrollContent: {
-    gap: Spacing.four,
-    paddingBottom: Spacing.four,
-  },
-  // Absolutely positioned so it never scrolls with either card column;
-  // rendered before them in the JSX so both columns paint over it if they
-  // ever overlap it. The top/bottom spacers bias the pet toward the lower
-  // portion of the room, roughly where the rug sits in the background art.
-  petOverlayWide: {
+  // Absolutely positioned so nothing ever scrolls or moves the pet. The spacers bias her
+  // toward the lower part of the room, roughly where the rug sits in the background art.
+  petOverlay: {
     ...StyleSheet.absoluteFill,
+    paddingHorizontal: Spacing.five,
   },
   petOverlaySpacerTop: {
     flexGrow: 5,
   },
   petOverlaySpacerBottom: {
     flexGrow: 1,
-  },
-  // Narrow/mobile: a non-scrolling column split into a fixed pet strip on
-  // top and a scrollable card stack below it.
-  narrowStack: {
-    flex: 1,
-  },
-  fixedPetTop: {
-    width: '100%',
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  // Only applied on top of fixedPetTop while the Egg is what's actually
-  // displayed (narrow/mobile layout only — the wide/desktop layout
-  // already has plenty of headroom above the pet via petOverlaySpacerTop
-  // below, so it doesn't need this). The Egg picture renders higher and
-  // bigger than its own box (see EGG_OFFSET_Y_PX/EGG_SCALE in
-  // @/components/pet-placeholder.tsx — currently -90px and 1.625x) via a
-  // transform, which doesn't get clipped by anything, but on a narrow
-  // phone the normal 16px top padding alone isn't enough room for that to
-  // stay fully on-screen above the SafeAreaView's own top edge. This
-  // extra padding pushes the whole fixed strip (and therefore the Egg's
-  // own box) down first, so the subsequent upward transform still lands
-  // comfortably on-screen instead of clipping off the top (kept generous
-  // rather than retuned to the exact current numbers, since it only ever
-  // applies while the Egg is displayed and costs nothing but some
-  // otherwise-empty space above it). Reverts to the normal fixedPetTop
-  // padding the instant any other stage is displayed — Hatchling/Baby/
-  // Young/Adult's own positioning is completely untouched by this.
-  fixedPetTopEggClearance: {
-    paddingTop: Spacing.three + 150,
-  },
-  narrowScrollContent: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.four,
-    gap: Spacing.four,
   },
 });

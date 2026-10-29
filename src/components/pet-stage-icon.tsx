@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
-import type { PetStage } from '@/utils/pet-stage';
+import { getArtworkStage, type PetStage } from '@/utils/pet-stage';
 
 type PetStageIconProps = {
   stage: PetStage;
@@ -27,7 +27,8 @@ const STAGE_CENTER_X: Record<PetStage, number> = {
 
 export function PetStageIcon({ stage, size = 44 }: PetStageIconProps) {
   const scale = size / CROP_SIZE;
-  const cropLeft = STAGE_CENTER_X[stage] - CROP_SIZE / 2;
+  // Follows the Hatchling/Baby artwork swap so the icon matches the kitty.
+  const cropLeft = STAGE_CENTER_X[getArtworkStage(stage)] - CROP_SIZE / 2;
 
   return (
     <View style={[styles.frame, { width: size, height: size, borderRadius: size / 2 }]}>

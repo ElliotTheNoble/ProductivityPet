@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 import { todayISO } from '@/utils/tasks';
+import { recordTokenEarning } from '@/utils/token-history';
 import { MEMORY_MATCH_DIFFICULTIES, type MemoryMatchDifficulty } from '@/utils/memory-match';
 
 // Persistent per-difficulty Best Moves + reward-granting for a completed
@@ -226,6 +227,9 @@ async function runCompleteRound(
     pawTokens: profileBeforeReward.pawTokens + totalPawTokensAwarded,
   };
   savePetProfile(updatedProfile);
+  // Earnings history only (@/utils/token-history.ts) — the amounts above are unchanged.
+  if (completionReward.amount > 0) recordTokenEarning({ amount: completionReward.amount, source: 'memory-match', refId: 'completion-reward' }).catch(() => {});
+  if (newBestBonus.amount > 0) recordTokenEarning({ amount: newBestBonus.amount, source: 'memory-match', refId: 'new-best-bonus' }).catch(() => {});
 
   if (previousBest === null || moves < previousBest) {
     saveBestMoves({ ...bestMovesRecord, [difficulty]: bestMoves });

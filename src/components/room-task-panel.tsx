@@ -168,10 +168,17 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
 
   if (!isExpanded) {
     return (
-      <Pressable onPress={() => setIsExpanded(true)} style={({ pressed }) => pressed && styles.pressed}>
-        <ThemedView
-          type="backgroundElementOverlay"
-          style={[styles.collapsedPill, isLeft ? { left: Spacing.three } : { right: Spacing.three }]}>
+      // The Pressable itself is what is absolutely positioned: positioning only the
+      // pill inside it anchored it to the Pressable's own (zero-height) in-flow spot
+      // near the top of the screen, where it covered the pet chips on a phone.
+      <Pressable
+        onPress={() => setIsExpanded(true)}
+        style={({ pressed }) => [
+          styles.collapsedPillAnchor,
+          isLeft ? { left: Spacing.three } : { right: Spacing.three },
+          pressed && styles.pressed,
+        ]}>
+        <ThemedView type="backgroundElementOverlay" style={styles.collapsedPill}>
           <ThemedText type="smallBold">
             📋 {roomName} ({completedCount}/{totalCount})
           </ThemedText>
@@ -249,9 +256,11 @@ const styles = StyleSheet.create({
     maxHeight: '55%',
   },
   // left/right supplied inline (see JSX above), not here.
-  collapsedPill: {
+  collapsedPillAnchor: {
     position: 'absolute',
-    bottom: 72,
+    bottom: Spacing.two,
+  },
+  collapsedPill: {
     borderRadius: Spacing.five,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,

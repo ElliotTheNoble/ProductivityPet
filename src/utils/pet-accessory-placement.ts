@@ -1,4 +1,4 @@
-import type { PetStage } from '@/utils/pet-stage';
+import { getArtworkStage, type PetStage } from '@/utils/pet-stage';
 
 // How a worn accessory is positioned/sized within the pet's own
 // responsive box (see accessoryFrame in pet-placeholder.tsx) — expressed
@@ -111,7 +111,7 @@ const PLACEMENT_TABLE: PlacementTable = {
       // -48% → -49%); width/height/marginTop/rotate unchanged. Still
       // pending full visual confirmation.
       Young: { width: '24%', marginTop: '56%', marginLeft: '-49%', rotate: '6deg' },
-      Adult: { width: '24%', marginTop: '82%' },
+      Adult: { width: '24%', marginTop: '50.8889%', marginLeft: '-34.2856%' }, // was 82% (Baby's copy); 25px up (→ 74.0635%), 100px up (→ 42.3175%), 5px down + 5px left (→ 43.9048% / -3.1746%), 10px down + 10px left twice (→ 50.254% / -15.873%), 10px left twice (→ -28.5714%), 5px down (→ 51.8413%), 3px up (→ 50.8889%), 2px left (→ -29.8412%), 2px left again (→ -31.111%), then 5px left (marginLeft → -34.2856%); px are % of the 315px pet box
     },
     // No headHat entry here — unlike bows, hats vary too much in shape to
     // share one placement safely (confirmed by the Rainbow Party Hat
@@ -128,6 +128,21 @@ const PLACEMENT_TABLE: PlacementTable = {
   // way as 'home' above, once that work actually starts — one stage at a
   // time, each one visually confirmed the same way Home's Baby was.
 };
+
+// The Hatchling and Baby kitty ARTWORK were swapped (each stage now draws
+// the other's picture — see getStageImage in
+// @/components/pet-placeholder.tsx), but every placement entry below and in
+// @/utils/pet-accessories.ts was tuned against the picture, not the stage
+// name. So placements must follow the artwork: the Hatchling stage (which
+// now shows the former Baby kitty) reads the entries labelled 'Baby', and
+// the Baby stage (former Hatchling kitty) reads the entries labelled
+// 'Hatchling'. Callers pass their real stage through this before any
+// placement lookup, so no tuned value had to be moved or rewritten. All
+// other stages map to themselves. If the artwork swap is ever undone, make
+// this return `stage` unchanged.
+export function getPlacementStageForArtwork(stage: PetStage): PetStage {
+  return getArtworkStage(stage);
+}
 
 // Looks up where a given accessory slot should sit for a given pet stage
 // on a given surface (Home vs Stats). Returns undefined if that specific

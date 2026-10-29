@@ -3,6 +3,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GentleWipeGame } from '@/components/gentle-wipe-game';
 import { BATHING_INSTRUCTIONS, BathingMiniGame, TOTAL_BATHING_TARGETS, type BathingPhase } from '@/components/bathing-mini-game';
 import { RoomPet } from '@/components/room-pet';
 import { RoomTaskPanel } from '@/components/room-task-panel';
@@ -12,10 +13,19 @@ import { Spacing } from '@/constants/theme';
 import { BATHING_STEP_COUNTS, type BathingStep } from '@/utils/bathing-stage-art';
 import { getActiveSoapItem } from '@/utils/bathing-soap';
 import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
+import { usePetFamily } from '@/hooks/use-pet-family';
+import { RECOVERY_NEED_THRESHOLD, WASHCLOTH_PRICE } from '@/utils/pet-family-config';
+import { getCareSupplies } from '@/utils/pet-family';
 import { getRenderedStage } from '@/utils/pet-growth';
-import { BATH_DRY_HOLD_MS, completeBathing, isShowingBathDryHold as getIsShowingBathDryHold } from '@/utils/pet-bathing';
+import {
+  BATH_DRY_HOLD_MS,
+  completeBathing,
+  gentleWipePet,
+  isBathingPaused,
+  isShowingBathDryHold as getIsShowingBathDryHold,
+} from '@/utils/pet-bathing';
 import { isPetDirty } from '@/utils/pet-needs';
-import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
+import { getPetProfile, subscribeToPetProfile, type PetProfile } from '@/utils/pet-profile';
 import { PET_STAGES } from '@/utils/pet-stage';
 import { resolveRoomPetPlacement } from '@/utils/room-pet-placement';
 import { getRoomTasks } from '@/utils/room-tasks';
@@ -58,6 +68,8 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   // Needed by resolveRoomPetPlacement below (Bedroom's wide-desktop nudge
   // is the only placement that currently depends on it).
   const { width } = useWindowDimensions();
+  // Phone-width window (same breakpoint the Home screen uses for its narrow layout).
+  const isPhone = width < 700;
 
   // The pet's real stage, same formula Home uses — loaded fresh on every
   // mount (this screen remounts per room navigation, same convention as
@@ -74,6 +86,10 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
         if (!cancelled) setPetProfile(profile);
       })
       .catch(() => {});
+    // Follow the selected pet (and its needs) if it changes while this room is open.
+    const offProfile = subscribeToPetProfile((profile) => {
+      if (!cancelled) setPetProfile(profile);
+    });
     getCachedTasks()
       .then((cached) => {
         if (!cancelled) setTasks(cached);
@@ -81,9 +97,14 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
       .catch(() => {});
     return () => {
       cancelled = true;
+      offProfile();
     };
   }, []);
-  const realStage = getRenderedStage(getCompletedTaskCount(tasks), petProfile?.paidStageIndex ?? 0);
+  // Stage from the selected pet's own growth credit (see @/utils/pet-family.ts).
+  const realStage = getRenderedStage(
+    petProfile?.growthCredit !== undefined ? Math.floor(petProfile.growthCredit) : getCompletedTaskCount(tasks),
+    petProfile?.paidStageIndex ?? 0
+  );
 
   // Mirrors the same dev-only Pet Stage Preview selected on Home's Pet
   // Progress panel (see @/utils/dev-stage-preview.ts for why this needs to
@@ -177,8 +198,39 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   // until Rinse is fully done, and neither can be re-selected once its
   // own phase is already done — Soap is the one deliberate exception (see
   // below).
+  // Bathing is paused while this pet is Sick or Critical; it gets a free
+  // Gentle Wipe-Down instead (see below) so it can still recover.
+  const bathingPaused = petProfile ? isBathingPaused(petProfile) : false;
+  // A passed-away pet shows the memorial and offers no care tools or mini-games in any room.
+  const petDeceased = petProfile?.lifeState === 'deceased';
+  // Each completed Gentle Wipe-Down uses up one Gentle Washcloth, bought in the Shop with Paw Tokens
+  // earned from tasks (opening the Bathroom, getting sick or leaving a session unfinished never uses
+  // one). Without one the wipe-down isn't offered.
+  const family = usePetFamily();
+  const washcloths = getCareSupplies(family).washcloth;
+  const tokens = family?.wallet.pawTokens ?? 0;
+  const [shopButtonHover, setShopButtonHover] = useState(false);
+  // The wipe-down is only offered while Cleanliness is below the recovery threshold (live: it follows
+  // the selected pet's current value, so it appears/disappears the moment Cleanliness crosses 50).
+  const wipeNeeded = petProfile ? petProfile.cleanliness < RECOVERY_NEED_THRESHOLD : false;
+  const needsWashcloth = wipeNeeded && washcloths === 0;
+  useEffect(() => {
+    if (bathingPaused) setActiveTool(null);
+  }, [bathingPaused]);
+
+  // Called once per finished wipe-down session (see GentleWipeGame): awards
+  // exactly one +25 Cleanliness, free, and nothing else.
+  // Only the Bathroom ever shows the wipe-down (see below), and a session is tied to
+  // the pet it started with, so it can never award Cleanliness elsewhere.
+  function handleWipeSessionComplete(sessionPetId: string | undefined) {
+    if (room.slug !== 'bathroom') return;
+    gentleWipePet(new Date(), sessionPetId)
+      .then((updated) => setPetProfile(updated))
+      .catch(() => {});
+  }
+
   function handleSelectTool(tool: BathingPhase) {
-    if (room.slug !== 'bathroom' || displayedStage === 'Egg') return;
+    if (room.slug !== 'bathroom' || displayedStage === 'Egg' || bathingPaused || petDeceased) return;
     if (tool === 'soap' && isSoapDone) {
       // Explicitly choosing to START A NEW BATH: all three phases stay at
       // 100% after a completed bath (see the completion effect below —
@@ -380,9 +432,13 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
       <SafeAreaView style={styles.safeArea}>
         <Pressable
           onPress={() => router.push('/rooms')}
-          style={({ pressed }) => [styles.backButtonPressable, pressed && styles.pressed]}>
-          <ThemedView type="accent" style={styles.backButton}>
-            <ThemedText type="smallBold" style={styles.backButtonText}>
+          style={({ pressed }) => [
+            styles.backButtonPressable,
+            isPhone && styles.backButtonPressablePhone,
+            pressed && styles.pressed,
+          ]}>
+          <ThemedView type="accent" style={[styles.backButton, isPhone && styles.backButtonPhone]}>
+            <ThemedText type="smallBold" style={[styles.backButtonText, isPhone && styles.backButtonTextPhone]}>
               ← Back to Rooms
             </ThemedText>
           </ThemedView>
@@ -412,15 +468,60 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
               stage={displayedStage}
               isDirty={isDirty}
               needsBath={petProfile?.needsBath}
+              healthState={petProfile?.lifeState}
               bathingFrame={bathingFrame}
               isShowingBathDryHold={isShowingBathDryHold}
             />
+            {/* While Sick / Critical the normal bath is replaced by the Gentle
+                Wipe-Down mini-game (free, +25 Cleanliness per finished session). */}
+            {/* Bathroom ONLY: in every other room a Sick / Critical kitty is shown
+                normally, with no washcloth, progress bar or wiping. The key restarts
+                the session if the room or the selected pet changes. */}
+            {room.slug === 'bathroom' && bathingPaused && displayedStage !== 'Egg' && wipeNeeded && !needsWashcloth ? (
+              <GentleWipeGame
+                key={`${room.slug}-${petProfile?.petId ?? 'pet'}`}
+                onComplete={() => handleWipeSessionComplete(petProfile?.petId)}
+                canWipeAgain={wipeNeeded && washcloths > 0}
+              />
+            ) : null}
+            {room.slug === 'bathroom' && bathingPaused && displayedStage !== 'Egg' && !petDeceased && !wipeNeeded ? (
+              <View style={styles.washclothNotice} pointerEvents="box-none">
+                <ThemedView type="peachOverlay" style={styles.washclothCard}>
+                  <ThemedText type="smallBold">Your kitty doesn't need a gentle bath right now.</ThemedText>
+                </ThemedView>
+              </View>
+            ) : null}
+            {room.slug === 'bathroom' && bathingPaused && displayedStage !== 'Egg' && needsWashcloth ? (
+              <View style={styles.washclothNotice} pointerEvents="box-none">
+                <ThemedView type="peachOverlay" style={styles.washclothCard}>
+                  <ThemedText type="smallBold">Your kitty needs a Gentle Washcloth.</ThemedText>
+                  <ThemedText type="small">
+                    {tokens >= WASHCLOTH_PRICE
+                      ? `Get one in the Shop for ${WASHCLOTH_PRICE} Paw Tokens.`
+                      : 'Not enough Paw Tokens! Complete tasks to earn more.'}
+                  </ThemedText>
+                  <View style={styles.washclothButtons}>
+                    <Pressable
+                      onPress={() => router.push(`/shop?tab=care&t=${Date.now()}`)}
+                      onHoverIn={() => setShopButtonHover(true)}
+                      onHoverOut={() => setShopButtonHover(false)}
+                      style={({ pressed }) => pressed && styles.pressed}>
+                      <ThemedView type="accent" style={[styles.washclothButton, shopButtonHover && styles.washclothButtonHover]}>
+                        <ThemedText type="smallBold" style={styles.backButtonText}>
+                          Go to Shop
+                        </ThemedText>
+                      </ThemedView>
+                    </Pressable>
+                  </View>
+                </ThemedView>
+              </View>
+            ) : null}
             {/* Only mounted while a tool is actually selected — see
                 handleSelectTool above. stage is narrowed away from 'Egg'
                 by the same displayedStage !== 'Egg' check the tool
                 buttons below are already gated on, so this never renders
                 for an Egg. */}
-            {activeTool && displayedStage !== 'Egg' ? (
+            {activeTool && displayedStage !== 'Egg' && !petDeceased ? (
               <BathingMiniGame
                 phase={activeTool}
                 toolIcon={activeTool === 'soap' ? soapItem.icon : activeTool === 'rinse' ? HOSE_ICON : BLOW_DRYER_ICON}
@@ -470,7 +571,21 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
             right/collapsed on mobile — see
             @/components/room-task-panel.tsx), never the horizontal center
             this row lives in. */}
-        {room.slug === 'bathroom' && displayedStage !== 'Egg' ? (
+        {/* On phones the same instruction is shown inside the health banner at the top
+            (see @/components/pet-family-bar.tsx), so this separate message is hidden
+            there instead of overlapping it. */}
+        {room.slug === 'bathroom' && displayedStage !== 'Egg' && bathingPaused && !isPhone && wipeNeeded && !needsWashcloth ? (
+          <View style={styles.washButtonRow} pointerEvents="box-none">
+            <ThemedView type="peachOverlay" style={styles.instructionBanner}>
+              <ThemedText type="smallBold">
+                Too poorly for a bath — drag the washcloth gently over her to freshen her up
+                {petProfile ? ` (Cleanliness ${Math.round(petProfile.cleanliness)}%)` : ''}.
+              </ThemedText>
+            </ThemedView>
+          </View>
+        ) : null}
+
+        {room.slug === 'bathroom' && displayedStage !== 'Egg' && !bathingPaused && !petDeceased ? (
           <View style={styles.washButtonRow} pointerEvents="box-none">
             {/* Only shown while a tool is actually selected — there's no
                 "glowing circle" to point at otherwise. Wording changes per
@@ -527,7 +642,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
           tasks={roomTasks}
           onToggleTask={handleToggleRoomTask}
           onAddTask={handleAddRoomTask}
-          side={room.slug === 'kitchen' ? 'left' : undefined}
+          side={room.slug === 'kitchen' && !isPhone ? 'left' : undefined}
         />
       </SafeAreaView>
     </ThemedView>
@@ -603,6 +718,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
   },
+  // Phone: a smaller pill tucked into the bottom-left corner so it stays clear of the
+  // pet (still about 36 px tall, an easy tap target; desktop is untouched).
+  backButtonPressablePhone: {
+    left: Spacing.two,
+    bottom: Spacing.two,
+  },
+  backButtonPhone: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one + 2,
+  },
+  backButtonTextPhone: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
   pressed: {
     opacity: 0.7,
   },
@@ -637,6 +766,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     paddingHorizontal: Spacing.three,
+  },
+  // Just above the kitty's box (so it doesn't hide her), shown instead of the wipe-down while there
+  // is no washcloth.
+  washclothNotice: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: '92%',
+    alignItems: 'center',
+  },
+  washclothCard: {
+    maxWidth: 300,
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    gap: Spacing.two,
+    alignItems: 'center',
+  },
+  washclothButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  washclothButtonHover: {
+    transform: [{ scale: 1.05 }, { translateY: -2 }],
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  washclothButton: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one + 2,
+    borderRadius: Spacing.five,
   },
   instructionBanner: {
     paddingHorizontal: Spacing.three,

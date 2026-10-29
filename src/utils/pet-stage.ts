@@ -2,6 +2,22 @@ export type PetStage = 'Egg' | 'Hatchling' | 'Baby' | 'Young' | 'Adult';
 
 export const PET_STAGES: PetStage[] = ['Egg', 'Hatchling', 'Baby', 'Young', 'Adult'];
 
+// The Hatchling and Baby kitty ARTWORK are swapped: the Hatchling stage shows
+// the picture that used to be the Baby's, and the Baby stage shows the one
+// that used to be the Hatchling's. Everything that is tied to a specific
+// kitty PICTURE — the picture itself (every sprite sheet, the Dirty and
+// bathing frames, the stage icons), plus the data tuned against that picture
+// (accessory placements, per-room pet placement) — is looked up through this
+// function, so the data always stays attached to the artwork it was made for
+// and no tuned value had to be moved or rewritten. Stage NAMES, growth
+// requirements, progress and saved data are unaffected. Egg, Young and Adult
+// map to themselves. To undo the swap, make this return `stage` unchanged.
+export function getArtworkStage(stage: PetStage): PetStage {
+  if (stage === 'Hatchling') return 'Baby';
+  if (stage === 'Baby') return 'Hatchling';
+  return stage;
+}
+
 // How many completed tasks it takes to advance one stage. Both Pet Progress
 // and the living-room pet derive their stage from this same formula, so the
 // pet shown in the room always matches the Pet Progress card.

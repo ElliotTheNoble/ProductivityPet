@@ -140,3 +140,11 @@ export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;
 // src/app/index.tsx) once the hatching transition has been tested.
 export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;
 
+
+// TEMPORARY, testing only. When true, the Pet Health Alerts page
+// (src/components/pet-alerts-screen.tsx) shows developer buttons that set the
+// selected pet's needs to 0 and fast-forward its sickness clock, so Sick,
+// Critical, death and resurrection can be tried without waiting 24 / 96 hours.
+// They go through the normal lifecycle rules (nothing is faked), but they do
+// change the selected pet's real saved needs/clock — turn this off for release.
+export const DEV_ENABLE_LIFECYCLE_TEST_CONTROLS = true;

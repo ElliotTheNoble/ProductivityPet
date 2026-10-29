@@ -65,6 +65,16 @@ export type Task = {
   // removed by stopping or deleting an occurrence — this is what keeps pet
   // progress (getCompletedTaskCount) from ever decreasing.
   completedDates?: string[];
+  // When (full ISO timestamp, as produced by new Date().toISOString()) a
+  // task was actually checked off, so the Stats category pages can show and
+  // chart real completion dates. Recorded by toggleTaskOccurrence and
+  // removed again on undo. completedAt is for one-time tasks;
+  // completedAtByDate (occurrence date -> timestamp) is for repeating ones.
+  // Both are OPTIONAL and purely informational: tasks completed before
+  // this existed simply have no timestamp (never back-filled or guessed),
+  // and nothing here is read by pet progress or Paw Token earning.
+  completedAt?: string;
+  completedAtByDate?: Record<string, string>;
   // Optional local reminder — only meaningful when `time` is set. undefined
   // means "no reminder". Read only by src/utils/notifications.ts; never
   // touched by anything that computes history or pet progress.
@@ -172,6 +182,11 @@ export function normalizeTask(raw: any, fallbackDate: string): Task {
     excludedDates: Array.isArray(raw.excludedDates) ? raw.excludedDates : undefined,
     completed: !!raw.completed,
     completedDates: Array.isArray(raw.completedDates) ? raw.completedDates : undefined,
+    completedAt: typeof raw.completedAt === 'string' ? raw.completedAt : undefined,
+    completedAtByDate:
+      raw.completedAtByDate && typeof raw.completedAtByDate === 'object' && !Array.isArray(raw.completedAtByDate)
+        ? raw.completedAtByDate
+        : undefined,
     reminderMinutesBefore: REMINDER_OFFSETS.includes(raw.reminderMinutesBefore)
       ? raw.reminderMinutesBefore
       : undefined,
@@ -249,12 +264,26 @@ export function getCompletedTaskCount(tasks: Task[]): number {
 export function toggleTaskOccurrence(tasks: Task[], id: string, dateISO: string): Task[] {
   return tasks.map((task) => {
     if (task.id !== id) return task;
-    if (!task.repeat) return { ...task, completed: !task.completed };
+    const now = new Date().toISOString();
+    if (!task.repeat) {
+      // Checking stamps completedAt; unchecking removes it so an undone
+      // task leaves no completion record behind.
+      return task.completed
+        ? { ...task, completed: false, completedAt: undefined }
+        : { ...task, completed: true, completedAt: now };
+    }
     const dates = task.completedDates ?? [];
     const isDone = dates.includes(dateISO);
+    const stamps = { ...(task.completedAtByDate ?? {}) };
+    if (isDone) {
+      delete stamps[dateISO];
+    } else {
+      stamps[dateISO] = now;
+    }
     return {
       ...task,
       completedDates: isDone ? dates.filter((d) => d !== dateISO) : [...dates, dateISO],
+      completedAtByDate: stamps,
     };
   });
 }

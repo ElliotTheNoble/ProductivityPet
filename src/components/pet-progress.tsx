@@ -39,7 +39,8 @@ export function PetProgress({
   onResetPreview,
 }: PetProgressProps) {
   const theme = useTheme();
-  const isPreviewEnabled = DEV_ENABLE_STAGE_PREVIEW && !!onPreviewStage;
+  // Development builds only (the preview store itself also does nothing in production).
+  const isPreviewEnabled = DEV_ENABLE_STAGE_PREVIEW && __DEV__ && !!onPreviewStage;
 
   // Floored at the stage actually shown on the pet (via paidStageIndex),
   // not just the raw completed-task count — so unchecking/removing tasks

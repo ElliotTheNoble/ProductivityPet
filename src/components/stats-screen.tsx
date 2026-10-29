@@ -1,36 +1,45 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PawTokenCoin } from '@/components/paw-token-coin';
+import { ResurrectControl } from '@/components/resurrect-control';
+import { getPetLabel, getSelectedPet } from '@/utils/pet-family';
+import { usePetFamily, useSelectedPetId } from '@/hooks/use-pet-family';
+import { PetAvatar } from '@/components/pet-avatar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskCategory } from '@/utils/categorize-task';
+import { categoryToSlug, type LifetimeStat } from '@/utils/category-accomplishments';
+import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
+import { getStreakSummary } from '@/utils/streaks';
+import { getTokenHistory, subscribeToTokenHistory, sumTokens } from '@/utils/token-history';
+import { getEquippedAccessories, type EquippedAccessories } from '@/utils/pet-equipment';
 import { getRenderedStage, getRenderedStageProgress } from '@/utils/pet-growth';
-import { getPetProfile, type PetProfile } from '@/utils/pet-profile';
-import { TASKS_PER_STAGE, type PetStage } from '@/utils/pet-stage';
+import { getPetProfile, subscribeToPetProfile, type PetProfile } from '@/utils/pet-profile';
+import { PET_STAGES, TASKS_PER_STAGE } from '@/utils/pet-stage';
 import { ALL_CATEGORIES, getCategoryCompletionCounts, getImportantCompletedCount } from '@/utils/stats';
 import { getCachedTasks } from '@/utils/task-storage';
 import { getCompletedTaskCount, type Task } from '@/utils/tasks';
 
 type Percent = `${number}%`;
 
-// Stats-page-only pet art — a separate, differently-styled illustration per
-// stage from the one Home/pet-room.tsx use (see pet-placeholder.tsx, which
-// is untouched and still drives the pet shown on Home). Each file has its
-// own real aspect ratio, so each is paired with its measured width/height
-// rather than assuming they're uniform. Keyed by the same PetStage type the
-// rest of pet-stage.ts already uses, so looking one up for the current
-// stage is just an object lookup — no separate progression system.
-const STATS_PET_IMAGES: Record<PetStage, { source: number; aspectRatio: number }> = {
-  Egg: { source: require('@/assets/images/pets/stats_egg.png'), aspectRatio: 1300 / 1210 },
-  Hatchling: { source: require('@/assets/images/pets/stats_hatchling.png'), aspectRatio: 1388 / 1133 },
-  Baby: { source: require('@/assets/images/pets/stats_baby.png'), aspectRatio: 1503 / 1047 },
-  Young: { source: require('@/assets/images/pets/stats_young.png'), aspectRatio: 1371 / 1147 },
-  Adult: { source: require('@/assets/images/pets/stats_adult.png'), aspectRatio: 1291 / 1218 },
-};
+// The pet shown in the Pet Progress card is now the SAME kitty Home and the
+// Shop draw (PetAvatar — shared body art plus the equipped hat/bow, see
+// @/components/pet-avatar.tsx), at this fraction of the art slot's width.
+// Less than 1 so a Young-stage kitty (rendered slightly larger than her box,
+// same as on Home) and any accessory near her edge still fit inside the card.
+const STATS_PET_SIZE_FRACTION = 0.85;
+// How far (in px) the whole kitty — body AND any equipped hat/bow together —
+// is nudged down inside the Pet Progress card. One value for every growth
+// stage; applied as a transform so it never changes the card's or the art
+// slot's layout size, and the accessories (children of PetAvatar) can't drift
+// from the body.
+const STATS_PET_OFFSET_Y = 20;
 
 // Every icon below is cropped from the user's custom icon sheet rather than
 // emoji/generic icons. stats_Icons.png is 1570x1002px; every crop box here
@@ -40,9 +49,9 @@ const STATS_ICONS_SOURCE = require('@/assets/images/task_icons/stats_Icons.png')
 const STATS_ICONS_WIDTH = 1570;
 const STATS_ICONS_HEIGHT = 1002;
 
-type IconCrop = { left: number; top: number; width: number; height: number };
-const CLIPBOARD_CROP: IconCrop = { left: 670, top: 47, width: 338, height: 344 };
-const STAR_CROP: IconCrop = { left: 1009, top: 81, width: 378, height: 312 };
+export type IconCrop = { left: number; top: number; width: number; height: number };
+export const CLIPBOARD_CROP: IconCrop = { left: 670, top: 47, width: 338, height: 344 };
+export const STAR_CROP: IconCrop = { left: 1009, top: 81, width: 378, height: 312 };
 const BOOKS_CROP: IconCrop = { left: 172, top: 400, width: 411, height: 280 };
 const SHOE_CROP: IconCrop = { left: 623, top: 433, width: 417, height: 259 };
 const BROOM_CROP: IconCrop = { left: 1056, top: 393, width: 396, height: 306 };
@@ -50,7 +59,7 @@ const HEART_CROP: IconCrop = { left: 73, top: 707, width: 374, height: 256 };
 const PERSON_CROP: IconCrop = { left: 458, top: 743, width: 320, height: 231 };
 const SPROUT_CROP: IconCrop = { left: 1212, top: 706, width: 292, height: 260 };
 
-const CATEGORY_ICON_CROP: Record<TaskCategory, IconCrop> = {
+export const CATEGORY_ICON_CROP: Record<TaskCategory, IconCrop> = {
   Study: BOOKS_CROP,
   Exercise: SHOE_CROP,
   Clean: BROOM_CROP,
@@ -72,7 +81,7 @@ const PURPLE_ACCENT_CROP: IconCrop = { left: 1842, top: 198, width: 251, height:
 
 // Same color pairing already used for each category's card background (see
 // CATEGORY_CARD_COLOR below) — one accent mark color per category.
-const CATEGORY_ACCENT_CROP: Record<TaskCategory, IconCrop> = {
+export const CATEGORY_ACCENT_CROP: Record<TaskCategory, IconCrop> = {
   Study: BLUE_ACCENT_CROP,
   Exercise: GREEN_ACCENT_CROP,
   Clean: YELLOW_ACCENT_CROP,
@@ -116,7 +125,7 @@ function SpriteIcon({
   );
 }
 
-function StatsIcon({ crop, size = 40 }: { crop: IconCrop; size?: number }) {
+export function StatsIcon({ crop, size = 40 }: { crop: IconCrop; size?: number }) {
   return (
     <SpriteIcon
       source={STATS_ICONS_SOURCE}
@@ -128,7 +137,7 @@ function StatsIcon({ crop, size = 40 }: { crop: IconCrop; size?: number }) {
   );
 }
 
-function AccentMarkIcon({ crop, size = 20 }: { crop: IconCrop; size?: number }) {
+export function AccentMarkIcon({ crop, size = 20 }: { crop: IconCrop; size?: number }) {
   return (
     <SpriteIcon
       source={ACCENT_MARKS_SOURCE}
@@ -158,6 +167,25 @@ const STATS_MAX_WIDTH = 1000;
 const DESKTOP_MIN_WIDTH = 760;
 const TABLET_MIN_WIDTH = 600;
 
+const REFLECT_LINKS = [
+  {
+    id: 'mood' as const,
+    href: '/stats/mood' as const,
+    emoji: '🌈',
+    title: 'My Mood Journey',
+    description: 'Look back at your mood check-ins and daily reflections.',
+    background: '#EFE9FA',
+  },
+  {
+    id: 'review' as const,
+    href: '/stats/review' as const,
+    emoji: '🎉',
+    title: 'My Year in Review',
+    description: 'A personal recap of your year, from what you recorded.',
+    background: '#FBF3DC',
+  },
+];
+
 function useCategoryColumnCount(): 1 | 2 | 3 {
   const { width } = useWindowDimensions();
   if (width >= DESKTOP_MIN_WIDTH) return 3;
@@ -176,7 +204,7 @@ const CATEGORY_CARD_WIDTH_PERCENT: Record<1 | 2 | 3, `${number}%`> = {
 // theme tokens (which read as solid/saturated next to this card's soft
 // style), so these are their own local hex values rather than reusing a
 // theme token.
-const CATEGORY_CARD_BACKGROUND: Record<TaskCategory, string> = {
+export const CATEGORY_CARD_BACKGROUND: Record<TaskCategory, string> = {
   Study: '#E8F4FB', // very light baby blue
   Exercise: '#E6F7EF', // very light mint green
   Clean: '#FBF3DC', // very light creamy yellow
@@ -198,8 +226,23 @@ export function StatsHubScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= DESKTOP_MIN_WIDTH;
   const columns = useCategoryColumnCount();
+  const router = useRouter();
+  // Desktop-only hover state (touch never fires onHoverIn) — which single
+  // category card, if any, the mouse is over. Same pattern as the Rooms
+  // hub's hoveredRoom (see room-hub-screen.tsx).
+  const [hoveredCategory, setHoveredCategory] = useState<TaskCategory | null>(null);
+  // Same idea for the two Lifetime Stats cards.
+  const [hoveredReflect, setHoveredReflect] = useState<'mood' | 'review' | null>(null);
+  const [hoveredLifetimeStat, setHoveredLifetimeStat] = useState<LifetimeStat | 'pets' | 'tokens' | 'streak' | null>(null);
+  function openLifetimeStat(stat: LifetimeStat) {
+    router.push({ pathname: '/stats/lifetime/[stat]', params: { stat } });
+  }
   const [tasks, setTasks] = useState<Task[]>([]);
   const [petProfile, setPetProfile] = useState<PetProfile | null>(null);
+  // The selected pet if it has passed away: a permanent memorial + Resurrect stays here in Stats.
+  const familyForMemorial = usePetFamily();
+  const selectedForMemorial = familyForMemorial ? getSelectedPet(familyForMemorial) : null;
+  const memorialPet = selectedForMemorial && selectedForMemorial.lifecycle.state === 'deceased' ? selectedForMemorial : null;
 
   // Read-only, via the same shared in-memory task cache as useBirthdayMode
   // and the Rooms hub's task-count badges (see @/utils/task-storage) — this
@@ -234,6 +277,62 @@ export function StatsHubScreen() {
     };
   }, []);
 
+  // Same live subscription Home uses, so a profile save made while this
+  // page is open (e.g. a growth upgrade) shows up right away instead of
+  // only after the next visit.
+  useEffect(() => subscribeToPetProfile(setPetProfile), []);
+
+  // The Pet Stage Preview override (see @/utils/dev-stage-preview.ts) —
+  // the very same shared value Home, every Room and the Shop read, so the
+  // kitty here is always the one shown everywhere else. Display-only: it
+  // never touches the progression numbers below.
+  const [devPreviewStageIndex, setDevPreviewStageIndexState] = useState<number | null>(() =>
+    getDevPreviewStageIndex()
+  );
+  useEffect(() => subscribeToDevPreviewStageIndex(setDevPreviewStageIndexState), []);
+
+  // The equipped hat and bow, from the same persisted record Home and the
+  // Shop read (see @/utils/pet-equipment.ts). Loaded on mount, like Home —
+  // Stats remounts on every navigation, so an equip change made in the Shop
+  // is picked up when the player comes back here.
+  const [equipped, setEquipped] = useState<EquippedAccessories>({ hat: null, bow: null });
+  const selectedPetId = useSelectedPetId();
+  useEffect(() => {
+    let cancelled = false;
+    getEquippedAccessories()
+      .then((loaded) => {
+        if (!cancelled) setEquipped(loaded);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPetId]);
+
+  // Measured width of the pet art slot, so the shared PetAvatar (which takes
+  // a pixel size) can fill it.
+  const [petSlotWidth, setPetSlotWidth] = useState(0);
+
+  // How many kitties are in the Pet Album: every pet in the family, living or
+  // passed away (see @/utils/pet-album.ts).
+  const family = usePetFamily();
+  const petAlbumCount = family?.pets.length ?? 0;
+
+  // Paw Tokens EARNED (recorded since tracking began — see
+  // @/utils/token-history.ts); separate from the current balance.
+  const [tokensEarned, setTokensEarned] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    getTokenHistory()
+      .then((history) => !cancelled && setTokensEarned(sumTokens(history.events)))
+      .catch(() => {});
+    const off = subscribeToTokenHistory((history) => setTokensEarned(sumTokens(history.events)));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
   // Every number and the pet's own stage below are derived from the exact
   // same Task[] using the project's existing, unmodified helpers — no
   // separate tracking system, nothing hard-coded. getRenderedStageProgress
@@ -248,12 +347,23 @@ export function StatsHubScreen() {
   // BUG-004) so the level/progress-bar/"X more tasks" message below can
   // never disagree with renderedStage (the pet art + stage label) about
   // which stage the pet is actually on.
-  const stageProgress = getRenderedStageProgress(completedTaskCount, petProfile?.paidStageIndex ?? 0);
+  // Growth is the SELECTED pet's own credit (shared between living pets), not
+  // the lifetime task total shown in the Lifetime Stats card below.
+  const growthCount =
+    petProfile?.growthCredit !== undefined ? Math.floor(petProfile.growthCredit) : completedTaskCount;
+  const stageProgress = getRenderedStageProgress(growthCount, petProfile?.paidStageIndex ?? 0);
   // The pet's ACTUAL rendered stage (art + stage label below) — stays in
   // sync with Home's own petStage: Egg/Hatchling/Baby still derive live
   // from completedTaskCount, but Young/Adult only show once paid for via
   // growPet() (see @/utils/pet-growth.ts), never from task count alone.
-  const renderedStage = getRenderedStage(completedTaskCount, petProfile?.paidStageIndex ?? 0);
+  const realStage = getRenderedStage(growthCount, petProfile?.paidStageIndex ?? 0);
+  const memorialStage = realStage;
+  // What the kitty (and the stage pill beside her) actually shows: the same
+  // `preview ?? real stage` rule Home and the Shop use for their displayedStage.
+  // Level and the progress bar below always stay on the real progression.
+  const renderedStage = devPreviewStageIndex !== null ? PET_STAGES[devPreviewStageIndex] : realStage;
+  // Same "no accessories on an Egg" rule as Home and the Shop.
+  const statsAccessoryIds = renderedStage === 'Egg' ? [] : [equipped.bow, equipped.hat];
 
   // Explicit line break (rather than relying on text wrap) so the bubble
   // always reads as two centered lines — "3 more tasks" / "to reach
@@ -294,6 +404,19 @@ export function StatsHubScreen() {
             </ThemedView>
           </View>
 
+          {memorialPet ? (
+            <ThemedView type="backgroundElementOverlay" style={styles.memorialCard}>
+              <PetAvatar stage={memorialStage} size={96} healthState="deceased" />
+              <View style={styles.memorialText}>
+                <ThemedText type="smallBold">{familyForMemorial ? getPetLabel(memorialPet, familyForMemorial.pets) : 'Your kitty'} — resting in memory</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Their memories will always be in your Pet Album. You can bring them back whenever you are ready.
+                </ThemedText>
+                <ResurrectControl petId={memorialPet.id} />
+              </View>
+            </ThemedView>
+          ) : null}
+
           <View style={[styles.topRow, isWide && styles.topRowWide]}>
             {/* Pet Progress — two-tone pastel-blue card: a soft baby-blue
                 outer card with the custom fluffy-cloud card art
@@ -312,13 +435,25 @@ export function StatsHubScreen() {
                       style={[
                         styles.petArtForeground,
                         isWide && styles.petArtForegroundWide,
-                        { aspectRatio: STATS_PET_IMAGES[renderedStage].aspectRatio },
-                      ]}>
-                      <Image
-                        source={STATS_PET_IMAGES[renderedStage].source}
-                        style={styles.petArtImage}
-                        contentFit="contain"
-                      />
+                        { aspectRatio: 1 },
+                      ]}
+                      onLayout={(event) => setPetSlotWidth(event.nativeEvent.layout.width)}>
+                      {/* Same kitty as Home and the Shop (body art + equipped
+                          hat/bow); the body and accessories are scaled
+                          together by PetAvatar's single size, so they stay
+                          aligned at any size. */}
+                      <View style={styles.petArtImage}>
+                        {petSlotWidth > 0 ? (
+                          <View style={[styles.petAvatarCenter, { transform: [{ translateY: STATS_PET_OFFSET_Y }] }]}>
+                            <PetAvatar
+                              stage={renderedStage}
+                              equippedAccessoryIds={statsAccessoryIds}
+                              healthState={petProfile?.lifeState}
+                              size={petSlotWidth * STATS_PET_SIZE_FRACTION}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
 
                     <View style={[styles.petInfo, isWide && styles.petInfoWide]}>
@@ -369,7 +504,21 @@ export function StatsHubScreen() {
               <ThemedView type="backgroundElementOverlay" style={[styles.card, styles.shadow]}>
                 <ThemedText style={styles.cardTitleLarge}>⭐ Lifetime Stats</ThemedText>
 
-                <View style={styles.statPanel}>
+                {/* Each Lifetime Stats card is fully clickable and opens its
+                    own detail page; hover/press feedback matches the
+                    category cards below. */}
+                <Pressable
+                  onPress={() => openLifetimeStat('tasks')}
+                  onHoverIn={() => setHoveredLifetimeStat('tasks')}
+                  onHoverOut={() => setHoveredLifetimeStat(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="View task completion history"
+                  style={({ pressed }) => [
+                    styles.statPanel,
+                    styles.statPanelInteractive,
+                    hoveredLifetimeStat === 'tasks' && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
                   <StatsIcon crop={CLIPBOARD_CROP} size={64} />
                   <View style={styles.statPanelText}>
                     <ThemedText style={[styles.statPanelNumber, { color: theme.mint }]}>
@@ -380,9 +529,20 @@ export function StatsHubScreen() {
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={32} />
-                </View>
+                </Pressable>
 
-                <View style={styles.statPanel}>
+                <Pressable
+                  onPress={() => openLifetimeStat('important')}
+                  onHoverIn={() => setHoveredLifetimeStat('important')}
+                  onHoverOut={() => setHoveredLifetimeStat(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="View important task history"
+                  style={({ pressed }) => [
+                    styles.statPanel,
+                    styles.statPanelInteractive,
+                    hoveredLifetimeStat === 'important' && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
                   <StatsIcon crop={STAR_CROP} size={64} />
                   <View style={styles.statPanelText}>
                     <ThemedText style={[styles.statPanelNumber, { color: theme.accent }]}>
@@ -393,7 +553,82 @@ export function StatsHubScreen() {
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={PINK_ACCENT_CROP} size={32} />
-                </View>
+                </Pressable>
+
+                {/* Pet Album — a look back at every kitty raised. */}
+                <Pressable
+                  onPress={() => router.push('/stats/lifetime/pets')}
+                  onHoverIn={() => setHoveredLifetimeStat('pets')}
+                  onHoverOut={() => setHoveredLifetimeStat(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Pet Album"
+                  style={({ pressed }) => [
+                    styles.statPanel,
+                    styles.statPanelInteractive,
+                    hoveredLifetimeStat === 'pets' && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
+                  <StatsIcon crop={HEART_CROP} size={64} />
+                  <View style={styles.statPanelText}>
+                    <ThemedText style={[styles.statPanelNumber, { color: theme.purple }]}>{petAlbumCount}</ThemedText>
+                    <ThemedText type="smallBold" themeColor="textSecondary">
+                      {petAlbumCount === 1 ? 'Pet in Your Album' : 'Pets in Your Album'}
+                    </ThemedText>
+                  </View>
+                  <AccentMarkIcon crop={PURPLE_ACCENT_CROP} size={32} />
+                </Pressable>
+
+                {/* Tokens Earned — lifetime earnings (not the balance). */}
+                <Pressable
+                  onPress={() => router.push('/stats/lifetime/tokens')}
+                  onHoverIn={() => setHoveredLifetimeStat('tokens')}
+                  onHoverOut={() => setHoveredLifetimeStat(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open token earnings history"
+                  style={({ pressed }) => [
+                    styles.statPanel,
+                    styles.statPanelInteractive,
+                    hoveredLifetimeStat === 'tokens' && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
+                  <View style={styles.statCoinSlot}>
+                    <PawTokenCoin size={56} />
+                  </View>
+                  <View style={styles.statPanelText}>
+                    <ThemedText style={[styles.statPanelNumber, { color: theme.apricot }]}>{tokensEarned}</ThemedText>
+                    <ThemedText type="smallBold" themeColor="textSecondary">
+                      Paw Tokens Earned
+                    </ThemedText>
+                  </View>
+                  <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={32} />
+                </Pressable>
+
+                {/* Day Streak — current streak of days with a completed task. */}
+                <Pressable
+                  onPress={() => router.push('/stats/lifetime/streak')}
+                  onHoverIn={() => setHoveredLifetimeStat('streak')}
+                  onHoverOut={() => setHoveredLifetimeStat(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open streak history"
+                  style={({ pressed }) => [
+                    styles.statPanel,
+                    styles.statPanelInteractive,
+                    hoveredLifetimeStat === 'streak' && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
+                  <View style={styles.statCoinSlot}>
+                    <ThemedText style={styles.statEmoji}>🔥</ThemedText>
+                  </View>
+                  <View style={styles.statPanelText}>
+                    <ThemedText style={[styles.statPanelNumber, { color: theme.mint }]}>
+                      {getStreakSummary(tasks).current}
+                    </ThemedText>
+                    <ThemedText type="smallBold" themeColor="textSecondary">
+                      Day Streak
+                    </ThemedText>
+                  </View>
+                  <AccentMarkIcon crop={GREEN_ACCENT_CROP} size={32} />
+                </Pressable>
               </ThemedView>
             </View>
           </View>
@@ -409,12 +644,26 @@ export function StatsHubScreen() {
 
             <View style={styles.categoryGrid}>
               {ALL_CATEGORIES.map((category) => (
-                <View
+                // The whole card is the tap target (not just its text) and
+                // opens that category's Accomplishments page. Hover reuses
+                // the Rooms cards' gentle lift + accent border; touch/click
+                // gets pressed feedback (hover never fires on touch).
+                <Pressable
                   key={category}
-                  style={[
+                  onPress={() =>
+                    router.push({ pathname: '/stats/[category]', params: { category: categoryToSlug(category) } })
+                  }
+                  onHoverIn={() => setHoveredCategory(category)}
+                  onHoverOut={() => setHoveredCategory(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${category} accomplishments`}
+                  style={({ pressed }) => [
                     styles.categoryCard,
+                    styles.categoryCardInteractive,
                     styles.shadow,
                     { width: CATEGORY_CARD_WIDTH_PERCENT[columns], backgroundColor: CATEGORY_CARD_BACKGROUND[category] },
+                    hoveredCategory === category && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
                   ]}>
                   <StatsIcon crop={CATEGORY_ICON_CROP[category]} size={64} />
                   <ThemedText type="smallBold" style={styles.categoryName}>
@@ -427,7 +676,40 @@ export function StatsHubScreen() {
                   <ThemedText type="small" themeColor="textSecondary">
                     completed tasks
                   </ThemedText>
-                </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Reflect — the Mood Journey and Year in Review pages. Same hover /
+              press behavior as the category cards above. */}
+          <View style={[styles.categoryPanel, styles.shadow]}>
+            <ThemedText style={styles.cardTitleLarge}>💭 Reflect</ThemedText>
+            <View style={styles.categoryGrid}>
+              {REFLECT_LINKS.map((link) => (
+                <Pressable
+                  key={link.id}
+                  onPress={() => router.push(link.href)}
+                  onHoverIn={() => setHoveredReflect(link.id)}
+                  onHoverOut={() => setHoveredReflect(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={link.title}
+                  style={({ pressed }) => [
+                    styles.categoryCard,
+                    styles.categoryCardInteractive,
+                    styles.shadow,
+                    { width: CATEGORY_CARD_WIDTH_PERCENT[columns === 3 ? 2 : columns], backgroundColor: link.background },
+                    hoveredReflect === link.id && [styles.categoryCardHovered, { borderColor: theme.accent }],
+                    pressed && styles.categoryCardPressed,
+                  ]}>
+                  <ThemedText style={styles.reflectEmoji}>{link.emoji}</ThemedText>
+                  <ThemedText type="smallBold" style={styles.categoryName}>
+                    {link.title}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.reflectText}>
+                    {link.description}
+                  </ThemedText>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -438,6 +720,16 @@ export function StatsHubScreen() {
 }
 
 const styles = StyleSheet.create({
+  memorialCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    borderRadius: Spacing.four,
+    marginBottom: Spacing.three,
+  },
+  memorialText: { flex: 1, flexBasis: 220, gap: Spacing.one + 2 },
   container: {
     flex: 1,
     alignItems: 'center',
@@ -569,6 +861,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  petAvatarCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   petInfo: {
     width: '100%',
     alignItems: 'center',
@@ -660,6 +957,27 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     position: 'relative',
   },
+  // Interactive Lifetime Stats cards: a transparent 2px border (so the hover
+  // accent border doesn't shift the layout — padding is reduced by the same
+  // 2px), pointer cursor, and the same smooth transition as the category cards.
+  statPanelInteractive: {
+    borderWidth: 2,
+    borderColor: 'transparent',
+    padding: Spacing.three - 2,
+    cursor: 'pointer',
+    transitionProperty: 'transform, border-color, box-shadow',
+    transitionDuration: '160ms',
+  },
+  statCoinSlot: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statEmoji: {
+    fontSize: 44,
+    lineHeight: 52,
+  },
   statPanelText: {
     gap: 2,
     flex: 1,
@@ -702,6 +1020,33 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  // Smooth hover/press transition (web; ignored where unsupported) and a
+  // pointer cursor on web.
+  categoryCardInteractive: {
+    cursor: 'pointer',
+    transitionProperty: 'transform, border-color, box-shadow',
+    transitionDuration: '160ms',
+  },
+  // Same gentle lift the Rooms cards use on hover.
+  categoryCardHovered: {
+    transform: [{ scale: 1.03 }, { translateY: -3 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  categoryCardPressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
+  },
+  reflectEmoji: {
+    fontSize: 44,
+    lineHeight: 52,
+  },
+  reflectText: {
+    textAlign: 'center',
   },
   categoryName: {
     fontSize: 17,

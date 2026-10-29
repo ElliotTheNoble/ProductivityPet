@@ -5,6 +5,8 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { getStageImage } from '@/components/pet-placeholder';
 import { SpriteCrop } from '@/components/sprite-crop';
 import { getBathingStepArt, type BathingStep } from '@/utils/bathing-stage-art';
+import { getHealthArt } from '@/utils/pet-health-art';
+import { MEMORIAL_TOMBSTONE_SOURCE } from '@/utils/resurrection-art';
 import type { PetStage } from '@/utils/pet-stage';
 import { getRoomPetArt } from '@/utils/room-pet-art';
 import type { RoomSlug } from '@/utils/rooms';
@@ -55,6 +57,10 @@ type RoomPetProps = {
   // overrides it (and why needsBath, not the broader isDirty, is the
   // right check here).
   isShowingBathDryHold?: boolean;
+  // The pet's real health state. A Sick / Critical pet shows its Sick /
+  // Critical picture in every room instead of its activity or normal picture
+  // (see @/utils/pet-health-art.ts); an active bath still wins while it runs.
+  healthState?: 'healthy' | 'sick' | 'critical' | 'deceased';
 };
 
 // Shows the pet in its Room detail page, at its current growth stage.
@@ -89,6 +95,7 @@ export function RoomPet({
   needsBath = false,
   bathingFrame,
   isShowingBathDryHold = false,
+  healthState,
 }: RoomPetProps) {
   const [boxSize, setBoxSize] = useState({ width: 0, height: 0 });
 
@@ -98,6 +105,46 @@ export function RoomPet({
   }
 
   const hasBox = boxSize.width > 0 && boxSize.height > 0;
+
+  const healthArt = getHealthArt(stage, healthState);
+  const healthRoomOffsetY = healthArt ? healthArt.roomOffsetY + (roomSlug === 'bathroom' ? healthArt.bathroomOffsetY : 0) : 0;
+  // PRIORITY: a Sick / Critical pet always shows its own Sick / Critical picture
+  // here, even if a bathing frame (a stale one left over from an earlier bath
+  // while healthy) or the 30-minute "just bathed" Dry pose is still around —
+  // otherwise the healthy bathing art replaces it and none of the Sick / Critical
+  // positioning in @/utils/pet-health-art.ts shows (same trap as BUG-039 on Home).
+  // Sick / Critical pets can't take a normal bath, so nothing is lost.
+  // A pet that has passed away is the memorial tombstone in every room, never a living kitty.
+  if (healthState === 'deceased') {
+    return (
+      <View style={styles.wrapper} onLayout={handleLayout}>
+        {hasBox ? (
+          <Image
+            source={MEMORIAL_TOMBSTONE_SOURCE}
+            contentFit="contain"
+            style={{ width: boxSize.width, height: boxSize.height, transform: [{ scale: 0.85 }] }}
+          />
+        ) : null}
+      </View>
+    );
+  }
+  if (healthArt) {
+    return (
+      <View style={styles.wrapper} onLayout={handleLayout}>
+        {hasBox ? (
+          <Image
+            source={healthArt.source}
+            contentFit="contain"
+            style={{
+              width: Math.min(boxSize.width, boxSize.height * healthArt.aspectRatio),
+              height: Math.min(boxSize.height, boxSize.width / healthArt.aspectRatio),
+              transform: healthRoomOffsetY ? [{ translateY: healthRoomOffsetY }] : undefined,
+            }}
+          />
+        ) : null}
+      </View>
+    );
+  }
 
   if (stage === 'Egg' || roomSlug === 'bathroom') {
     // bathingFrame/isShowingBathDryHold only ever matter for the Bathroom

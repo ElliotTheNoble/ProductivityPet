@@ -1,4 +1,4 @@
-import type { PetStage } from '@/utils/pet-stage';
+import { getArtworkStage, type PetStage } from '@/utils/pet-stage';
 import type { RoomSlug } from '@/utils/rooms';
 
 // Centralized, stage-aware configuration for where/how big Kitty renders
@@ -83,6 +83,9 @@ export type RoomPetPlacement = {
   // Vertical anchor — styles.petArea's paddingBottom. Larger values move
   // Kitty further up (she's bottom-anchored).
   paddingBottomPx: number;
+  // Phone-width windows only (below PHONE_BREAKPOINT_PX): replaces paddingBottomPx, for a
+  // room whose floor sits higher up the phone-cropped background (Kitchen).
+  phonePaddingBottomPx?: number;
   // Base box size as a percentage of the room's own available width,
   // capped at a px maximum — the same "responsive but not unbounded"
   // sizing every other responsive box in this app already uses. The box
@@ -96,6 +99,10 @@ export type RoomPetPlacement = {
   // omitted by default everywhere; only add an entry for a stage that
   // actually needs something different from this room's base numbers.
   stageAdjustments?: Partial<Record<PetStage, PetStageAdjustment>>;
+  // Phone-width windows only (below PHONE_BREAKPOINT_PX), non-Egg stages: an extra size factor
+  // on top of the stage's own scale. The Gym has no stage scale of its own (Study Room 1.2,
+  // Bedroom 1.15, Kitchen/Bathroom bigger boxes), so its kitty looked small on a phone.
+  phoneScale?: number;
 };
 
 // The single source of truth for every room's pet placement. Study
@@ -107,6 +114,12 @@ export type RoomPetPlacement = {
 // room/stage combination tested so far (no stageAdjustments are populated
 // yet for any room, so every stage currently renders identically to its
 // room's base placement).
+// Same width the Home screen treats as "narrow" (WIDE_LAYOUT_BREAKPOINT in app/index.tsx).
+const PHONE_BREAKPOINT_PX = 700;
+// A small rightward bias is kept on phones (Kitchen's rug is on the right) but it must
+// never push the pet box past the screen edge.
+const PHONE_MAX_SHIFT_RIGHT_PX = 60;
+
 export const ROOM_PET_PLACEMENTS: Record<RoomSlug, RoomPetPlacement> = {
   'study-room': {
     horizontalAlign: 'center',
@@ -138,6 +151,8 @@ export const ROOM_PET_PLACEMENTS: Record<RoomSlug, RoomPetPlacement> = {
     paddingBottomPx: 32,
     widthPercent: 55,
     maxWidthPx: 320,
+    // Same size as the Study Room kitty (its 1.2 stage scale) on phones; desktop / landscape unchanged.
+    phoneScale: 1.2,
   },
   bedroom: {
     horizontalAlign: 'flex-start',
@@ -164,6 +179,9 @@ export const ROOM_PET_PLACEMENTS: Record<RoomSlug, RoomPetPlacement> = {
     horizontalAlign: 'center',
     shiftRightPx: 280,
     paddingBottomPx: 32,
+    // On a phone the background is re-framed onto the rug (see _layout.tsx), and the
+    // kitty rests on that rug instead of sitting at the very bottom of the screen.
+    phonePaddingBottomPx: 48,
     widthPercent: 79,
     maxWidthPx: 460,
     // Hatchling sat too high and too far left relative to Kitchen's base
@@ -260,21 +278,37 @@ export function resolveRoomPetPlacement(
   windowWidth: number
 ): ResolvedRoomPetPlacement {
   const placement = ROOM_PET_PLACEMENTS[roomSlug];
-  const adjustment = placement.stageAdjustments?.[stage];
-  const scale = adjustment?.scale ?? 1;
+  // Tuned against each kitty PICTURE, so look it up through the Hatchling/
+  // Baby artwork swap (see getArtworkStage in pet-stage.ts).
+  const adjustment = placement.stageAdjustments?.[getArtworkStage(stage)];
+  const isPhone = windowWidth < PHONE_BREAKPOINT_PX;
+  const scale = (adjustment?.scale ?? 1) * (isPhone && getArtworkStage(stage) !== 'Egg' ? placement.phoneScale ?? 1 : 1);
 
   let shiftRightPx = (placement.shiftRightPx ?? 0) + (adjustment?.offsetXPx ?? 0);
   if (placement.wideDesktop && windowWidth >= placement.wideDesktop.breakpointPx) {
     shiftRightPx += placement.wideDesktop.extraShiftRightPx;
   }
 
-  const offsetYPx = adjustment?.offsetYPx ?? 0;
+  // The fixed pixel shifts (Kitchen's rightward 280px + per-stage offsets) were tuned
+  // for a desktop-width window. On a phone they pushed the kitty off the right edge
+  // of the screen (and made the page scroll sideways), so below the phone breakpoint
+  // the shift is capped so the pet stays on the visible scene. Desktop is unchanged.
+  if (windowWidth < PHONE_BREAKPOINT_PX) shiftRightPx = Math.min(shiftRightPx, PHONE_MAX_SHIFT_RIGHT_PX);
+
+  // Kitchen's Hatchling-picture adjustment moves her DOWN 60px (desktop tuning); on a phone,
+  // where the floor is re-framed higher, that pushed her into the Back button, so a
+  // downward nudge is ignored below the phone breakpoint.
+  const offsetYPx =
+    windowWidth < PHONE_BREAKPOINT_PX ? Math.max(adjustment?.offsetYPx ?? 0, 0) : adjustment?.offsetYPx ?? 0;
 
   return {
     areaStyle: {
       // Room-level only — NEVER adjusted by a stage's offsetYPx (see why
       // below, at boxStyle.transform).
-      paddingBottom: placement.paddingBottomPx,
+      paddingBottom:
+        windowWidth < PHONE_BREAKPOINT_PX && placement.phonePaddingBottomPx !== undefined
+          ? placement.phonePaddingBottomPx
+          : placement.paddingBottomPx,
       alignItems: placement.horizontalAlign,
       paddingLeft:
         placement.horizontalAlign === 'flex-start' && placement.paddingLeftPercent !== undefined

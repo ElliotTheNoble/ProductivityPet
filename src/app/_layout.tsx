@@ -2,15 +2,22 @@ import { Image } from 'expo-image';
 import { DarkTheme, DefaultTheme, Slot, ThemeProvider, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { StyleSheet, View, useColorScheme } from 'react-native';
+import { AppState, StyleSheet, View, useColorScheme, useWindowDimensions } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppHeader } from '@/components/app-header';
+import { CriticalAlertEffects } from '@/components/critical-alert-effects';
+import { PetFamilyBar } from '@/components/pet-family-bar';
+import { ResurrectionOverlay } from '@/components/resurrection-overlay';
 import { ROOMS as ROOM_PREVIEWS } from '@/components/rooms-card';
 import { useBirthdayMode } from '@/hooks/use-birthday-mode';
+import { useSelectedPetId } from '@/hooks/use-pet-family';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
+import { getTokenHistory } from '@/utils/token-history';
+import { advanceAllPets } from '@/utils/pet-family';
+import { getRenderedStage } from '@/utils/pet-growth';
+import { startPetAlerts } from '@/utils/pet-alerts';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
-import { getPetStage } from '@/utils/pet-stage';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import { ROOMS, isRoomSlug } from '@/utils/rooms';
 import { getCachedTasks } from '@/utils/task-storage';
@@ -59,7 +66,13 @@ export default function RootLayout() {
   const pathname = usePathname();
   const isHome = pathname === '/';
   const isTasks = pathname === '/tasks';
-  const isStats = pathname === '/stats';
+  // Includes the per-category Accomplishments pages (/stats/<category>) so they
+  // share Stats' background.
+  const isStats = pathname === '/stats' || pathname.startsWith('/stats/');
+  // The pet family bar (switch pets, adopt, health warnings, resurrection) is
+  // shown on the pet pages: Home, Rooms, Shop and Stats.
+  const showFamilyBar =
+    pathname === '/' || pathname === '/shop' || pathname === '/rooms' || pathname.startsWith('/rooms/') || isStats;
   const isMiniGames = pathname === '/mini-games';
   const isShop = pathname === '/shop';
   // The 5 individual Room detail pages (/rooms/study-room, /rooms/gym,
@@ -69,6 +82,7 @@ export default function RootLayout() {
   // (non-full-bleed) layout, only the individual room detail pages move to
   // this same full-bleed treatment.
   const roomDetailSlug = pathname.startsWith('/rooms/') ? pathname.slice('/rooms/'.length) : null;
+  const { width: windowWidth } = useWindowDimensions();
   const isRoomDetail = roomDetailSlug !== null && isRoomSlug(roomDetailSlug);
   // Re-checks whenever the route changes (RootLayout itself persists across
   // navigation, unlike the screens it wraps), so adding/removing a birthday
@@ -102,11 +116,48 @@ export default function RootLayout() {
   // on a fresh app launch, and correctly catches up on however many piles
   // should have accumulated (up to the max) if the app was closed for a
   // while — see applyPoopAccumulation's own comment for exactly how.
+  // Catches the whole pet family up to now (needs, sleep, sickness, death —
+  // see @/utils/pet-family.ts), then runs the poop check for the SELECTED
+  // pet. Re-runs when a different pet is selected, because only the selected
+  // pet is shown. The family itself also advances on a timer below, so none
+  // of this depends on Home being open.
+  const selectedPetId = useSelectedPetId();
   useEffect(() => {
     loadPetProfileWithNeedsUpdate()
-      .then(() => getCachedTasks())
-      .then((tasks) => checkForPoopAccumulation(getPetStage(getCompletedTaskCount(tasks))))
+      .then(async (profile) => {
+        if (profile.lifeState === 'deceased') return;
+        const tasks = await getCachedTasks();
+        const growthCount =
+          profile.growthCredit !== undefined ? Math.floor(profile.growthCredit) : getCompletedTaskCount(tasks);
+        return checkForPoopAccumulation(getRenderedStage(growthCount, profile.paidStageIndex));
+      })
       .catch(() => {});
+  }, [selectedPetId]);
+
+  // Time passes for every living pet even when no screen is looking at them:
+  // once a minute while the app is open, and again whenever it comes back to
+  // the foreground.
+  useEffect(() => {
+    const tick = () => advanceAllPets(new Date(), true);
+    const interval = setInterval(tick, 60000);
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') tick();
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, []);
+
+  // Health alerts: phone notifications scheduled ahead from the sickness
+  // clocks, plus the live critical signal (see @/utils/pet-alerts.ts).
+  useEffect(() => startPetAlerts(), []);
+
+  // Starts the Paw Token earnings history (@/utils/token-history.ts) at app
+  // launch, so its recorded start date is when tracking really began — not
+  // whenever someone first opens a page that reads it. Read/create only.
+  useEffect(() => {
+    getTokenHistory().catch(() => {});
   }, []);
 
   // Ordered priority list of currently-active special events — to add
@@ -193,11 +244,17 @@ export default function RootLayout() {
           source={resolveRoomBackground(roomDetailSlug, ROOMS[roomDetailSlug].image, activeEvents)}
           style={styles.homeBackground}
           contentFit="cover"
+          // Phone-width Kitchen only: the centred crop showed the sink and almost no floor, so
+          // the picture is framed toward the right where the flowered rug and floor are.
+          contentPosition={roomDetailSlug === 'kitchen' && windowWidth < 700 ? { left: '62%', top: '50%' } : undefined}
           cachePolicy="memory-disk"
         />
       ) : null}
       <AppHeader />
+      {showFamilyBar ? <PetFamilyBar /> : null}
       <Slot />
+      <ResurrectionOverlay />
+      <CriticalAlertEffects />
     </ThemeProvider>
   );
 }

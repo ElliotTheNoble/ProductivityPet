@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { getPetProfile, savePetProfile } from '@/utils/pet-profile';
+import { addToWallet, awardGrowthForTasks, ensureFamilyLoaded, getLivingPetCount } from '@/utils/pet-family';
+import { getTaskTokenReward } from '@/utils/pet-family-config';
+import { recordTokenEarning, type TokenSource } from '@/utils/token-history';
 import type { Task } from '@/utils/tasks';
 
 // Paw Token earning — completing a task or appointment earns the pet a
@@ -28,14 +30,6 @@ export const REGULAR_TASK_REWARD = 10;
 export const IMPORTANT_TASK_REWARD = 15;
 export const APPOINTMENT_REWARD = 5;
 
-// How many Paw Tokens one completion of this task is worth. Only called
-// for kind: 'task' (regular/important) or kind: 'event' (appointment) —
-// see isEligibleKind below.
-function getRewardAmount(task: Task): number {
-  if (task.kind === 'task') return task.important ? IMPORTANT_TASK_REWARD : REGULAR_TASK_REWARD;
-  return APPOINTMENT_REWARD; // kind === 'event'
-}
-
 function isEligibleKind(task: Task): boolean {
   return task.kind === 'task' || task.kind === 'event';
 }
@@ -46,17 +40,19 @@ function isEligibleKind(task: Task): boolean {
 // the item's own id); repeating items have one occurrence per
 // completedDates entry (keyed by id + that specific date), since the same
 // repeating item can be done on one day and not another.
-function getCompletedOccurrences(tasks: Task[]): { key: string; amount: number }[] {
-  const occurrences: { key: string; amount: number }[] = [];
+function getCompletedOccurrences(
+  tasks: Task[]
+): { key: string; important: boolean; source: TokenSource; taskId: string }[] {
+  const occurrences: { key: string; important: boolean; source: TokenSource; taskId: string }[] = [];
   for (const task of tasks) {
     if (!isEligibleKind(task)) continue;
-    const amount = getRewardAmount(task);
+    const source: TokenSource = task.kind === 'task' ? 'task' : 'appointment';
     if (task.repeat) {
       for (const date of task.completedDates ?? []) {
-        occurrences.push({ key: `${task.id}:${date}`, amount });
+        occurrences.push({ key: `${task.id}:${date}`, important: task.important, source, taskId: task.id });
       }
     } else if (task.completed) {
-      occurrences.push({ key: task.id, amount });
+      occurrences.push({ key: task.id, important: task.important, source, taskId: task.id });
     }
   }
   return occurrences;
@@ -137,7 +133,34 @@ async function runReconcile(tasks: Task[]): Promise<void> {
     // this particular write failed; the next successful write catches up.
   }
 
-  const profile = await getPetProfile();
-  const earned = newlyCompleted.reduce((sum, occurrence) => sum + occurrence.amount, 0);
-  savePetProfile({ ...profile, pawTokens: profile.pawTokens + earned });
+  // Rewards for these NEW occurrences only (history is never re-priced).
+  // Paw Tokens belong to the player: one combined reward per completed task,
+  // bigger with more living pets (see TASK_TOKEN_REWARDS_BY_LIVING_PETS in
+  // @/utils/pet-family-config.ts); appointments keep their flat amount.
+  // Growth is separate: each completed TASK is shared between the living
+  // pets (@/utils/pet-family.ts awardGrowthForTasks).
+  await ensureFamilyLoaded();
+  const livingPets = getLivingPetCount();
+  const payouts = newlyCompleted.map((occurrence) => ({
+    ...occurrence,
+    amount:
+      occurrence.source === 'task'
+        ? getTaskTokenReward(livingPets, occurrence.important)
+        : APPOINTMENT_REWARD,
+  }));
+  const earned = payouts.reduce((sum, payout) => sum + payout.amount, 0);
+  addToWallet(earned);
+  awardGrowthForTasks(newlyCompleted.filter((occurrence) => occurrence.source === 'task').length);
+
+  // Log each payout in the earnings history (@/utils/token-history.ts). The
+  // event id is derived from the occurrence key, so it can never be logged
+  // twice. Logging never changes what was paid or the balance above.
+  for (const occurrence of payouts) {
+    await recordTokenEarning({
+      id: `earn:${occurrence.key}`,
+      amount: occurrence.amount,
+      source: occurrence.source,
+      refId: occurrence.taskId,
+    }).catch(() => {});
+  }
 }

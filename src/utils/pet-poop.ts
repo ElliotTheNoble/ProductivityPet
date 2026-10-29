@@ -260,7 +260,15 @@ function createPoopPile(now: Date, stage: PetStage, existingPiles: PoopPile[], s
 // Takes `stage` because placement (how far from Kitty's center the new
 // pile's zone starts) is stage-specific — see createPoopPile/placePoopPile
 // above.
+// A Sick or Critical pet makes no new poop (existing piles stay on the floor
+// until it recovers). Applies to this pet only, since it reads this pet's own
+// health state.
+export function isPoopPaused(profile: PetProfile): boolean {
+  return profile.lifeState === 'sick' || profile.lifeState === 'critical';
+}
+
 export function applyAddPoopPile(profile: PetProfile, stage: PetStage, now: Date = new Date(), size?: PoopSize): PetProfile {
+  if (isPoopPaused(profile)) return profile;
   if (profile.poopPiles.length >= MAX_POOP_PILES) return profile;
   const pile = createPoopPile(now, stage, profile.poopPiles, size);
   const poopPiles = [...profile.poopPiles, pile];
@@ -307,7 +315,7 @@ export function applyAddPoopPile(profile: PetProfile, stage: PetStage, now: Date
 //   fresh interval at that point) rather than this function immediately
 //   refilling the moment room opens up.
 export function applyPoopAccumulation(profile: PetProfile, stage: PetStage, now: Date = new Date()): PetProfile {
-  if (profile.isSleeping || stage === 'Egg') return profile;
+  if (profile.isSleeping || stage === 'Egg' || isPoopPaused(profile)) return profile;
 
   const scheduledTime = profile.nextPoopEventAt ? new Date(profile.nextPoopEventAt).getTime() : NaN;
   if (Number.isNaN(scheduledTime)) {
@@ -385,6 +393,8 @@ export async function checkForPoopAccumulation(stage: PetStage, now: Date = new 
 // next pile could appear, rather than one potentially appearing instantly
 // if the schedule had gone stale while piles sat at the max.
 export function applyCleanUpPile(profile: PetProfile, pileId: string, now: Date = new Date()): PetProfile {
+  // Poop activities are paused while the pet is Sick or Critical; the piles stay.
+  if (isPoopPaused(profile)) return profile;
   const pile = profile.poopPiles.find((p) => p.id === pileId);
   if (!pile) return profile;
 

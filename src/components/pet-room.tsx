@@ -14,10 +14,16 @@ type PetRoomProps = {
   // vertically centering it in a cramped space. Narrow/mobile layouts stay
   // compact, same as before.
   spacious?: boolean;
-  // The id of the currently-equipped Pet Accessory, passed straight
-  // through to PetPlaceholder — see that component and
+  // The ids of the currently-equipped Pet Accessories (one hat + one bow),
+  // passed straight through to PetPlaceholder — see that component and
   // @/utils/pet-equipment.ts.
-  equippedAccessoryId?: string | null;
+  equippedAccessoryIds?: readonly (string | null | undefined)[];
+  // Passed straight through to PetPlaceholder: show the memorial tombstone.
+  isMemorial?: boolean;
+  // Passed straight through to PetPlaceholder: the narrow (phone) Home layout.
+  reserveHealthSpace?: boolean;
+  // Passed straight through to PetPlaceholder: Sick / Critical artwork.
+  healthState?: 'healthy' | 'sick' | 'critical' | 'deceased';
   // The real Hunger value, passed straight through to PetPlaceholder —
   // see that component. Optional so the room-detail screens keep working
   // unchanged without it.
@@ -57,6 +63,8 @@ type PetRoomProps = {
   // Passed straight through to PetPlaceholder — see that component and
   // @/utils/pet-profile.ts's lastBathCompletedAt field.
   lastBathCompletedAt?: string;
+  // Passed straight through to PetPlaceholder: the toy currently out to play (temporary).
+  toyId?: string | null;
 };
 
 // The living-room background now lives once, fixed behind the whole Home
@@ -67,7 +75,10 @@ export function PetRoom({
   stage,
   message,
   spacious = false,
-  equippedAccessoryId,
+  equippedAccessoryIds,
+  isMemorial,
+  reserveHealthSpace,
+  healthState,
   hunger,
   cleanliness,
   happiness,
@@ -84,13 +95,17 @@ export function PetRoom({
   hatchedAt,
   isStagePreviewActive,
   lastBathCompletedAt,
+  toyId,
 }: PetRoomProps) {
   return (
     <View style={[styles.scene, spacious && styles.sceneSpacious]}>
       <PetPlaceholder
         stage={stage}
         message={message}
-        equippedAccessoryId={equippedAccessoryId}
+        equippedAccessoryIds={equippedAccessoryIds}
+        isMemorial={isMemorial}
+        reserveHealthSpace={reserveHealthSpace}
+        healthState={healthState}
         hunger={hunger}
         cleanliness={cleanliness}
         happiness={happiness}
@@ -107,6 +122,7 @@ export function PetRoom({
         hatchedAt={hatchedAt}
         isStagePreviewActive={isStagePreviewActive}
         lastBathCompletedAt={lastBathCompletedAt}
+        toyId={toyId}
       />
     </View>
   );

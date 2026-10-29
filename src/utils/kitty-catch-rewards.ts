@@ -4,6 +4,7 @@ import { KITTY_CATCH_MIN_SCORE_FOR_BONUS } from '@/utils/kitty-catch';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 import { todayISO } from '@/utils/tasks';
+import { recordTokenEarning } from '@/utils/token-history';
 
 // Persistent high score + reward-granting for a completed Kitty Catch
 // round — kept separate from kitty-catch.ts (pure game mechanics, no
@@ -194,6 +195,9 @@ async function runCompleteRound(score: number): Promise<KittyCatchRoundResult> {
     pawTokens: profileBeforeReward.pawTokens + totalPawTokensAwarded,
   };
   savePetProfile(updatedProfile);
+  // Earnings history only (@/utils/token-history.ts) — the amounts above are unchanged.
+  if (playReward.amount > 0) recordTokenEarning({ amount: playReward.amount, source: 'kitty-catch', refId: 'round-reward' }).catch(() => {});
+  if (highScoreBonus.amount > 0) recordTokenEarning({ amount: highScoreBonus.amount, source: 'kitty-catch', refId: 'high-score-bonus' }).catch(() => {});
 
   if (isNewHighScore) {
     saveHighScore(nextHighScore);

@@ -11,10 +11,13 @@ import { BATH_DRY_HOLD_MS, isShowingBathDryHold as getIsShowingBathDryHold } fro
 import { getBathingStepArt } from '@/utils/bathing-stage-art';
 import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP, DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT } from '@/utils/dev-flags';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
-import { getAccessoryPlacement } from '@/utils/pet-accessory-placement';
+import { getHealthAccessoryTransform, getHealthArt } from '@/utils/pet-health-art';
+import { MEMORIAL_TOMBSTONE_SOURCE } from '@/utils/resurrection-art';
+import { getAccessoryPlacement, getPlacementStageForArtwork } from '@/utils/pet-accessory-placement';
+import { ToyFloorItem } from '@/components/toy-floor-item';
 import { DIRTY_CLEANLINESS_THRESHOLD } from '@/utils/pet-needs';
 import type { PoopPile, PoopSize } from '@/utils/pet-profile';
-import type { PetStage } from '@/utils/pet-stage';
+import { getArtworkStage, type PetStage } from '@/utils/pet-stage';
 
 // How far up (in px, via a translateY transform) Kitty's own art — and
 // her equipped accessory, so it keeps tracking her body — sits in the
@@ -30,6 +33,17 @@ import type { PetStage } from '@/utils/pet-stage';
 // (PetPlaceholder) — @/components/room-pet.tsx (every other room) is a
 // separate component untouched by this constant.
 const KITTY_LIVING_ROOM_OFFSET_Y_PX = -30;
+
+// The passed-away tombstone picture: bigger than the kitty, nudged down onto the rug.
+const MEMORIAL_TOMBSTONE_SCALE = 2.0;
+const MEMORIAL_TOMBSTONE_OFFSET_Y_PX = 20;
+
+// How far (px) a Sick / Critical picture can be moved down on Home before it
+// starts to overlap the needs bars under the pet box (see healthExtraSpacePx).
+const HEALTH_FREE_SPACE_PX = 55;
+// Extra breathing room under a lowered Sick / Critical picture on the narrow
+// (phone) layout, where the pet box is small and the paws sit closer to the bars.
+const HEALTH_NARROW_CLEARANCE_PX = 20;
 
 // How far up (in px) the normal Egg picture (stats_egg.png) sits, relative
 // to its old position (which was 0 — unmoved). History: 0 → -40 → -140 →
@@ -111,7 +125,18 @@ const EGG_SCALE = 1.625;
 // deliberately never clips its contents (see its own style comment below),
 // the enlarged picture is never cut off. Only applies to stage === 'Young';
 // every other stage's own scale (hatchIntroScale/eggScale) is unaffected.
-const YOUNG_SCALE = 1.21;
+//
+// Exported (not just module-local) because every Young-stage accessory
+// placement in pet-accessory-placement.ts/pet-accessories.ts was tuned by
+// eye against this SAME scaled-up body image — the accessory's own frame
+// is never itself scaled (see accessoryOverlay's transform below, which
+// only ever carries translateY, not scale), so its position only lands
+// correctly relative to a body that's ALSO rendered at this same 1.21x.
+// @/components/pet-avatar.tsx (the Shop's Kitty preview) imports this
+// constant directly, rather than a second hardcoded copy, specifically so
+// it reproduces that same body-to-accessory relationship — see BUG-021 in
+// bugs.md for the misalignment this fixed when it was missing there.
+export const YOUNG_SCALE = 1.21;
 
 // The pet artwork's own display area (petWrap, the box immediately
 // around Kitty/the Egg's picture) always reserves exactly this much
@@ -177,14 +202,26 @@ type PetPlaceholderProps = {
   // as false on purpose, since that button is deliberately simulating a
   // real hatch for testing.
   isStagePreviewActive?: boolean;
-  // The id of the currently-equipped Pet Accessory (see
-  // @/utils/pet-equipment.ts), passed down from Home — null/undefined
-  // means nothing is equipped, so the pet renders exactly as it always
-  // has. Only ids present in PET_ACCESSORY_ART actually render anything;
-  // this intentionally stays silent (not an error) for any other id, so
-  // an item that's equippable-but-not-yet-wired-up-visually just doesn't
-  // show rather than breaking the pet's rendering.
-  equippedAccessoryId?: string | null;
+  // The ids of the currently-equipped Pet Accessories (see
+  // @/utils/pet-equipment.ts) — up to one hat and one bow, passed down
+  // from Home. Omitted/empty (or null entries) means nothing is equipped,
+  // so the pet renders exactly as it always has. Only ids present in
+  // PET_ACCESSORY_ART actually render anything; this intentionally stays
+  // silent (not an error) for any other id, so an item that's
+  // equippable-but-not-yet-wired-up-visually just doesn't show rather than
+  // breaking the pet's rendering.
+  equippedAccessoryIds?: readonly (string | null | undefined)[];
+  // True when the selected pet has passed away: show the memorial tombstone
+  // (see @/utils/resurrection-art.ts) instead of the pet's picture.
+  isMemorial?: boolean;
+  // True on the narrow (phone) Home layout, which flows top-to-bottom: a lowered
+  // Sick / Critical picture then gets real space under the pet box instead of a
+  // visual shift of the bars (see healthExtraSpacePx).
+  reserveHealthSpace?: boolean;
+  // The pet's real health state. Sick / Critical swap in the matching health
+  // artwork once it exists (see @/utils/pet-health-art.ts); until then, and for
+  // healthy pets and Eggs, the normal picture is shown.
+  healthState?: 'healthy' | 'sick' | 'critical' | 'deceased';
   // The real Hunger value from the persistent Pet Profile (see
   // @/utils/pet-profile.ts), passed down from Home — optional so this
   // component never has to invent a fake value before the profile has
@@ -228,6 +265,8 @@ type PetPlaceholderProps = {
   // there). undefined/'' means "no active Dry hold," same convention as
   // hatchedAt above.
   lastBathCompletedAt?: string;
+  // The toy currently out to play with the pet (a temporary toy session, see @/utils/pet-toy-session.ts).
+  toyId?: string | null;
   // All optional so every existing caller (e.g. the Rooms hub's pet
   // preview, if any) keeps working unchanged without passing these — each
   // button only renders when its own handler is actually provided.
@@ -293,7 +332,9 @@ type PetPlaceholderProps = {
 // own art at any given moment.
 export function getStageImage(stage: PetStage, isDirty: boolean = false, isShowingHatchIntro: boolean = false) {
   if (isDirty) {
-    switch (stage) {
+    // Picture tables are keyed by the kitty PICTURE; getArtworkStage maps
+    // the stage to the swapped Hatchling/Baby artwork (see pet-stage.ts).
+    switch (getArtworkStage(stage)) {
       case 'Hatchling':
         return { source: require('@/assets/images/pets/dirty_hatchling.png'), aspectRatio: 421 / 455 };
       case 'Baby':
@@ -307,7 +348,7 @@ export function getStageImage(stage: PetStage, isDirty: boolean = false, isShowi
   if (stage === 'Hatchling' && isShowingHatchIntro) {
     return { source: require('@/assets/images/pets/kitten_nest.png'), aspectRatio: 1381 / 1139 };
   }
-  switch (stage) {
+  switch (getArtworkStage(stage)) {
     case 'Egg':
       // Simple explanation: the normal Egg-stage picture — originally
       // egg_nest.png (still on disk, just no longer referenced here),
@@ -367,10 +408,20 @@ function capitalizePoopSize(size: PoopSize): string {
   return size.charAt(0).toUpperCase() + size.slice(1);
 }
 
+// The speech bubble shows plain words: the little emoji / icons that some messages end with are
+// dropped here (the message texts themselves, their randomisation and priorities are unchanged,
+// and the same texts keep their emoji wherever else they are shown, e.g. Today's Mood).
+function stripDecorativeEmoji(text: string): string {
+  return text.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 export function PetPlaceholder({
   stage,
   message,
-  equippedAccessoryId,
+  equippedAccessoryIds,
+  isMemorial = false,
+  reserveHealthSpace = false,
+  healthState,
   hunger,
   cleanliness,
   happiness,
@@ -387,6 +438,7 @@ export function PetPlaceholder({
   hatchedAt,
   isStagePreviewActive = false,
   lastBathCompletedAt,
+  toyId,
 }: PetPlaceholderProps) {
   const theme = useTheme();
 
@@ -609,7 +661,17 @@ export function PetPlaceholder({
   // rendering until a real value arrives.
   const isDirty =
     (cleanliness !== undefined && cleanliness <= DIRTY_CLEANLINESS_THRESHOLD) || piles.length > 0 || needsBath === true;
-  const { source } = getStageImage(stage, isDirty, isShowingHatchIntro);
+  const stageImage = getStageImage(stage, isDirty, isShowingHatchIntro);
+  const livingSource = stageImage.source;
+  // Sick / Critical picture, placed so its head lines up with the healthy
+  // picture's head (see @/utils/pet-health-art.ts) — that is what keeps the
+  // tuned hat/bow placements on the head. Null for healthy pets, Eggs and
+  // memorials, which keep the normal picture.
+  const healthArt = isMemorial ? null : getHealthArt(stage, healthState);
+  // A pet that has passed away is shown as the gentle memorial tombstone instead
+  // of its picture (and wears nothing). It goes back to normal the moment the
+  // pet is resurrected, because the flag simply turns off.
+  const source = isMemorial ? MEMORIAL_TOMBSTONE_SOURCE : livingSource;
   // Egg gets its own separate offset (EGG_OFFSET_Y_PX) — see its own
   // comment above for why only the pet's own Image/accessory shift, not
   // the whole petWrap box.
@@ -626,8 +688,29 @@ export function PetPlaceholder({
   const eggScale = stage === 'Egg' && !isShowingHatchIntro ? EGG_SCALE : 1;
   // Simple explanation: the Young-stage picture itself is 10% bigger than
   // before — see YOUNG_SCALE's own comment above.
-  const youngScale = stage === 'Young' ? YOUNG_SCALE : 1;
-  const accessoryArt = equippedAccessoryId ? PET_ACCESSORY_ART[equippedAccessoryId] : undefined;
+  const youngScale = stage === 'Young' && !isMemorial ? YOUNG_SCALE : 1;
+  // The memorial tombstone is drawn larger than a kitty box (it is a smaller picture), so it reads
+  // clearly, especially on a phone. Only the memorial picture is scaled, never the room.
+  const memorialScale = isMemorial ? MEMORIAL_TOMBSTONE_SCALE : 1;
+  // Worn accessories keep their saved placement; on a Sick / Critical picture
+  // they are only moved (and resized) along with the head. The Young body is
+  // drawn 1.21x bigger around the box centre while accessories are not scaled,
+  // so the head positions are mapped through that same scale first.
+  // A Sick / Critical picture moved down by more than HEALTH_FREE_SPACE_PX would
+  // run into the needs bars below the pet box, so the bars and the Feed / Play / Rest
+  // row are shifted down by the extra distance (a pure visual shift: the layout
+  // is bottom-anchored, so adding real space would push the pet UP instead).
+  const healthExtraSpacePx = healthArt ? Math.max(0, healthArt.homeOffsetY - HEALTH_FREE_SPACE_PX) : 0;
+  // Wide layout: shift the bars / buttons visually. Narrow layout: reserve real
+  // space under the pet box so everything below moves down (and the cards after).
+  // On a small (phone-width) pet box the paws sit closer to the bars, so a little extra clearance.
+  const healthShiftPx = reserveHealthSpace
+    ? 0
+    : healthExtraSpacePx + (healthExtraSpacePx > 0 && petBoxSize.width > 0 && petBoxSize.width < 200 ? HEALTH_NARROW_CLEARANCE_PX : 0);
+  const healthSpacePx = reserveHealthSpace && healthExtraSpacePx ? healthExtraSpacePx + HEALTH_NARROW_CLEARANCE_PX : 0;
+  const healthAccessoryTransform = healthArt
+    ? getHealthAccessoryTransform(healthArt, youngScale, petBoxSize.width, petBoxSize.height, healthArt.homeOffsetY)
+    : [];
   // Stage-aware — see @/utils/pet-accessory-placement.ts. 'home' is passed
   // explicitly (not a default) because this component is specifically the
   // Home-screen pet renderer — Stats renders its own, visually different
@@ -653,14 +736,30 @@ export function PetPlaceholder({
   // it's never written to PET_ACCESSORY_ART, never becomes a real
   // placementOverride, and disappears (back to rendering nothing) the
   // moment that flag goes back to false.
-  const accessoryPlacement = accessoryArt
-    ? (accessoryArt.placementOverrides?.home?.[stage] ??
-        (accessoryArt.slot === 'neckCollar'
-          ? getAccessoryPlacement('home', accessoryArt.slot, stage)
-          : DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP && accessoryArt.slot === 'headHat'
-            ? DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT
-            : undefined))
-    : undefined;
+  //
+  // Up to two accessories can be worn at once (one hat + one bow — see
+  // @/utils/pet-equipment.ts); each one resolves its own placement exactly
+  // as described above, independently of the other. An id with no art or
+  // no placement for this stage is simply skipped.
+  //
+  // Placements follow the kitty ARTWORK, not the stage name — Hatchling and
+  // Baby artwork are swapped, so their placement entries are too (see
+  // getPlacementStageForArtwork).
+  const placementStage = getPlacementStageForArtwork(stage);
+  const equippedAccessories = (isMemorial ? [] : (equippedAccessoryIds ?? [])).flatMap((accessoryId) => {
+    const accessoryArt = accessoryId ? PET_ACCESSORY_ART[accessoryId] : undefined;
+    const accessoryPlacement = accessoryArt
+      ? (accessoryArt.placementOverrides?.home?.[placementStage] ??
+          (accessoryArt.slot === 'neckCollar'
+            ? getAccessoryPlacement('home', accessoryArt.slot, placementStage)
+            : DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP && accessoryArt.slot === 'headHat'
+              ? DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT
+              : undefined))
+      : undefined;
+    return accessoryId && accessoryArt && accessoryPlacement
+      ? [{ accessoryId, accessoryArt, accessoryPlacement }]
+      : [];
+  });
   // Rounded for display only — the real, unrounded value is what's stored
   // and what Feed's +20 math (see @/utils/pet-feeding.ts) operates on.
   const hungerPercent = hunger !== undefined ? Math.round(hunger) : null;
@@ -672,12 +771,12 @@ export function PetPlaceholder({
     <View style={styles.wrapper}>
       {message ? (
         <ThemedView type="backgroundElement" style={styles.bubble}>
-          <ThemedText type="smallBold">{message}</ThemedText>
+          <ThemedText type="smallBold">{stripDecorativeEmoji(message)}</ThemedText>
         </ThemedView>
       ) : null}
 
       <View
-        style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO }]}
+        style={[styles.petWrap, { aspectRatio: PET_ART_BOX_ASPECT_RATIO, marginBottom: healthSpacePx }]}
         onLayout={handlePetWrapLayout}
         // `box-none`: this box itself never responds to a touch (it has
         // no onPress of its own), but its real interactive children — the
@@ -689,6 +788,7 @@ export function PetPlaceholder({
         // makes sure it never has a stray hit area of its own out there
         // either, regardless of what's rendered inside it.
         pointerEvents="box-none">
+        {toyId && stage !== 'Egg' ? <ToyFloorItem toyId={toyId} /> : null}
         {/* The ONLY pet-art Image in this box — getStageImage (above)
             already picked exactly one source to show (the temporary
             "just hatched" picture, or the normal one for whatever stage
@@ -742,7 +842,15 @@ export function PetPlaceholder({
             (already a `View` wrapping a `SpriteCrop`) was unaffected by
             this gap, while the bare `<Image>` in the far more common
             normal-picture branch was the one actually swallowing taps. */}
-        {isShowingBathDryHold && !needsBath && petBoxSize.width > 0 && petBoxSize.height > 0 ? (
+        {/* PRIORITY: a Sick / Critical pet must ALWAYS show its own Sick / Critical
+            picture, so the "just bathed" Dry pose (kept for BATH_DRY_HOLD_MS = 30
+            minutes after a normal bath) is skipped whenever healthArt exists. Do
+            not remove the `!healthArt` check: the Dry pose would then replace the
+            Sick / Critical picture if the pet fell ill soon after a bath, and none of
+            the Sick / Critical positioning in @/utils/pet-health-art.ts (the Home
+            offsets, the hat / bow alignment) would show on screen (BUG-039). Healthy
+            pets keep the Dry pose for the full 30 minutes. */}
+        {!healthArt && isShowingBathDryHold && !needsBath && petBoxSize.width > 0 && petBoxSize.height > 0 ? (
           // Kitty just finished a real bath (see lastBathCompletedAt's own
           // comment above) — show her final Dry pose instead of her normal
           // picture, for BATH_DRY_HOLD_MS. Uses the exact same bathing
@@ -800,17 +908,46 @@ export function PetPlaceholder({
           // `pointerEvents="none"` onto the `View` instead of the `Image`,
           // the same way the Dry-hold `SpriteCrop` branch above already
           // (correctly) does it.
-          <View pointerEvents="none" style={styles.petImage}>
-            <Image
-              source={source}
-              style={{
-                width: '100%',
-                height: '100%',
-                transform: [{ translateY: kittyOffsetY }, { scale: hatchIntroScale * eggScale * youngScale }],
-              }}
-              contentFit="contain"
-            />
-          </View>
+          healthArt ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.petImage,
+                {
+                  transform: [
+                    { translateY: kittyOffsetY + healthArt.homeOffsetY },
+                    { scale: hatchIntroScale * eggScale * youngScale },
+                  ],
+                },
+              ]}>
+              <Image
+                source={healthArt.source}
+                style={{
+                  position: 'absolute',
+                  left: `${healthArt.box.left * 100}%`,
+                  top: `${healthArt.box.top * 100}%`,
+                  width: `${healthArt.box.width * 100}%`,
+                  height: `${healthArt.box.height * 100}%`,
+                }}
+                contentFit="contain"
+              />
+            </View>
+          ) : (
+            <View pointerEvents="none" style={styles.petImage}>
+              <Image
+                source={source}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  transform: [
+                    { translateY: kittyOffsetY + (isMemorial ? MEMORIAL_TOMBSTONE_OFFSET_Y_PX : 0) },
+                    { scale: hatchIntroScale * eggScale * youngScale * memorialScale },
+                  ],
+                }}
+                contentFit="contain"
+              />
+            </View>
+          )
         )}
 
         {/* The equipped accessory, layered on top of the pet art itself
@@ -822,8 +959,14 @@ export function PetPlaceholder({
             the same kittyOffsetY as the pet Image above, so an equipped
             accessory keeps tracking Kitty's own (now nudged-up) body
             instead of staying behind at the old position. */}
-        {accessoryArt && accessoryPlacement ? (
-          <View style={[styles.accessoryOverlay, { transform: [{ translateY: kittyOffsetY }] }]} pointerEvents="none">
+        {equippedAccessories.map(({ accessoryId, accessoryArt, accessoryPlacement }) => (
+          <View
+            key={accessoryId}
+            style={[
+              styles.accessoryOverlay,
+              { transform: [{ translateY: kittyOffsetY }, ...healthAccessoryTransform] },
+            ]}
+            pointerEvents="none">
             <View
               style={[
                 styles.accessoryFrame,
@@ -859,7 +1002,7 @@ export function PetPlaceholder({
               />
             </View>
           </View>
-        ) : null}
+        ))}
 
         {/* Simple explanation: this draws one picture + tappable area for
             EACH poop pile in the list. Tapping/clicking it calls
@@ -986,7 +1129,7 @@ export function PetPlaceholder({
           Developer Stage Preview (isStagePreviewActive keeps
           isShowingHatchIntro false there) are completely unaffected. */}
       {!isShowingHatchIntro ? (
-      <View style={styles.needsRow}>
+      <View style={[styles.needsRow, healthShiftPx ? { transform: [{ translateY: healthShiftPx }] } : null]}>
         {/* Hunger status bar — reads the real petProfile.hunger value
             passed down from Home, no separate/fake value. Re-renders
             immediately whenever Home's petProfile state updates (e.g.
@@ -1104,7 +1247,7 @@ export function PetPlaceholder({
           can't be pressed during those 5 seconds — there's no Pressable
           in the tree to receive a tap/click in the first place. */}
       {(onFeed || onPlay || onRest) && !isShowingHatchIntro ? (
-        <View style={styles.actionsRow}>
+        <View style={[styles.actionsRow, healthShiftPx ? { transform: [{ translateY: healthShiftPx }] } : null]}>
           {onFeed ? (
             <Pressable
               onPress={onFeed}

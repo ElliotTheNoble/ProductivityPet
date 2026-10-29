@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -53,10 +54,12 @@ export function AppHeader() {
   // and the nav pills already have their own opaque fill regardless of
   // this flag, so both stay readable over any background.
   const roomDetailSlug = pathname.startsWith('/rooms/') ? pathname.slice('/rooms/'.length) : null;
+  const isPhone = useWindowDimensions().width < 700;
   const isImmersiveRoute =
     pathname === '/' ||
     pathname === '/tasks' ||
     pathname === '/stats' ||
+    pathname.startsWith('/stats/') ||
     pathname === '/mini-games' ||
     pathname === '/shop' ||
     (roomDetailSlug !== null && isRoomSlug(roomDetailSlug));
@@ -68,6 +71,8 @@ export function AppHeader() {
   // any one route, so it mounts once per app session and this stays in
   // sync no matter which page is active.
   const [pawTokens, setPawTokens] = useState<number | null>(null);
+  // Desktop-only hover state for the bell tab's tooltip.
+  const [bellHovered, setBellHovered] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +93,13 @@ export function AppHeader() {
   }, []);
 
   return (
-    <ThemedView style={[styles.container, isImmersiveRoute && styles.transparentContainer]}>
+    <ThemedView
+      style={[
+        styles.container,
+        isImmersiveRoute && styles.transparentContainer,
+        // Phone width: the pet chips sit right under the nav pills (small gap, not a big empty band).
+        isPhone && styles.containerPhone,
+      ]}>
       <View style={styles.inner}>
         <View style={[styles.brand, isImmersiveRoute && styles.brandBackdrop]}>
           <View style={styles.brandTitleRow}>
@@ -121,7 +132,10 @@ export function AppHeader() {
           ) : null}
 
           {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
+            // The per-category Accomplishments pages live under /stats/, so they keep
+            // the Stats pill highlighted.
+            const isActive =
+              pathname === item.href || (item.href === '/stats' && pathname.startsWith('/stats/'));
             return (
               <Pressable
                 key={item.label}
@@ -141,6 +155,39 @@ export function AppHeader() {
               </Pressable>
             );
           })}
+
+          {/* Pet Care & Alerts — an icon-only tab, always last (after Stats). Same
+              pastel pill, spacing and active state as the other tabs. */}
+          <View style={styles.bellWrap}>
+            <Pressable
+              onPress={() => router.replace('/pet-alerts')}
+              onHoverIn={() => setBellHovered(true)}
+              onHoverOut={() => setBellHovered(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Pet Care & Alerts"
+              accessibilityState={{ selected: pathname === '/pet-alerts' }}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <View
+                style={[
+                  styles.navPill,
+                  styles.bellPill,
+                  { backgroundColor: pathname === '/pet-alerts' ? theme.purple : theme.backgroundElement },
+                ]}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={19}
+                  color={pathname === '/pet-alerts' ? '#FFFFFF' : theme.text}
+                />
+              </View>
+            </Pressable>
+            {bellHovered ? (
+              <View style={styles.tooltip} pointerEvents="none">
+                <ThemedText type="small" style={styles.tooltipText}>
+                  Pet Care & Alerts
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
         </View>
       </View>
     </ThemedView>
@@ -155,6 +202,9 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.three,
     paddingTop: Spacing.four,
     paddingBottom: Spacing.three,
+  },
+  containerPhone: {
+    paddingBottom: Spacing.one,
   },
   transparentContainer: {
     backgroundColor: 'transparent',
@@ -196,15 +246,48 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '700',
   },
+  // maxWidth/flexShrink: on a phone the pills must wrap onto a second row instead
+  // of making the whole page scroll sideways (react-native-web items default to
+  // flexShrink 0, so the nav kept its single-row width).
   nav: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+    maxWidth: '100%',
+    flexShrink: 1,
   },
   navPill: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.five,
+  },
+  // The icon-only bell tab: same pill, but sized so the icon sits centred with a
+  // comfortable touch area (at least 44 px wide and 40 px tall).
+  bellPill: {
+    minWidth: 44,
+    minHeight: 40,
+    paddingHorizontal: Spacing.two + 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellWrap: {
+    position: 'relative',
+  },
+  tooltip: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.three,
+    backgroundColor: 'rgba(80, 55, 70, 0.92)',
+    zIndex: 20,
+  },
+  tooltipText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 16,
   },
   navLabelActive: {
     color: '#FFFFFF',

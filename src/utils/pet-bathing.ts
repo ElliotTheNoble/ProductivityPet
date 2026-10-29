@@ -1,3 +1,5 @@
+import { RECOVERY_NEED_THRESHOLD } from '@/utils/pet-family-config';
+import { consumeWashcloth } from '@/utils/pet-family';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 
@@ -16,6 +18,44 @@ import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-pro
 
 // How many Cleanliness points one bath restores.
 export const BATHE_CLEANLINESS_AMOUNT = 25;
+
+// While a pet is Sick or Critical the bathing mini-game is off (this pet only).
+export function isBathingPaused(profile: PetProfile): boolean {
+  return profile.lifeState === 'sick' || profile.lifeState === 'critical';
+}
+
+// The free, always-available way for a Sick or Critical pet to get its
+// Cleanliness back up to the recovery level (50) without the bath: one
+// gentle wipe-down adds WIPE_CLEANLINESS_AMOUNT. Like feeding it costs no Paw
+// Tokens. Touches Cleanliness only — poop piles, needsBath and everything else
+// stay as they are. A no-op for a pet that isn't Sick or Critical.
+export const WIPE_CLEANLINESS_AMOUNT = 25;
+
+export function applyGentleWipe(profile: PetProfile): PetProfile {
+  if (!isBathingPaused(profile)) return profile;
+  // Only a pet that actually needs freshening up (Cleanliness below the recovery threshold) is wiped;
+  // otherwise nothing changes and no washcloth is consumed (see gentleWipePet).
+  if (profile.cleanliness >= RECOVERY_NEED_THRESHOLD) return profile;
+  const next = clampNeedValue(profile.cleanliness + WIPE_CLEANLINESS_AMOUNT);
+  if (next === profile.cleanliness) return profile;
+  return { ...profile, cleanliness: next };
+}
+
+// `expectedPetId` is the pet the wipe-down session was started with: if the
+// selected pet has changed since (the player switched pets mid-session), nothing
+// is awarded.
+export async function gentleWipePet(now: Date = new Date(), expectedPetId?: string): Promise<PetProfile> {
+  const profile = await loadPetProfileWithNeedsUpdate(now);
+  if (expectedPetId !== undefined && profile.petId !== expectedPetId) return profile;
+  const wiped = applyGentleWipe(profile);
+  if (wiped !== profile) {
+    // A completed wipe-down uses up one Gentle Washcloth (never on cancel). Without one
+    // nothing is awarded — the Bathroom doesn't offer the mini-game without a washcloth.
+    if (!profile.petId || !consumeWashcloth(profile.petId).ok) return profile;
+    savePetProfile(wiped);
+  }
+  return wiped;
+}
 
 // Increases Cleanliness by BATHE_CLEANLINESS_AMOUNT, clamped so it never
 // exceeds 100. Touches Cleanliness only — Hunger, Happiness, Energy, Paw
@@ -101,6 +141,9 @@ export function isShowingBathDryHold(lastBathCompletedAt: string | undefined, no
 // to be at their finished values.
 export async function completeBathing(now: Date = new Date()): Promise<PetProfile> {
   const profile = await loadPetProfileWithNeedsUpdate(now);
+  // Bathing is paused while the pet is Sick or Critical (a Gentle Wipe-Down
+  // below is used instead), so a bath can never complete for it.
+  if (isBathingPaused(profile)) return profile;
   const completed: PetProfile = {
     ...profile,
     cleanliness: clampNeedValue(100),

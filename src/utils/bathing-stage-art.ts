@@ -1,3 +1,4 @@
+import { getArtworkStage } from '@/utils/pet-stage';
 import type { RoomPetStage } from '@/utils/room-pet-art';
 
 // Simple explanation: this file just prepares the artwork for the future
@@ -332,7 +333,9 @@ export function getBathingStepArt(step: BathingStep, stepNumber: number, stage: 
   const sheets = step === 'soap' ? SOAP_SHEETS : step === 'rinse' ? RINSE_SHEETS : DRY_SHEETS;
   const sheet = sheets[stepNumber - 1];
   const { source, sheetWidth, sheetHeight, stages } = sheet;
-  return { source, sheetWidth, sheetHeight, ...stages[stage] };
+  // The crops are keyed by each picture's own column; look them up through
+  // the Hatchling/Baby artwork swap (see getArtworkStage in pet-stage.ts).
+  return { source, sheetWidth, sheetHeight, ...stages[getArtworkStage(stage) as RoomPetStage] };
 }
 
 // How many numbered pictures exist for each step — exported so a future

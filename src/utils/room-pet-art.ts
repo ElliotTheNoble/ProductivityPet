@@ -1,4 +1,4 @@
-import type { PetStage } from '@/utils/pet-stage';
+import { getArtworkStage, type PetStage } from '@/utils/pet-stage';
 import type { RoomSlug } from '@/utils/rooms';
 
 // The 4 Rooms that have their own room-specific pet ACTIVITY ART — a
@@ -100,7 +100,9 @@ export const ROOM_PET_ART: Record<RoomPetSlug, Record<RoomPetStage, RoomPetArt>>
 };
 
 export function getRoomPetArt(slug: RoomPetSlug, stage: RoomPetStage): RoomPetArt {
-  return ROOM_PET_ART[slug][stage];
+  // Looked up through the Hatchling/Baby artwork swap (see getArtworkStage
+  // in pet-stage.ts): the tables above are keyed by the picture's own column.
+  return ROOM_PET_ART[slug][getArtworkStage(stage) as RoomPetStage];
 }
 
 // Simple explanation: the Bathroom's "soapy Kitty" pictures, shown while
@@ -134,5 +136,5 @@ const WASHING_KITTY_ART: Record<RoomPetStage, WashingKittyArt> = {
 };
 
 export function getWashingKittyArt(stage: RoomPetStage): WashingKittyArt {
-  return WASHING_KITTY_ART[stage];
+  return WASHING_KITTY_ART[getArtworkStage(stage) as RoomPetStage];
 }

@@ -377,7 +377,7 @@ Track planned and in-progress features here. Copy the template for each new feat
 
 ### [FEATURE-040] Hatchling-stage Shop accessory placements (bow + 15 hats)
 
-- **Status:** In Progress
+- **Status:** Done
 - **Description:** Shop accessories (bows, hats) were previously only placed/sized for Baby Kitty — equipping one on any other stage either showed it in the wrong spot or, for most hats, didn't render it at all, since there was no placement data for those stages. This step adds real Hatchling-stage placements, tuned through direct visual feedback on the real Home pet, for the shared bow placement and all 15 currently-purchasable hats. Young and Adult are not covered yet.
 - **Notes:**
   - **Bow (`neckCollar`, shared by all 26 bows)** — `src/utils/pet-accessory-placement.ts`'s `PLACEMENT_TABLE`. Hatchling's entry was a plain copy of Baby's numbers before this round; it's now its own tuned value, reached through several rounds of visual feedback: `{ width: '22%', marginTop: '70%' }`.
@@ -387,6 +387,7 @@ Track planned and in-progress features here. Copy the template for each new feat
   - The White Cat-Ear Beanie (`hat-1`)'s current Hatchling placement (`{ width: '86%', marginTop: '-15%' }`) may still need further adjustment after peer feedback — it was the first one tuned, before the `scaleX`/`scaleY` independent-axis approach was adopted for later hats.
   - Accessory ownership/purchasing (`shop-inventory.ts`) and the equip system (`pet-equipment.ts`) were not touched by any of this — only placement *data* changed.
   - **Paused here for now** — Hatchling placements exist for the bow and all 15 current hats; the remaining growth stages (Young, Adult) are planned as a later continuation of this same work.
+  - **Update (2026-10-26):** the paused work was completed — Young and Adult placements for the bow and every hat were later tuned and finalized, and Hatchling/Baby placements now follow the swapped artwork. See FEATURE-046.
 
 ### [FEATURE-041] Interactive Soap → Rinse → Blow Dry bathing mini-game
 
@@ -416,3 +417,322 @@ Track planned and in-progress features here. Copy the template for each new feat
   - **Sizing/position tuning.** The Kitty preview went through several rounds of direct visual feedback: removing its purple/lavender card background and instructional text (now just the sprite), moving it lower so she appears to sit on the Shop background's rug, and enlarging her about 75% (`PREVIEW_KITTY_SIZE` 180 → 315px) with the vertical offset adjusted so her paws stayed anchored at the same spot rather than sinking as she grew. The sidebar itself was widened (`PREVIEW_PANEL_WIDTH` 280 → 340px) to comfortably fit her at the larger size.
   - **3-column accessory grid.** The grid isn't a fixed-column layout — it's a flex-wrap row of fixed-width cards (`CARD_WIDTH`). Narrowing `CARD_WIDTH` (246 → 228) is what let 3 cards fit per row at the Shop's typical desktop width instead of 2, since the grid now shares that width with the Kitty preview sidebar. Card spacing (`gap`), and the centered name/price/badge/button layout inside each card, were untouched.
   - Purchasing, ownership, the equip system, Shop categories, and the bathing/growth-progression systems were not touched by any of this.
+
+### [FEATURE-043] Current feature map: what is implemented vs. what is planned (documented 2026-10-26)
+
+- **Status:** Done
+- **Description:** A single, honest summary of the app's state after the Stats / Pet Album / Mood Journey / Token / Streak work, written from the actual code. Detailed entries follow (FEATURE-044 onward); older entries above are kept as the historical record.
+- **Notes:**
+  - **Implemented:** pet growth stages and progression (FEATURE-044), the pet-care system (FEATURE-045), Shop accessories with independent hat + bow slots (FEATURE-046), shared Home/Shop/Stats kitty rendering (FEATURE-047), Completed by Category pages (FEATURE-048), Lifetime Stats cards and pages (FEATURE-049), Pet Album and Born On (FEATURE-050, FEATURE-051), mood history and My Mood Journey (FEATURE-052), daily reflections (FEATURE-053), Your Year So Far / Year in Review (FEATURE-054), Paw Token earnings history (FEATURE-055), task streaks (FEATURE-056), and the mini-games and rewards (FEATURE-057).
+  - **Not implemented (planned / ideas only):** kitty death, revival, and starting a new pet; pet naming; sickness behavior; back-filling token, streak, mood or hatch-date history from before tracking began; AI-written yearly summaries; bandanas in the Shop; a Shop soap item. See FEATURE-058.
+  - **Update (pet family):** the app now supports several pets, health, death and resurrection — see FEATURE-059 to FEATURE-063. The "exactly ONE pet" statement that used to be here no longer applies.
+
+### [FEATURE-044] Pet growth stages and progression
+
+- **Status:** Done
+- **Description:** The kitty has five stages — Egg, Hatchling, Baby, Young, Adult — shown consistently everywhere.
+- **Notes:**
+  - Progress is measured in completed tasks, `TASKS_PER_STAGE = 10` per stage (`src/utils/pet-stage.ts`). Only real tasks count (appointments and birthdays never do), via the shared `countCompletedOccurrences` rule (`src/utils/tasks.ts`).
+  - Egg → Hatchling → Baby advance automatically from the completed-task count. Baby → Young and Young → Adult are paid upgrades through `growPet()` (`src/utils/pet-growth.ts`): Young needs 30 completed tasks and 500 Paw Tokens, Adult needs 40 tasks and 1000 Paw Tokens. The stage actually shown is `getRenderedStage(completedTaskCount, paidStageIndex)`, so Young/Adult only appear once paid for.
+  - The Pet Stage Preview (clickable stage icons on Home's Pet Progress panel) is a display-only developer override shared by Home, the Rooms, the Shop and Stats through `src/utils/dev-stage-preview.ts`, and now persists across refreshes (BUG-020). It never changes real progression.
+  - The Hatchling and Baby kitty artwork are swapped everywhere through one shared mapping, `getArtworkStage()` in `src/utils/pet-stage.ts`: the shared kitty image, the Dirty art, the four Rooms' activity sprites, the Bathroom's washing and bathing frames and the Pet Progress stage icons. Data tuned to a picture (accessory placements, per-room pet placement) is looked up through the same mapping so it stays attached to its artwork (see FEATURE-046; BUG-023, fixed in code and awaiting manual testing).
+
+### [FEATURE-045] Kitty care system: Hunger, Cleanliness, Happiness, Energy
+
+- **Status:** Done
+- **Description:** A persistent Pet Profile (`src/utils/pet-profile.ts`) stores the four 0–100 needs, Paw Tokens, adoption date, hatch date and poop state; the needs decay over time and the player restores them with Feed, Play, Rest and bathing.
+- **Notes:**
+  - Decay per hour (`src/utils/pet-needs.ts`): Hunger 2.5, Cleanliness 1.25, Happiness about 0.83, Energy about 1.67 (Energy recovers while sleeping). A dirty kitty (Cleanliness at or below 20, an uncleaned poop pile, or `needsBath`) also loses extra Happiness and Energy.
+  - Actions: Feed +20 Hunger, Play +20 Happiness (opens the mini-games), Rest +20 Energy, a full Soap → Rinse → Blow Dry bath in the Bathroom (FEATURE-041). Poop piles accumulate and are cleaned by tapping them. There is a bedtime/sleep schedule (`src/utils/pet-bedtime.ts`). Egg has no pet-care features.
+  - The player's own moods are NOT these meters and never touch them (FEATURE-052).
+  - Sickness, death and recovery are now implemented — see FEATURE-061. Needs belong to each pet (FEATURE-059). Egg-stage pets no longer decay. (The old `isSick` flag in the profile is still unused; health lives in each pet's lifecycle.)
+
+### [FEATURE-046] Shop accessories with independent hat and bow slots
+
+- **Status:** Done
+- **Description:** The player can wear one hat AND one bow at the same time. Equipping a hat only replaces the current hat; equipping a bow only replaces the current bow; either can be removed on its own.
+- **Notes:**
+  - `src/utils/pet-equipment.ts` keeps two saved slots (`@ProductivityPet:equippedPetHatId`, `@ProductivityPet:equippedPetBowId`). Hats go in the hat slot; bows (and bandanas, currently hidden from the Shop) share the bow slot. The old single saved id is migrated into the right slot once, then removed. Ownership and purchases are untouched.
+  - Rendering draws every equipped accessory (bow first, hat on top) in `PetPlaceholder` (Home/Rooms) and `PetAvatar` (Shop, Stats, Pet Album) from the same placement data. Eggs never wear accessories. The Shop's "tap an item to try it on" preview replaces only that item's slot.
+  - Placements are keyed by growth stage and finished for Hatchling, Baby, Young and Adult (hats in `placementOverrides` in `src/utils/pet-accessories.ts`; the shared bow placement in `src/utils/pet-accessory-placement.ts`). Because the Hatchling and Baby artwork were swapped, `getPlacementStageForArtwork()` makes each stage read the other's placement entries, so every accessory still fits the artwork it was tuned for. Adult hats and bows were tuned individually in this round.
+  - `DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP` (`src/utils/dev-flags.ts`) is still `true`, which lets unowned hats be equipped for tuning.
+
+### [FEATURE-047] One shared kitty on Home, Shop and Stats
+
+- **Status:** Done
+- **Description:** The Stats Pet Progress card now draws the same kitty as the Shop (`PetAvatar`) — same body art, same equipped hat and bow, same stage rule (`preview ?? real stage`) — instead of separate static Stats images, and updates when the pet profile changes.
+- **Notes:**
+  - Level, the progress bar and "X more tasks" always show real progression; only the kitty and stage pill follow a Pet Stage Preview.
+  - The kitty is nudged 20px lower inside the card (`STATS_PET_OFFSET_Y`) as one transform, so body and accessories stay aligned.
+  - The old `stats_*.png` pet images are no longer referenced but remain on disk.
+
+### [FEATURE-048] Completed by Category: interactive cards and detail pages
+
+- **Status:** Done
+- **Description:** Each of the five category cards (Study, Exercise, Clean, Health, Personal) is fully clickable with hover lift, pointer cursor and press feedback, and opens `/stats/<category>` — "Study Accomplishments" etc.
+- **Notes:**
+  - Each page shows the category icon, total completed, completed in the last 7 days, a pastel bar chart of the last 7 days (zero days included), and the list of completed tasks with dates, from the real task list.
+  - To have real completion dates, tasks gained optional `completedAt` (one-time) and `completedAtByDate` (repeating) timestamps, stamped by `toggleTaskOccurrence` and cleared on undo. Tasks completed before this have no timestamp, show "Date not recorded", and are left off the charts rather than guessed.
+  - Counts use the same rule as the overview, so they always match. Shared page pieces live in `src/components/detail-page-parts.tsx`.
+
+### [FEATURE-049] Lifetime Stats: interactive cards and detail pages
+
+- **Status:** Done
+- **Description:** The Lifetime Stats card on Stats has five interactive rows, each with the same hover/press behavior as the category cards: Tasks Completed, Important Tasks Completed, Pet Album, Paw Tokens Earned, and Day Streak.
+- **Notes:**
+  - `/stats/lifetime/tasks` (Task Completion History) and `/stats/lifetime/important` (Important Task History): total, this week, this month, a 7/30-day bar chart, a by-category breakdown, and the list of completed tasks.
+  - `/stats/lifetime/pets` (Pet Album, FEATURE-050), `/stats/lifetime/tokens` (FEATURE-055) and `/stats/lifetime/streak` (FEATURE-056).
+
+### [FEATURE-050] Pet Album and pet history
+
+- **Status:** Done
+- **Description:** A cute album of every kitty raised: `/stats/lifetime/pets` shows a card per pet (picture, highest stage, highest level, "Current pet" or "Previous pet", Born On), and each card opens a detail page with tasks completed, dates and a gentle memory message.
+- **Notes:**
+  - The current pet is built live from the real profile, tasks and equipment (`src/utils/pet-album.ts`); its stable id comes from the profile's `adoptionDate`. Its highest stage/level are kept as never-lowered "peaks" in a small saved record, so un-checking tasks can't lower them.
+  - Previous pets are stored as frozen snapshots by `archivePet()`, including worn accessories only when a snapshot was supplied. A previous pet never shows the current pet's accessories. **Update:** the album is now built from the pet family store (FEATURE-059/062) — it lists every living and passed-away pet, with history events, and `archivePet()` no longer exists. The earlier peak/archive record is superseded; a pet's peak is saved with the pet.
+  - The app has no pet-naming feature, so cards say "Your Kitty" / "A Previous Kitty". Details that were never recorded say "Not recorded" or "Birth date unknown" instead of guessing.
+
+### [FEATURE-051] Kitty birthday ("Born On") recorded when the egg hatches
+
+- **Status:** Done
+- **Description:** "Born On" is the moment the egg hatched into a Hatchling — not the day the egg arrived (that is shown separately as "Egg arrived").
+- **Notes:**
+  - Recorded by `recordHatchIfNeeded()` (`src/utils/pet-lifecycle.ts`), called from `persistCachedTasks()` (`src/utils/task-storage.ts`) — the one place Home, the Tasks page and the Rooms all save tasks — so it works whichever screen is open. It compares the stage before and after each task change, only records a real Egg → Hatchling crossing, never overwrites an existing `hatchedAt`, and uses the time of the completion that caused the hatch.
+  - Home no longer records it itself; Home still uses `hatchedAt` to decide whether to show the temporary "just hatched" picture.
+  - A pet that had already hatched before this existed has no recorded date and shows "Birth date unknown" — the date is never back-filled.
+  - The date is also copied into the pet's album record the first time the album sees it.
+
+### [FEATURE-052] Mood history and My Mood Journey
+
+- **Status:** Done
+- **Description:** Picking a mood on Home still works exactly as before and now also saves a timestamped check-in (`src/utils/mood-log.ts`, append-only). `/stats/mood` ("My Mood Journey", reached from the "Reflect" panel on Stats) shows total check-ins, days with a check-in, the most recorded mood, and a neutral pattern summary.
+- **Notes:**
+  - **Day view:** the day's check-ins with times, day-to-day navigation, and the reflection editor (FEATURE-053). **Month view:** a calendar, a check-ins-per-day bar chart and a mood pie chart. **Year view:** a one-square-per-day calendar for 365 or 366 days (leap years handled), a yearly pie chart, a 12-month bar chart, and tap-a-day details.
+  - With several check-ins on a day, the calendars show the latest one (all are kept and listed in the day view). Days with no check-in are plain grey — never a mood, never negative. Moods are never labeled good or bad.
+  - Pie charts are made from rotated Views (no SVG library), so they render the same on web and Android (`src/components/pie-chart.tsx`).
+  - Check-ins start from when this shipped; the earlier single saved mood had no timestamp and was not back-filled. Entirely separate from the kitty's meters.
+
+### [FEATURE-053] Daily journal reflections
+
+- **Status:** Done
+- **Description:** On the Day view the player can answer "What's something you'd like to remember about today?" — one short reflection (up to 500 characters) per day, which can be saved, updated or deleted. Writing is always optional, and a journal history list lets the player jump back to any day.
+- **Notes:** Stored only on the device (`src/utils/journal.ts`, AsyncStorage); nothing is sent anywhere. Linked to mood check-ins only by date. Saving empty text removes that day's reflection.
+
+### [FEATURE-054] Your Year So Far / Year in Review
+
+- **Status:** Done
+- **Description:** `/stats/review` shows a personal recap for a chosen year. The current year is headed "Your Year So Far" (January 1 through today only; future dates and not-yet-happened months are never counted or shown as empty); earlier years are headed "Your Year in Review".
+- **Notes:**
+  - Shows tasks completed (top categories and a monthly chart), Paw Tokens earned (monthly chart), days with a completed task, longest streak and milestones, mood check-ins (pie chart and monthly chart), saved reflections quoted in the player's own words, and recorded pet dates. The year picker only spans years that have data.
+  - The written recap is a local template over the real numbers (`src/utils/year-review.ts`) — no AI service, nothing leaves the device, nothing is invented, and moods are never interpreted or judged.
+  - Tasks completed before completion dates were recorded can't be placed in a year; the page says so.
+
+### [FEATURE-055] Paw Token earnings history
+
+- **Status:** Done
+- **Description:** Every Paw Token earning event is now logged (`src/utils/token-history.ts`) with a stable id, timestamp, amount, source and related task or reward. `/stats/lifetime/tokens` shows tokens earned (recorded) and the current balance as separate numbers, this week/month/year, a weekly/monthly/yearly chart, a by-source breakdown, and the latest 100 earnings.
+- **Notes:**
+  - Recorded sources are exactly the ones that exist: completing a task, completing an appointment (`src/utils/paw-tokens.ts`), Kitty Catch rewards and Memory Match rewards. Reward amounts, Shop prices and the balance were not changed.
+  - Task earnings use an id derived from the occurrence, so they can't be logged twice. Spending is never recorded, so it can't lower lifetime earned; un-checking a task never reverses a payout in the existing rules, so there is nothing to subtract. The Home developer test grant is deliberately not recorded.
+  - Tracking started the first time the app launched after this shipped (`startedAt`, shown on the page); earlier earnings were never logged and are not back-filled.
+
+### [FEATURE-056] Task completion streaks and milestones
+
+- **Status:** Done
+- **Description:** `/stats/lifetime/streak` shows the current streak, longest streak, total active days, a month calendar of active days, active days per month for the last 12 months, and a list of previous streaks of 2+ days. The Lifetime Stats row shows the current streak.
+- **Notes:** Computed from the real task list each time (`src/utils/streaks.ts`) — no stored counter. A day is active if at least one task was completed on it; consecutive active days form a streak; the current streak stays alive until a full day passes without a completion. One-time tasks completed before completion dates were recorded can't be placed on a day (the page says how many). Year in Review adds the year's longest streak and 3/7/14/30/60/100-day milestones. The app had no streak rule before this.
+
+### [FEATURE-057] Mini-games and rewards
+
+- **Status:** Done
+- **Description:** Play opens the Mini-Games page with Kitty Catch and Memory Match; each finished game raises Happiness and can pay Paw Tokens, with daily limits. Bathing is its own interactive mini-game (FEATURE-041).
+- **Notes:** Kitty Catch: +10 Happiness, 5 tokens per round (3 per day) plus a 10-token new-high-score bonus (3 per day, minimum score required). Memory Match: +10 Happiness, 5/7/10/15 tokens for easy/medium/hard/expert (3 per day) plus a 10-token new-best bonus (3 per day). Completing tasks pays 10 tokens (15 if Important); appointments pay 5. Rewards are now also logged in the token history (FEATURE-055).
+
+### [FEATURE-058] Not implemented yet (planned / ideas)
+
+- **Status:** Idea
+- **Description:** Things discussed or hinted at that do NOT exist in the code today.
+- **Notes:**
+  - ~~Kitty death, revival, and starting a new pet~~ — implemented, see FEATURE-059 to FEATURE-063.
+  - Pet naming (pets are labelled Kitty 1/2/3 in the UI; no names are stored).
+  - Back-filling token, streak, mood or hatch-date history from before tracking began (not possible from existing data).
+  - Optional AI-written yearly summaries (would need explicit consent; the current recap is a local template).
+  - Bandanas in the Shop (hidden/postponed), and a Shop soap item (`src/utils/bathing-soap.ts` is prepared).
+  - **Pet Pawadise** — a separate future feature. Nothing for it exists in the code yet; it is planned to be built after the current milestone is committed.
+  - Toys for other species (Dog, Frog, Fancy Rat): the per-species structure in `src/utils/toys/` is ready, but no catalogs or artwork exist.
+  - Permanent furniture / room decoration from items such as the cat bed, tunnel and cube house (today they are ordinary temporary toys).
+  - Real Room Decor and Backgrounds products: the Backgrounds tab still shows placeholder emoji items with no buying; Room Decor is hidden from the Shop navigation (its placeholder data is kept).
+  - Final balancing of toy prices and Happiness rewards (current values are provisional).
+
+### [FEATURE-059] Pet family: up to 3 living pets at once
+
+- **Status:** Done (implemented and type-checked; not yet manually tested in the running app)
+- **Description:** The player can adopt extra eggs and care for up to `MAX_LIVING_PETS = 3` pets at the same time (`src/utils/pet-family-config.ts` — change that one number to add slots). Deceased pets do not count toward the limit. Every pet has its own stable id, needs (Hunger, Cleanliness, Happiness, Energy), poop, growth, stage, level, accessories, birthday, health timers and history.
+- **Notes:**
+  - **One atomic store.** `src/utils/pet-family.ts` keeps every pet plus the player's shared Paw Token wallet in a single saved record (`@ProductivityPet:petFamily`), so adoption and resurrection either fully save or don't save at all. Pets are never deleted.
+  - **Migration.** On the first launch after this update the old single Pet Profile becomes pet #1 with the same id the Pet Album already used (`pet-<adoption date>`); its tokens move to the wallet, its growth starts at the current completed-task count (so its stage doesn't change), and its worn hat and bow are carried over. The old saved values are left untouched. Pets already at 0 in a need are given a fresh sickness clock that starts at that moment, so nothing can die on the first launch.
+  - **Switching.** The pet family bar (`src/components/pet-family-bar.tsx`, shown under the header on Home, Rooms, Shop and Stats) has a chip per pet (picture, name label, status dot), an "＋ Adopt an egg" button (with confirmation, safe against repeat taps) and a link to Alerts. The selected pet is what Home, the Rooms, the Shop and Stats show and what every care action changes. Existing code still calls `getPetProfile` / `savePetProfile`; they now act on the selected pet (`src/utils/pet-profile.ts` is a thin layer over the store, `pet-profile-model.ts` holds the data model).
+  - **Per pet:** accessories (equipping affects only the selected pet; purchases are shared by the family and nothing is auto-equipped on another pet), growth, health and album history.
+  - Pets are numbered "Kitty 1/2/3" in the UI only; no names are invented. Only the existing kitty artwork is used.
+
+### [FEATURE-060] Shared Paw Tokens and shared growth
+
+- **Status:** Done (not yet manually tested)
+- **Description:** Tokens belong to the player; growth belongs to each pet.
+- **Notes:**
+  - **Task tokens** (one combined reward per completed task, `getTaskTokenReward`): 1 living pet 10 / 15 (important), 2 pets 20 / 30, 3 pets 30 / 45. Appointment and mini-game rewards are unchanged. With every pet deceased the player still earns the 1-pet amount. Earlier earnings are never repriced. Rewards are paid at most once per task occurrence (the existing awarded-keys record), so refreshing, undoing or switching pets can't pay twice; the earnings history (FEATURE-055) records the new amounts.
+  - **Growth.** Each pet has its own growth credit, stored as whole units (27720 per task, divisible by every pet count from 1 to 12) so splitting never loses anything to rounding. A completed TASK's growth is shared equally between the living pets; Sick, Critical and Deceased pets get nothing and their share is not given to anyone else. Stage and level still come from the same thresholds (10 tasks per stage; Young and Adult still need the paid upgrade) but from the pet's own credit. A pet's Born On is recorded when its credit first reaches 10. Because growth is a ledger, un-checking a task no longer lowers a pet's progress (tokens already worked this way).
+
+### [FEATURE-061] Pet health: Sick, Critical, death, and free recovery
+
+- **Status:** Done (the health rules passed 37 automated checks and the family store 47 (migration, adoption, growth split, health, resurrection, failed saves, restart) in a throwaway test run; not yet tested in the app)
+- **Description:** Each pet follows Healthy → Sick → Critical → Deceased on its own timers (`src/utils/pet-lifecycle-core.ts`).
+- **Notes:**
+  - A pet becomes Sick when Hunger, Cleanliness or Happiness reaches 0 (several at once = one episode, one timer). 24 hours later it becomes Critical (the original sickness start is kept); 72 hours after that (96 hours in total) it passes away. Death is never instant. Growth is paused while Sick or Critical.
+  - It recovers for free as soon as Hunger, Cleanliness and Happiness are all at least 50; the timers clear and a future episode starts fresh. No growth is granted for time spent sick.
+  - **Energy is different:** at 0 the pet falls asleep from exhaustion (no sickness, no death) and wakes once Energy has recovered to 50; this never resets a sickness timer.
+  - Egg-stage pets have no pet care, so their needs don't decay and they can't get sick.
+  - **Timers use saved timestamps** and run for every living pet from the root layout (at launch, once a minute, and when the app returns to the foreground), not from the Home screen. Elapsed time is measured between instants, so time zone and daylight-saving changes don't matter; a device clock moved backwards never rewinds a pet's timers. If a need hit 0 while the app was closed, the sickness start is the estimated moment it crossed 0 (never earlier than it really could have been), or the moment of the first launch for a pet that was already at 0.
+  - Home shows gentle speech-bubble messages for each state, the family bar shows a warning panel with what care is needed and a countdown, and a deceased pet's care buttons, needs bars and poop are hidden. No new sick artwork was invented.
+
+### [FEATURE-062] Death memorial and resurrection (500 Paw Tokens)
+
+- **Status:** Done (the hospital-truck and tombstone artwork are in place; not yet manually tested)
+- **Description:** When a pet passes away its real death time is recorded once, decay and growth stop, ordinary care is disabled, and its identity, birthday, stage, level, accessories and history are preserved in the Pet Album. The memorial reads "Your pet's journey has come to an end. Their memories will always be in your Pet Album." A deceased pet can be resurrected at any time, with no expiry, for exactly 500 Paw Tokens.
+- **Notes:**
+  - `resurrectPet` is one atomic save: it charges 500 and revives the same pet (same id, name, birthday, stage, level, accessories) with Hunger, Cleanliness, Happiness and Energy at 75, Healthy, timers cleared, and no growth for the time it was gone. Not enough tokens or no free living slot means nothing is charged (the dialog says how many tokens are missing). Repeated taps or a failed save never charge twice or leave a half-finished state. The revived pet counts toward the 3-pet limit. Tasks and tokens keep working with all pets deceased.
+  - **Hospital truck animation** (`src/components/resurrection-overlay.tsx`): truck drives in, a progress bar fills over about 60 seconds, the truck drives away, the revived pet appears with a happy message. It is purely visual and starts after the payment succeeded; its progress comes from the saved start time so closing the app resumes it (or goes straight to the ending), Skip is always available, and reduced-motion settings remove the sliding. The truck is `assets/images/resurrection/ambulance.png`, kept at its real proportions with its transparent background, sized from the screen width (180-480 px) and moved as one picture (no wheels, lights or parts animate). On Home, a passed-away pet is replaced by `Memorial_Tombstone.png` (no accessories drawn on it), together with the memorial message, the 500-token Resurrect button and, if short, how many more tokens are needed; the tombstone disappears when the pet is resurrected. Artwork is referenced from `src/utils/resurrection-art.ts`.
+  - The Pet Album (FEATURE-050) now lists living and passed-away pets from the family store, with a status badge, Born On, a history timeline (egg arrived, hatched, sick, critical, recovered, passed away, came back), a Switch button and the Resurrect button.
+
+### [FEATURE-063] Pet health alerts: notifications, vibration and flashlight
+
+- **Status:** Done in code; needs a new development build and on-device testing
+- **Description:** `/pet-alerts` (the icon-only bell tab, the last tab in the navigation bar after Stats) is the child-friendly "Pet Care & Alerts" page: a short "Keep Your Pets Happy!" card (Feed, Bathe, Play, Rest), three simple switches under "Pet Alerts" (remind me, vibrate, flashlight warning), and a "You're in Control!" note. The detailed health rules are in a collapsed "How Pet Health Works" section, and the Samsung instructions and test buttons in a collapsed "Phone Help & Testing" section. `src/utils/pet-alerts.ts` does the work and was not changed by the redesign.
+- **Notes:**
+  - **Phone notifications** (opt-in; asks permission when turned on): a gentle "isn't feeling well" notice when a pet becomes Sick and a stronger emergency notice when it turns Critical, each naming the pet. They are scheduled ahead of time from the saved sickness clocks so they can arrive with the app closed (where the OS allows), rebuilt whenever anything changes so alerts for recovered, deceased or resurrected pets are cancelled, and each episode is announced once. Android channels: "Pet health" and "Pet emergencies" (max importance, vibration pattern, plus a no-vibration twin used when vibration is turned off). Local notifications need a development or production build (not Expo Go).
+  - **Vibration** (on by default): three short pulses when a pet turns Critical while the app is open. Can be turned off.
+  - **Flashlight alert** (off by default, opt-in): while the app is open, the flashlight switches on and off three times in step with the vibration when a pet turns Critical. It uses `expo-camera`'s torch, so it needs a development build and camera permission (requested only when the player turns it on; the app never takes photos). Android doesn't reliably allow flashlight control from the background, so it only runs while the app is open, and only once per sickness episode.
+  - **Samsung Camera Flash Notification:** the page explains how players can switch on Samsung's own accessibility feature themselves; the app cannot enable it.
+  - **Non-flashing alternative:** a critical pet always shows a red warning panel with a countdown in the family bar.
+  - **Developer Tools** (shown only when `DEV_ENABLE_LIFECYCLE_TEST_CONTROLS` is on AND the build is a development build, i.e. never in a production release): buttons on the Alerts page set a need to 0 and move the sickness clock back 24/72/96 hours so Sick, Critical, death and resurrection can be tried quickly.
+  - **Build change:** `expo-camera` was added to `package.json` and `app.json` (config plugin with a camera-permission description, microphone off). A new EAS development build is required before the flashlight (and any notification test) can be tried.
+
+### [FEATURE-064] Compact health banner, Happiness dev controls and health-artwork structure
+
+- **Status:** Done in code, including the Sick/Critical artwork (2026-10-27); not yet manually verified
+- **Description:** The Sick / Critical banner under the pet-switching bar is now one compact pastel row: a line "heart-pulse" icon, "<pet name> isn't feeling well" (Critical: "<pet name> needs urgent care"), "Help her feel better by restoring her needs.", and a clock icon with the live countdown (to Critical, or to passing away). The speech-bubble message is no longer repeated in it. Developer Tools has "Dev: Set Happiness to 0% / 25% / 50% / Restore to 100%" for the selected pet only, using the normal health recalculation. `src/utils/pet-health-art.ts` holds the Sick / Critical pictures per stage (cropped from the supplied sheets into `assets/images/pets/health/`, aligned head-to-head with the healthy pictures so the tuned hat/bow placements still fit); Home and every Room show them from the pet's real health state, and a recovered pet returns to the normal picture. Eggs, healthy and deceased pets never use them.
+
+### [FEATURE-065] Gentle Wipe-Down mini-game and browse-only Shop while unwell
+
+- **Status:** Done in code; not yet manually verified
+- **Description:** A Sick or Critical pet cannot bathe, so the Bathroom offers a free Gentle Wipe-Down instead: drag a soft pastel washcloth over the kitty (mouse or touch) while a cute progress bar fills; at 100% the pet gets +25 Cleanliness once (a new session can be started if it still needs more). Its Sick / Critical picture shows throughout. The Shop can still be opened and browsed, with the pet's Sick / Critical picture, but buying and equipping are disabled with a short friendly note until the pet recovers; purchases, equipped accessories and Paw Tokens are never changed by this.
+
+### [FEATURE-066] Home redesign: two slide-out panels, cleaner living room, developer tools moved to Alerts
+
+- **Status:** Done in code (2026-10-27); looked at in a real web run (Chrome-engine, mouse) at 360/390 px portrait, 844x390 landscape and 1070 px desktop — **not yet tried with real touch or on a phone**.
+- **Home:** the living room now shows just the kitty, her speech bubble, the four needs bars and Feed / Play / Rest. Two small labelled tabs sit on the screen edges:
+  - **Pet Progress** (lavender, left, paw icon + arrow): the existing `PetProgress` card (level, growth bar, tasks to the next stage, the five stages, and the development-only Pet Stage Preview on the stage icons).
+  - **Home Features** (pastel pink, right, home icon + arrow): Today's Tasks, Today's Appointments, Today's Mood and — in landscape/wide only — the Rooms shortcut card. In portrait the duplicate Rooms card is hidden (the Rooms tab in the top navigation is unchanged and the Rooms feature itself is untouched).
+- **Panel behaviour** (`src/components/slide-out-panel.tsx`): tap the tab, drag the tab, or swipe in from the screen edge to open; a "Close" button, tapping the dimmed room, or swiping the panel back closes it; only one panel at a time (the other tab hides while one is open); gentle ease-out slide + backdrop fade; the panel body scrolls on its own (scroll doesn't chain to the page) and the dimmed backdrop blocks the room behind from being touched or scrolled. Gestures only claim clearly horizontal moves, so pet taps, care buttons and vertical scrolling aren't affected. Portrait panel ~88% of the width (max 360 px); landscape/desktop up to 400 px.
+- **Orientation:** unchanged (`app.json` still `"orientation": "default"`); portrait/landscape is just re-evaluated from the window size, panels resize, the selected pet and saved data are never touched. In a short landscape window the pet group scales down to fit instead of being cut off.
+- **Developer tools moved** from Home to Alerts -> Developer Tools (development builds only, as before; the pet-specific actions act on the selected pet only), in collapsible sections: Pet Needs, Pet Growth and Stages (actual stage, +10 growth, paid "Grow to…"), Health and Lifecycle Testing, Poop and Bath Testing (cleanliness, add piles, fast-forward, clear piles, reset needsBath), Paw Token Testing (+1500), Hatching and Animation Testing ("Replay Hatching Animation" switches to Home and plays it). The display-only Pet Stage Preview stays on the Pet Progress panel's stage icons. No controls were duplicated or removed.
+- **To test manually:** touch swipes (open from the edge, swipe closed, vertical scroll inside a panel with a long task list, page behind not scrolling), a real phone rotation between portrait and landscape, the care buttons/bars/kitty while panels are closed, panels with several pets and a Sick/Critical pet, replaying the hatching animation from Alerts, and that none of the developer sections show in a production build.
+
+### [FEATURE-067] Developer Health State (Alerts -> Developer Tools -> Health and Lifecycle Testing)
+
+- **Status:** Done in code (2026-10-28); logic checked with a throwaway store test (all passed); the new buttons were **not yet tried in the app UI**.
+- **Description:** a new "Developer Health State" section with four options (Healthy, Sick, Critical, Deceased) and an "Apply State" button. It sets the selected pet's REAL, saved health state in any direction (including Deceased -> Sick / Critical / Healthy), persists across refresh, and affects only the selected pet. Healthy restores Hunger/Cleanliness/Happiness/Energy to 100 and clears illness timers; Sick starts the sickness clock now (24h to Critical); Critical starts it 24h ago so 72h remain; Deceased records the time of passing and keeps identity, name, stage, growth, accessories and history. If a Sick/Critical pet would otherwise have all needs at 50+, Happiness is set to 25 so it doesn't recover at once. No Paw Tokens are charged, no resurrection or ambulance animation runs, no alerts are sent, and the paid resurrection and normal illness rules are unchanged. An Egg can't be set Sick/Critical/Deceased, and reviving a Deceased pet needs a free living-pet slot (max 3). Development builds only; the existing illness-timer buttons stay.
+
+### [FEATURE-068] Pet Care Supplies (Gentle Washcloth, Pet Medicine), Deceased state across the app, plain speech bubbles
+
+- **Status:** Done in code (2026-10-28); `npx tsc --noEmit` passes; store logic checked with a throwaway test (all passed); Shop supplies card, Bathroom washcloth notice and the deceased pictures looked at in a web run at 390 px. Not yet manually tried end-to-end with a real wipe-down / purchases in the UI.
+- **Pet Care Supplies (Shop, new section above the accessory categories):**
+  - **Gentle Washcloth — 10 Paw Tokens.** A completed Gentle Wipe-Down (Bathroom only) uses up exactly one and still gives +25 Cleanliness; cancelling or leaving early uses nothing; each extra wipe-down needs another washcloth. Without one, the Bathroom shows "Gentle Washcloth needed" (Go to Shop; if the player can't afford one it says to complete tasks to earn Paw Tokens) instead of the mini-game, and the health banner says so. Nothing is used up by getting sick, opening the Bathroom or leaving a session unfinished. The drag mechanics and 1800 px requirement are unchanged.
+  - **Pet Medicine — 50 Paw Tokens.** "Give to <pet>" on a Sick or Critical, hatched pet: +25 Hunger and +25 Happiness (max 100), one item used; it doesn't cure — the normal recovery rule (Hunger, Cleanliness, Happiness all 50+) is re-checked afterwards. Refused for Eggs, healthy and deceased pets.
+  - **Inventory** (`supplies` in the saved pet-family data, shared by all pets, older saves = none): purchases deduct tokens and add the item in one save; use deducts once; quantities and balance can't go negative; shown as "You own: N"; survives refresh and pet switching.
+  - **No free washcloths:** there is no emergency or free washcloth; Paw Tokens come from completing tasks (the existing task reward system, unchanged). If the player can't afford a supply the Shop and Bathroom say to complete tasks to earn more. Tasks stay reachable whether the selected pet is Healthy, Sick, Critical or Deceased.
+  - Temporary Ionicons (water drop, medkit) stand in for artwork.
+- **Shop by health state:** Healthy — everything normal. Sick / Critical — accessories browse-only (explanatory message), supplies can be bought and used. Deceased — no accessory or supply buying/equipping/using; the memorial/resurrection (500) information is shown.
+- **Deceased everywhere:** a passed-away pet is the memorial tombstone in Home, every Room, the Shop preview, Stats, and the pet-switching chips (never a living kitty); Room care tools / bathing are hidden for it; the Pet Album and the revival animation are unchanged. The Home tombstone is about twice as large (`MEMORIAL_TOMBSTONE_SCALE`), nudged onto the rug.
+- **Speech bubbles:** the little emoji at the end of some messages are no longer shown in the bubble (texts, randomisation and priorities unchanged; other places such as Today's Mood keep theirs).
+
+### [FEATURE-069] Shop by health state (supplies-only when unwell), sticky Kitty Preview, tighter phone header
+
+- **Status:** Done in code (2026-10-28); looked at in a web run at 390/360 px portrait and 1000x420; not tried on a phone.
+- **Healthy:** full Shop (catalog, categories, preview, buy, equip) plus Pet Care Supplies. **Sick / Critical:** the accessory catalog, category tabs and Kitty Preview are hidden; a friendly message says accessories come back when she feels better; Pet Care Supplies stay usable. **Deceased:** no catalog and no supplies, just the memorial message with Resurrect guidance (500 Paw Tokens). The Shop follows the selected pet immediately when switching pets or changing state; purchased and equipped accessories are never touched, and the buy/equip handlers remain blocked for unwell and deceased pets.
+- **Portrait:** the Kitty Preview button is a single compact button that stays at the top of the visible page while the catalog scrolls (sticky on web); the existing preview behaviour is unchanged.
+- **Phone header:** the gap between the navigation pills and the pet chips (Kitty 1/2/3) is small and consistent (shared header, phone width only).
+
+### [FEATURE-070] Temporary memorial notification, permanent memorial + Resurrect in Stats, Bathroom/Shop button polish
+
+- **Status:** Done in code (2026-10-28); toast, Stats memorial and Bathroom message looked at in a web run (390/360 px). Hover/pressed effects not seen.
+- **Memorial notification:** when the selected pet passes away a small heart-icon message appears under the navigation for about 5 seconds (or until tapped). It is remembered per death (pet id + time of passing, `@ProductivityPet:memorialSeen`), so it doesn't return on tab changes or refreshes; a different pet's death, or the same pet dying again, shows a new one. It floats, so it doesn't push or cover navigation.
+- **Stats:** a permanent memorial card for a deceased selected pet: name, the memorial picture, a short message, and the existing Resurrect control (500 Paw Tokens, disabled with "needs N more Paw Tokens" when short; confirmation, ambulance animation, slot limit and checks all come from the existing `resurrectPet`). The Home memorial card was replaced by the notification; Resurrect is also still in the Pet Album.
+- **Bathroom:** the washcloth notice reads "Your kitty needs a Gentle Washcloth." plus "Get one in the Shop for 10 Paw Tokens." or "Not enough Paw Tokens! Complete tasks to earn more."; Go to Shop highlights on hover and shows pressed feedback.
+- **Shop supplies:** Buy Gentle Washcloth, Buy Pet Medicine and Give Medicine (when enabled) lift/outline on hover; disabled ones don't.
+
+### [FEATURE-071] Toys (Cat Toys), per-species toy structure, Shop tab swap
+
+- **Status:** Done in code (2026-10-28); `npx tsc --noEmit` passes. Looked at in a web run: Shop Toys tab at 360/390/844x390/1280 px, buy/play/consume, 30-second toy beside the kitty on Home (portrait, landscape, desktop). Provisional prices and rewards, and a starter set of only 3 toys, pending the player's approval.
+- **Update:** the Shop-card Play and the 30-second session described here were refined later: 60-second sessions (FEATURE-072), the Pet Care tab (FEATURE-073), Buy/Play side by side and all 24 toys (FEATURE-074, FEATURE-075). Home Features -> Toys is inventory only.
+- **Shop navigation:** Pet Accessories, **Toys**, Backgrounds. Room Decor is only hidden from the navigation (its placeholder data is still in the code; it never had saved purchases).
+- **Per-species structure:** `src/utils/toys/` — `toy-catalog.ts` (species registry; only Cat Toys exists), `cat-toys.ts` (the catalog), `cat-toy-art.ts` (artwork crops from `assets/images/shop/toys/kitty_toys.png`, a 6 x 4 sheet of 24 toys), `toy-config.ts` (every price / Happiness reward / the 30 s session length). A future species is its own art + catalog file plus one registry line; the Shop and Home read the registry only.
+- **Inventory:** `toys` count map saved in the pet family store (`buyToy`, `playWithToy` in `pet-family.ts`): tokens and the toy are changed in one save; single use; counts never below 0; persists across refreshes.
+- **Playing:** from the Shop (Play on a toy card) or Home Features -> Toys. Happiness +reward (cap 100) once, one toy used, then the toy shows beside the kitty on Home for ~30 s (`pet-toy-session.ts`, not saved, never decoration). Repeat taps and a second toy during a session do nothing (one session per pet).
+- **Health rules:** Healthy, Sick and Critical pets can buy and play; a Sick/Critical pet sees only the Toys tab (accessories/backgrounds stay paused) plus Pet Care Supplies. Deceased: no toys. Egg: can't play (buying allowed).
+- **Gentle Wipe-Down only when Cleanliness < 50:** at 49 the wipe-down (or the washcloth card with Go to Shop when none is owned) shows; at 50+ "Your kitty doesn't need a gentle bath right now." shows instead, no purchase prompt, no washcloth used (the wipe itself also refuses at 50+). Updates live.
+
+### [FEATURE-072] Toys polish: one consumable note, full artwork, 60-second sessions, simple category icons
+
+- **Status:** Done in code (2026-10-28); `npx tsc --noEmit` passes. Seen in a web run at 360/390/844x390/1280 px (art, note, icons) and a timed run for the 60-second session. Hover/pressed of the new icons not looked at.
+- **Update:** the category icons were replaced again in FEATURE-073 (MaterialCommunityIcons); the 60-second session and the single consumable note still apply.
+- Individual toy cards no longer say "Single Use"; the Cat Toys section has one line: "Play with toys to make your kitty happy! Toys are used up after playtime." Quantities ("You own") still show. Behaviour, prices and rewards unchanged.
+- A toy now stays beside the kitty on Home for 60 seconds (`TOY_SESSION_MS` in `src/utils/toys/toy-config.ts`). One Happiness award and one toy used per play; overlapping sessions still blocked.
+- Shop category buttons use outline Ionicons (`ribbon-outline`, `football-outline`, `image-outline`, size 18, same colour) instead of emoji; colours, labels and states unchanged.
+
+### [FEATURE-073] "Play with Toy" beside Play on Home; Shop "Pet Care" tab; new category icons
+
+- **Status:** Partly superseded (2026-10-28). The Pet Care tab and the category icons are Done and kept; the Home "Play with Toy" button was removed (see FEATURE-074).
+- **Update:** the Home "Play with Toy" button and its chooser described below were REMOVED in FEATURE-074 (toys are played from their Shop cards; Home's care controls are Feed, Play, Rest again). The Pet Care tab, the new category icons and the Bathroom's Go to Shop opening the Pet Care tab remain.
+- **Home:** a peach "Play with Toy" button sits right after Play in the care row (`toy-play-button.tsx`, passed to the pet as `extraAction`). The row now wraps and centers when it doesn't fit (Rest drops to a second line at 360/390 px). Original Play and its mini-game are untouched. The button opens a small chooser (toy picture, name, owned count, Happiness); picking one calls the same `playWithToy()` as before (one Happiness award, one toy, one 60-second session). With no toys it offers Go to Shop; while a toy is out the button reads "Toy out…" and is disabled.
+- **Home Features -> Toys** is now inventory only (counts plus a hint); the Play buttons there were removed to avoid duplication.
+- **Shop tabs:** Pet Accessories, Toys, **Pet Care** (Gentle Washcloth / Pet Medicine moved here from under every tab), Backgrounds. Sick/Critical pets see Toys and Pet Care. Icons are all MaterialCommunityIcons outline at one size: `creation-outline` (sparkles), `gamepad-variant-outline` (gamepad), `heart-pulse`, `image-outline`. The project doesn't have the Lucide set you named (`gamepad-2` etc.) and no SVG library, so these are the closest matches; adding Lucide would need new dependencies.
+
+### [FEATURE-074] Buy and Play side by side on each toy card (replaces the Home "Play with Toy" button)
+
+- **Status:** Done in code (2026-10-28); `npx tsc --noEmit` passes. Seen in a web run at 360/390/844x390/1280 px (cards, Home row), plus buy/play flow and the Bathroom's Go to Shop. A real-phone touch test wasn't done.
+- **Player-tested:** the player tested this on 2026-10-28 and reported it working (portrait Buy/Play layout confirmed).
+- Each toy card in Shop -> Toys now has `[Buy · price] [Play]` on one row (it wraps only if a card is too narrow). Quantity ("You own") and "+N Happiness" stay visible; Play is disabled at 0 owned and while a toy is out. Hover/pressed feedback unchanged.
+- **Removed:** the peach "Play with Toy" button and its chooser (FEATURE-073) and the care-row wrapping that came with it; Home's care controls are Feed, Play, Rest again, and Play's mini-game was never touched. The toy logic (`playWithToy`, inventory, 60-second session) is unchanged. Home Features -> Toys is inventory only; its hint now points to the Shop cards.
+- Kept as approved: the four category icons (creation-outline, gamepad-variant-outline, heart-pulse, image-outline), the Pet Care tab, and Sick/Critical seeing Toys + Pet Care. The Bathroom's Go to Shop now opens the Pet Care tab explicitly (`/shop?tab=care`), even if the player last left the Shop on Toys.
+- Test result: buy 10 tokens once (100 -> 90, 1 owned); a double-tap on Play used one toy and gave +10 Happiness once (40 -> 50).
+
+### [FEATURE-075] Full Cat Toys collection (all 24 designs) and price-only Buy buttons
+
+- **Status:** Done in code (2026-10-28); `npx tsc --noEmit` passes. Seen in a web run (see below). Prices and rewards are provisional.
+- **Player-tested:** the player tested this on 2026-10-28 and reported it working (portrait Buy/Play layout confirmed).
+- **All 24 toys** from `kitty_toys.png` are in Shop -> Toys -> Cat Toys, in sheet order, as ordinary temporary toys (beds, tunnel and cube house included; permanent furniture is a future idea). Names: Plush Mouse, Blue Fish Plush, Pink Yarn Ball, Feather Wand, Crinkle Ball, Chick Plush / Paw Tunnel, Catnip Candy, Ball Tower, Spring Paw Toy, Jingle Bell Ball, Mint Pom-Pom / Heart Pillow, Pastel Pom-Pom, Goldfish Plush, Cat Bed, Dangling Star Stand, Cat Cube House / Shrimp Plush, Fishbone Plush, Butterfly Toy, Daisy Toy, Rainbow Toy, Strawberry Milk Toy. The first three keep their original ids, so anything already owned still counts.
+- **Prices / Happiness** (all in `src/utils/toys/toy-config.ts`): the first three keep 10/+10, 15/+15, 20/+20; others use the 10 / 20 / 30 tiers — 10: Crinkle Ball, Catnip Candy, Jingle Bell Ball, Mint Pom-Pom, Pastel Pom-Pom, Shrimp, Fishbone, Daisy; 20: Feather Wand, Chick, Spring Paw, Heart Pillow, Goldfish, Butterfly, Rainbow, Strawberry Milk; 30: Paw Tunnel, Ball Tower, Cat Bed, Dangling Star Stand, Cat Cube House. Task rewards untouched.
+- **Art:** unchanged crop system (`cat-toy-art.ts`, each toy's own bounding box). I rendered all 24 crops side by side: every toy is whole (tails, fins, bows, shadows) with no neighbour in frame. The sheet file is untouched.
+- **Buy buttons** on toy cards now show just the Paw Token coin and the price (e.g. coin 10); the accessible name is still "Buy Plush Mouse for 10 Paw Tokens". Padding is a little tighter. Only toy cards changed; Pet Care supplies and accessories keep their buttons.
+- **Same toy system** as before: shared inventory, one Happiness award and one toy per play, one 60-second session per pet, Sick/Critical allowed, deceased/egg refused.
+
+### [FEATURE-076] Milestone feature map: completed vs. planned (documented 2026-10-28)
+
+- **Status:** Done (documentation; written from the code and the earlier entries). The player tested the milestone below on 2026-10-28 and reported everything working. Older entries stay as the historical record.
+- **Completed (in the app today):**
+  - **Cat Toys collection** — all 24 toys from `assets/images/shop/toys/kitty_toys.png` in Shop -> Toys -> Cat Toys (FEATURE-071, FEATURE-075). Names, art slots and the provisional price/Happiness tiers (10/+10, 20/+20, 30/+30; the first three keep 10, 15, 20) live in `src/utils/toys/`; artwork crops are each toy's own bounding box (BUG-055).
+  - **Paw Token purchasing and persistent toy inventory** — buying deducts tokens and adds the toy in one save; counts persist (saved with the pet family); shared by all pets.
+  - **Toy Play buttons and Happiness rewards** — Buy (coin + price) and Play side by side on every toy card (FEATURE-074, BUG-056, BUG-057); a play uses one toy and adds its Happiness once; Play is disabled with none owned or while a toy is out.
+  - **Temporary toy animations in the Home living room** — the toy shows beside the kitty for 60 seconds (`TOY_SESSION_MS`), gently bouncing, then disappears; one session per pet; never saved or permanent (BUG-054).
+  - **Responsive Shop** — four tabs (Pet Accessories, Toys, Pet Care, Backgrounds) with simple MaterialCommunityIcons; whole-page scrolling on phones, sticky Kitty Preview, docked preview on wide/landscape screens (FEATURE-042, FEATURE-069, FEATURE-073).
+  - **Pet Care Shop** — Gentle Washcloth (10 tokens) and Pet Medicine (50 tokens) with a persistent inventory (FEATURE-068); Pet Medicine is given from its card; the Bathroom's Go to Shop opens this tab.
+  - **Sick and Critical pet care** — the Gentle Wipe-Down mini-game (one washcloth per completed wipe, +25 Cleanliness, only when Cleanliness is below 50, otherwise "Your kitty doesn't need a gentle bath right now."), Pet Medicine, toys for Happiness, the health banner naming which needs to check (Hunger/Cleanliness/Happiness below 50), Sick/Critical artwork in Home, Rooms, Shop and Stats, and no accessory buying/equipping while unwell (FEATURE-061, FEATURE-064, FEATURE-065, FEATURE-068, FEATURE-069, FEATURE-071).
+  - **Pet health progression, recovery and resurrection** — Healthy -> Sick -> Critical -> Deceased on saved timers; free recovery at 50+ in all three needs; a memorial (tombstone, 5-second notification, permanent card in Stats) and paid resurrection for 500 Paw Tokens with the hospital-truck animation (FEATURE-061, FEATURE-062, FEATURE-070).
+  - **Pet family** — up to 3 living pets with shared Paw Tokens and a shared toy/supply inventory (FEATURE-059, FEATURE-060).
+  - **Home redesign** — kitty-focused living room with Pet Progress and Home Features slide-out panels (FEATURE-066).
+  - **Pet alerts** — notifications, vibration and flashlight warning options (FEATURE-063; needs a development build on a device).
+  - **Developer Tools** (Alerts page, development builds only) — pet needs, growth and stages, health/lifecycle testing, Developer Health State, poop and bath testing, Paw Token testing, hatching replay (FEATURE-063, FEATURE-066, FEATURE-067).
+  - Everything listed in FEATURE-043 (growth, care system, accessories, Stats, Pet Album, mood and year-in-review features, streaks, mini-games).
+- **Planned / future (NOT implemented):** Pet Pawadise (separate future feature, no code yet); toys for Dog, Frog and Fancy Rat pets; permanent furniture from beds/tunnel/cube house; real Backgrounds and Room Decor products; bandanas; pet naming; final toy price/reward rebalancing. See FEATURE-058.
+- **Known gaps:** the Gentle Wipe-Down's finger-drag completion, real-phone touch behaviour, hover states and multi-pet toy sessions were not separately itemised in testing; see the open items in bugs.md.
