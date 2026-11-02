@@ -1,3 +1,4 @@
+import { HoverPressable } from '@/components/hover-pressable';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
@@ -8,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CareSuppliesSection } from '@/components/care-supplies-section';
 import { ToyShopSection } from '@/components/toy-shop-section';
 import { hoverLift } from '@/constants/hover';
+import { trName, useT, type StringKey } from '@/i18n';
 import { PawTokenCoin } from '@/components/paw-token-coin';
 import { RESURRECTION_COST } from '@/utils/pet-family-config';
 import { PetAvatar } from '@/components/pet-avatar';
@@ -582,7 +584,16 @@ const SAMPLE_ITEMS: Record<ShopCategory | 'Room Decor', SampleShopItem[]> = {
 // - The accessory grid: cards wrap onto new rows automatically based on
 //   how many fit — narrowing/widening CARD_WIDTH is what changes how
 //   many columns show.
+// The category tab labels (the stored category names stay English).
+const CATEGORY_LABEL_KEYS: Record<string, StringKey> = {
+  'Pet Accessories': 'shopCatAccessories',
+  Toys: 'shopCatToys',
+  'Pet Care': 'shopCatCare',
+  Backgrounds: 'shopCatBackgrounds',
+};
+
 export function ShopScreen() {
+  const { t } = useT();
   const theme = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<ShopCategory>('Pet Accessories');
   // "/shop?tab=care" (the Bathroom's Go to Shop) opens the Pet Care tab.
@@ -1017,8 +1028,8 @@ export function ShopScreen() {
             <View style={styles.restNotice} accessibilityRole="alert">
               <ThemedText type="smallBold">
                 {petHealth === 'deceased'
-                  ? `Your kitty is resting in memory, so shopping is paused. To bring her back, use Resurrect in the memorial section of the Stats tab (${RESURRECTION_COST} Paw Tokens).`
-                  : 'Your kitty needs some rest! Accessories will come back when she feels better. Toys and Pet Care Supplies can still be bought and used (see those tabs).'}
+                  ? t('shopRestDeceased', { cost: RESURRECTION_COST })
+                  : t('shopRestUnwell')}
               </ThemedText>
             </View>
           ) : null}
@@ -1041,7 +1052,7 @@ export function ShopScreen() {
                       <MaterialCommunityIcons name={icon} size={18} color="#6B4A5A" />
                     </View>
                     <ThemedText type="smallBold" style={isSelected ? styles.categoryLabelActive : undefined}>
-                      {name}
+                      {CATEGORY_LABEL_KEYS[name] ? t(CATEGORY_LABEL_KEYS[name]) : name}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -1054,15 +1065,15 @@ export function ShopScreen() {
           {!isDesktopPreview && !petUnwell ? (
             <>
               <View style={styles.stickyPreviewToggle}>
-              <Pressable
+              <HoverPressable
                 onPress={() => setIsMobilePreviewExpanded((prev) => !prev)}
                 style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="backgroundSelected" style={styles.mobilePreviewToggle}>
                   <ThemedText type="smallBold">
-                    🐾 Kitty Preview {isMobilePreviewExpanded ? '▾' : '▸'}
+                    {t('shopKittyPreview')} {isMobilePreviewExpanded ? '▾' : '▸'}
                   </ThemedText>
                 </ThemedView>
-              </Pressable>
+              </HoverPressable>
               </View>
               {/* No card background here (per the player's request — see
                   previewPanelContent's own comment) — a plain View purely
@@ -1139,7 +1150,7 @@ export function ShopScreen() {
                     )}
                   </Pressable>
                   <ThemedText type="smallBold" style={styles.itemName}>
-                    {item.name}
+                    {trName(item.name)}
                   </ThemedText>
                   <View style={styles.priceRow}>
                     <PawTokenCoin size={16} />
@@ -1150,10 +1161,10 @@ export function ShopScreen() {
                     ownedIds.has(item.id) ? (
                       <>
                         <View style={[styles.ownedBadge, { backgroundColor: theme.mint }]}>
-                          <ThemedText type="smallBold">✓ Owned</ThemedText>
+                          <ThemedText type="smallBold">{t('shopOwned')}</ThemedText>
                         </View>
                         {item.equippable ? (
-                          <Pressable
+                          <HoverPressable
                             onPress={() => handleEquipToggle(item)}
                             onHoverIn={() => setHoveredButtonId(item.id)}
                             onHoverOut={() => setHoveredButtonId(null)}
@@ -1189,16 +1200,16 @@ export function ShopScreen() {
                                 {equipBusyId === item.id
                                   ? '…'
                                   : isEquipped(item.id)
-                                    ? '✓ Equipped'
-                                    : 'Equip'}
+                                    ? t('shopEquipped')
+                                    : t('shopEquip')}
                               </ThemedText>
                             </View>
-                          </Pressable>
+                          </HoverPressable>
                         ) : null}
                       </>
                     ) : insufficientFundsId === item.id ? (
                       <ThemedText type="small" themeColor="accent" style={styles.insufficientFundsText}>
-                        Not enough Paw Tokens!
+                        {t('shopNotEnough')}
                       </ThemedText>
                     ) : (
                       <>
@@ -1222,7 +1233,7 @@ export function ShopScreen() {
                               ],
                             ]}>
                             <ThemedText type="smallBold" style={styles.buyButtonText}>
-                              {purchasingId === item.id ? 'Buying…' : 'Buy'}
+                              {purchasingId === item.id ? t('shopBuying') : t('shopBuy')}
                             </ThemedText>
                           </View>
                         </Pressable>
@@ -1234,7 +1245,7 @@ export function ShopScreen() {
                             along with DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP
                             once hat placements are finished. */}
                         {DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP && item.art?.slot === 'headHat' ? (
-                          <Pressable
+                          <HoverPressable
                             onPress={() => handleEquipToggle(item)}
                             disabled={equipBusyId === item.id || petUnwell}
                             style={({ pressed }) => [
@@ -1246,11 +1257,11 @@ export function ShopScreen() {
                                 {equipBusyId === item.id
                                   ? '…'
                                   : isEquipped(item.id)
-                                    ? '🧪 Equipped (test)'
-                                    : '🧪 Test Equip'}
+                                    ? t('shopTestEquipped')
+                                    : t('shopTestEquip')}
                               </ThemedText>
                             </View>
-                          </Pressable>
+                          </HoverPressable>
                         ) : null}
                       </>
                     )

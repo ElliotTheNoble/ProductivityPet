@@ -1,3 +1,5 @@
+import { getLocale, tr, useT } from '@/i18n';
+import { HoverPressable } from '@/components/hover-pressable';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -14,7 +16,8 @@ import { usePetFamily } from '@/hooks/use-pet-family';
 import { useTheme } from '@/hooks/use-theme';
 import { EVENT_LABELS, buildAlbumEntries, type PetAlbumEntry } from '@/utils/pet-album';
 import { selectPet } from '@/utils/pet-family';
-import { MEMORIAL_MESSAGE } from '@/utils/pet-life-messages';
+import { stageLabel } from '@/utils/pet-stage';
+import { getMemorialMessage } from '@/utils/pet-life-messages';
 
 // Pet Album pages — the overview grid of every kitty raised (living and passed
 // away) and a detail page per kitty. All data comes from the pet family store
@@ -27,13 +30,13 @@ function formatDate(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString(getLocale(), { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  return `${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  return `${date.toLocaleDateString(getLocale(), { year: 'numeric', month: 'short', day: 'numeric' })} · ${date.toLocaleTimeString(getLocale(), { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 // "Born On" is the day the egg HATCHED (never the day the egg arrived). A pet
@@ -41,9 +44,17 @@ function formatDateTime(iso: string): string {
 // "Birth date unknown" instead of guessing.
 function bornOnText(entry: PetAlbumEntry): string {
   const hatched = formatDate(entry.hatchedAt);
-  if (hatched) return `Born On: ${hatched}`;
-  if (entry.isEgg) return 'Born On: not hatched yet';
-  return 'Birth date unknown';
+  if (hatched) return tr('albBornOn', { date: hatched });
+  if (entry.isEgg) return tr('albNotHatched');
+  return tr('albBirthUnknown');
+}
+
+// The same as bornOnText without its label (for the fact row on the detail page).
+function bornOnValue(entry: PetAlbumEntry): string {
+  const hatched = formatDate(entry.hatchedAt);
+  if (hatched) return hatched;
+  if (entry.isEgg) return tr('albNotHatchedValue');
+  return tr('albBirthUnknown');
 }
 
 // Eggs never wear accessories.
@@ -52,14 +63,15 @@ function accessoryIdsFor(entry: PetAlbumEntry): string[] {
 }
 
 function statusText(entry: PetAlbumEntry): string {
-  if (entry.isRetired) return '🌴 Retired in Pawadise';
-  if (entry.lifeState === 'deceased') return '🌈 Passed away';
-  if (entry.lifeState === 'critical') return '🚨 Critical';
-  if (entry.lifeState === 'sick') return '🤒 Sick';
-  return entry.isSelected ? '💚 Living · Selected' : '💚 Living';
+  if (entry.isRetired) return tr('albRetired');
+  if (entry.lifeState === 'deceased') return tr('albPassed');
+  if (entry.lifeState === 'critical') return tr('albCritical');
+  if (entry.lifeState === 'sick') return tr('albSick');
+  return entry.isSelected ? tr('albLivingSel') : tr('albLiving');
 }
 
 function StatusBadge({ entry }: { entry: PetAlbumEntry }) {
+  useT();
   return (
     <ThemedView type={entry.isActive || entry.isRetired ? 'mint' : 'backgroundSelected'} style={styles.badge}>
       <ThemedText type="smallBold" style={styles.badgeText}>
@@ -70,6 +82,7 @@ function StatusBadge({ entry }: { entry: PetAlbumEntry }) {
 }
 
 function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
+  const { t } = useT();
   const theme = useTheme();
   const router = useRouter();
   const [hovered, setHovered] = useState(false);
@@ -79,7 +92,7 @@ function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       accessibilityRole="button"
-      accessibilityLabel={`View ${entry.label}`}
+      accessibilityLabel={t('albView', { name: entry.label })}
       style={({ pressed }) => [
         styles.card,
         styles.cardInteractive,
@@ -96,10 +109,10 @@ function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
       <StatusBadge entry={entry} />
       <View style={styles.cardFacts}>
         <ThemedText type="small" themeColor="textSecondary">
-          Highest stage: <ThemedText type="smallBold">{entry.stage}</ThemedText>
+          {t('albHighestStage')} <ThemedText type="smallBold">{stageLabel(entry.stage)}</ThemedText>
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Highest level: <ThemedText type="smallBold">{entry.highestLevel}</ThemedText>
+          {t('albHighestLevel')} <ThemedText type="smallBold">{entry.highestLevel}</ThemedText>
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {bornOnText(entry)}
@@ -110,14 +123,15 @@ function AlbumCard({ entry }: { entry: PetAlbumEntry }) {
 }
 
 type AlbumTab = 'memories' | 'pawadise';
-const ALBUM_TABS: { key: AlbumTab; label: string; icon: string }[] = [
-  { key: 'memories', label: 'Pet Memories', icon: '📖' },
-  { key: 'pawadise', label: 'Pet Pawadise', icon: '🌴' },
+const ALBUM_TABS: { key: AlbumTab; label: 'albTabMemories' | 'albTabPawadise'; icon: string }[] = [
+  { key: 'memories', label: 'albTabMemories', icon: '📖' },
+  { key: 'pawadise', label: 'albTabPawadise', icon: '🌴' },
 ];
 
 // The two tabs INSIDE the Pet Album (not part of the main navigation). Switching is just local state, so
 // it is immediate; each tab's content is rendered only while it is selected, so nothing is duplicated.
 function AlbumTabs({ value, onChange }: { value: AlbumTab; onChange: (tab: AlbumTab) => void }) {
+  const { t } = useT();
   const theme = useTheme();
   const [hovered, setHovered] = useState<AlbumTab | null>(null);
   return (
@@ -141,7 +155,7 @@ function AlbumTabs({ value, onChange }: { value: AlbumTab; onChange: (tab: Album
               ]}>
               <ThemedText style={styles.tabIcon}>{tab.icon}</ThemedText>
               <ThemedText type="smallBold" style={selected ? styles.tabLabelActive : undefined}>
-                {tab.label}
+                {t(tab.label)}
               </ThemedText>
             </View>
           </Pressable>
@@ -152,6 +166,7 @@ function AlbumTabs({ value, onChange }: { value: AlbumTab; onChange: (tab: Album
 }
 
 export function PetAlbumScreen() {
+  const { t } = useT();
   const family = usePetFamily();
   const entries = family ? buildAlbumEntries(family) : null;
   const [tab, setTab] = useState<AlbumTab>('memories');
@@ -159,7 +174,7 @@ export function PetAlbumScreen() {
     <DetailPageShell>
       <DetailTitleCard
         icon={<ThemedText style={styles.titleEmoji}>🐾</ThemedText>}
-        title="Pet Album"
+        title={t('albTitle')}
         backgroundColor={ALBUM_BACKGROUND}
       />
       <AlbumTabs value={tab} onChange={setTab} />
@@ -167,12 +182,12 @@ export function PetAlbumScreen() {
       {tab === 'pawadise' ? (
         <PawadiseSection />
       ) : (
-      <DetailPanel title="📖 Every kitty you've raised">
+      <DetailPanel title={t('albEvery')}>
         {entries === null ? null : entries.length === 0 ? (
           <DetailEmptyState
             icon={<ThemedText style={styles.titleEmoji}>🐱</ThemedText>}
-            title="Your album is empty"
-            text="Your kitty's story will appear here as soon as your pet profile is ready."
+            title={t('albEmpty')}
+            text={t('albEmptyText')}
           />
         ) : (
           <View style={styles.grid}>
@@ -201,11 +216,12 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 export function PetAlbumDetailScreen({ petId }: { petId: string }) {
+  const { t } = useT();
   const family = usePetFamily();
   const entries = family ? buildAlbumEntries(family) : null;
   const entry = entries?.find((candidate) => candidate.id === petId) ?? null;
 
-  const shellProps = { backHref: '/stats/lifetime/pets' as const, backLabel: '← Back to Pet Album' };
+  const shellProps = { backHref: '/stats/lifetime/pets' as const, backLabel: t('albBack') };
 
   if (entries === null) {
     return <DetailPageShell {...shellProps}>{null}</DetailPageShell>;
@@ -213,11 +229,11 @@ export function PetAlbumDetailScreen({ petId }: { petId: string }) {
   if (!entry) {
     return (
       <DetailPageShell {...shellProps}>
-        <DetailPanel title="Pet not found">
+        <DetailPanel title={t('albNotFound')}>
           <DetailEmptyState
             icon={<ThemedText style={styles.titleEmoji}>🔍</ThemedText>}
-            title="We couldn't find that kitty"
-            text="Head back to the Pet Album to see everyone you've raised."
+            title={t('albNotFoundTitle')}
+            text={t('albNotFoundText')}
           />
         </DetailPanel>
       </DetailPageShell>
@@ -239,47 +255,47 @@ export function PetAlbumDetailScreen({ petId }: { petId: string }) {
         <StatusBadge entry={entry} />
       </View>
 
-      <DetailPanel title="✨ About this kitty">
-        <Fact label="Highest stage reached" value={entry.stage} />
-        <Fact label="Highest level" value={String(entry.highestLevel)} />
-        <Fact label="Tasks completed while with you" value={String(entry.tasksCounted)} />
-        <Fact label="Born On" value={bornOnText(entry).replace(/^Born On: /, '')} />
-        <Fact label="Egg arrived" value={created ?? 'Not recorded'} />
-        {entry.diedAt ? <Fact label="Passed away" value={died ?? 'Not recorded'} /> : null}
-        {entry.resurrectionCount > 0 ? <Fact label="Times brought back" value={String(entry.resurrectionCount)} /> : null}
+      <DetailPanel title={t('albAbout')}>
+        <Fact label={t('albFactStage')} value={stageLabel(entry.stage)} />
+        <Fact label={t('albFactLevel')} value={String(entry.highestLevel)} />
+        <Fact label={t('albFactTasks')} value={String(entry.tasksCounted)} />
+        <Fact label={t('albFactBorn')} value={bornOnValue(entry)} />
+        <Fact label={t('albFactEgg')} value={created ?? t('albNotRecorded')} />
+        {entry.diedAt ? <Fact label={t('albFactDied')} value={died ?? t('albNotRecorded')} /> : null}
+        {entry.resurrectionCount > 0 ? <Fact label={t('albFactBack')} value={String(entry.resurrectionCount)} /> : null}
       </DetailPanel>
 
       <View style={[styles.memory, { backgroundColor: MEMORY_BACKGROUND }]}>
         <ThemedText style={styles.memoryText}>
           {entry.isRetired
-            ? 'This kitty is relaxing in Pet Pawadise. Everything about them is safe, and you can bring them home for free from the Pet Pawadise tab of the Pet Album. 🌴'
+            ? t('albMemRetired')
             : entry.lifeState === 'deceased'
-            ? `${MEMORIAL_MESSAGE} 🌈`
+            ? `${getMemorialMessage()} 🌈`
             : entry.lifeState === 'critical'
-              ? 'This kitty is in critical condition and needs care right away. It is free — feed, bathe or play until all three needs are at 50 or more. 💗'
+              ? t('albMemCritical')
               : entry.lifeState === 'sick'
-                ? "This kitty isn't feeling well. Caring for them (it's free) will help them recover. 💗"
-                : 'This kitty is growing with you — every task you finish makes your story together a little bigger. 💗'}
+                ? t('albMemSick')
+                : t('albMemGrowing')}
         </ThemedText>
         {entry.lifeState === 'deceased' ? <ResurrectControl petId={entry.id} /> : null}
         {entry.isActive && !entry.isSelected ? (
-          <Pressable onPress={() => selectPet(entry.id)} accessibilityRole="button" style={({ pressed }) => pressed && styles.cardPressed}>
+          <HoverPressable onPress={() => selectPet(entry.id)} accessibilityRole="button" style={({ pressed }) => pressed && styles.cardPressed}>
             <ThemedView type="backgroundElement" style={[styles.switchButton, styles.cardInteractive]}>
-              <ThemedText type="smallBold">Switch to this kitty</ThemedText>
+              <ThemedText type="smallBold">{t('albSwitch')}</ThemedText>
             </ThemedView>
-          </Pressable>
+          </HoverPressable>
         ) : null}
       </View>
 
       {/* The pet's Pawadise scrapbook: only ITS postcards, kept forever (even when it is home again). */}
-      <DetailPanel title="💌 Pawadise scrapbook">
+      <DetailPanel title={t('albScrapbook')}>
         <PetPostcards petId={entry.id} petLabel={entry.label} />
       </DetailPanel>
 
-      <DetailPanel title="🕰️ History">
+      <DetailPanel title={t('albHistory')}>
         {entry.events.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Nothing recorded yet.
+            {t('albNothing')}
           </ThemedText>
         ) : (
           entry.events.map((event) => (

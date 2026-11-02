@@ -24,7 +24,8 @@ import {
   setDevPreviewStageIndex,
   subscribeToDevPreviewStageIndex,
 } from '@/utils/dev-stage-preview';
-import { MOODS, getRandomMoodMessage, type Mood } from '@/utils/mood';
+import { useT, trList, tr } from '@/i18n';
+import { MOODS, getMoodMessage, getRandomMoodMessageIndex, type Mood } from '@/utils/mood';
 import { recordMoodEntry } from '@/utils/mood-log';
 import { getPetLifeMessage } from '@/utils/pet-life-messages';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
@@ -53,10 +54,9 @@ import {
   type Task,
 } from '@/utils/tasks';
 
-const COMPLETION_MESSAGES = ['Yippee!', 'Yay!', 'Woohoo!', 'I knew you could do it!'];
-
-// Shown briefly when a completed task gets unchecked.
-const UNCHECK_MESSAGE = 'Aww, not done yet? You got this! 💕';
+// The reactive speech-bubble messages are kept as a reference (which message), not as text, so they follow the
+// language if it changes while they are showing. The wording is in the translation catalog (lists / strings).
+type TemporaryMessage = { kind: 'complete'; index: number } | { kind: 'uncheck' };
 
 // How long a reactive message (task completed/unchecked) stays on screen
 // before the speech bubble falls back to the ambient mood message.
@@ -100,12 +100,14 @@ export default function HomeScreen() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [temporaryMessage, setTemporaryMessage] = useState<string | null>(null);
+  const { t, lang } = useT();
+  const [temporaryMessage, setTemporaryMessage] = useState<TemporaryMessage | null>(null);
   const [messageIndex, setMessageIndex] = useState(0);
   const [isCelebrating, setIsCelebrating] = useState(false);
   const [mood, setMood] = useState<Mood>(DEFAULT_MOOD);
   const [isMoodHydrated, setIsMoodHydrated] = useState(false);
-  const [moodMessage, setMoodMessage] = useState(() => getRandomMoodMessage(DEFAULT_MOOD));
+  const [moodMessageIndex, setMoodMessageIndex] = useState(() => getRandomMoodMessageIndex(DEFAULT_MOOD));
+  const moodMessage = getMoodMessage(mood, moodMessageIndex);
   // The Today's Mood picker's handler: updates the on-screen mood exactly as
   // before AND appends a timestamped check-in to the mood history (see
   // @/utils/mood-log.ts) that the Stats Mood Journey reads. Only a real
@@ -404,9 +406,9 @@ export default function HomeScreen() {
   // hydration loads a saved mood), then occasionally re-roll a different
   // message from the same pool while idle — not constantly or rapidly.
   useEffect(() => {
-    setMoodMessage(getRandomMoodMessage(mood));
+    setMoodMessageIndex(getRandomMoodMessageIndex(mood));
     const interval = setInterval(() => {
-      setMoodMessage((prev) => getRandomMoodMessage(mood, prev));
+      setMoodMessageIndex((prev) => getRandomMoodMessageIndex(mood, prev));
     }, MOOD_MESSAGE_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [mood]);
@@ -470,7 +472,7 @@ export default function HomeScreen() {
         if (updated !== tasks) setTasks(updated);
       })
       .catch(() => {});
-  }, [tasks, isHydrated]);
+  }, [tasks, isHydrated, lang]);
 
   function toggleTask(id: string) {
     const target = tasks.find((task) => task.id === id);
@@ -479,10 +481,10 @@ export default function HomeScreen() {
     const completed = !isOccurrenceCompleted(target, today);
     if (temporaryMessageTimeoutRef.current) clearTimeout(temporaryMessageTimeoutRef.current);
     if (completed) {
-      setTemporaryMessage(COMPLETION_MESSAGES[messageIndex]);
-      setMessageIndex((prev) => (prev + 1) % COMPLETION_MESSAGES.length);
+      setTemporaryMessage({ kind: 'complete', index: messageIndex });
+      setMessageIndex((prev) => (prev + 1) % trList('completion').length);
     } else {
-      setTemporaryMessage(UNCHECK_MESSAGE);
+      setTemporaryMessage({ kind: 'uncheck' });
     }
     temporaryMessageTimeoutRef.current = setTimeout(
       () => setTemporaryMessage(null),
@@ -731,7 +733,12 @@ export default function HomeScreen() {
   // A sick, critical or deceased pet's own message comes before the usual mood line.
   // A passed-away pet shows no speech bubble: the memorial card under the navigation already says
   // it (and carries the resurrection button), so the same sentence above the tombstone was a duplicate.
-  const displayedPetMessage = isDeceased ? null : (temporaryMessage ?? getPetLifeMessage(petProfile) ?? moodMessage);
+  const temporaryText = temporaryMessage
+    ? temporaryMessage.kind === 'uncheck'
+      ? tr('uncheckMessage')
+      : trList('completion')[temporaryMessage.index % trList('completion').length]
+    : null;
+  const displayedPetMessage = isDeceased ? null : (temporaryText ?? getPetLifeMessage(petProfile) ?? moodMessage);
 
   // "Today's Tasks" and "Today's Appointments" show only what's actually
   // scheduled for today — including today's occurrence of any repeating
@@ -859,7 +866,7 @@ export default function HomeScreen() {
             the development-only Pet Stage Preview). */}
         <SlideOutPanel
           side="left"
-          label="Pet Progress"
+          label={t('panelPetProgress')}
           icon="paw"
           tint="#DCCBF5"
           panelBackground="#F6F0FD"
@@ -882,7 +889,7 @@ export default function HomeScreen() {
             only — the Rooms shortcut; portrait already has the Rooms tab in the top navigation). */}
         <SlideOutPanel
           side="right"
-          label="Home Features"
+          label={t('panelHomeFeatures')}
           icon="home"
           tint="#FBC9DB"
           panelBackground="#FFF1F6"

@@ -1,10 +1,13 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { PetStageIcon } from '@/components/pet-stage-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT, type StringKey } from '@/i18n';
 import { DEV_ENABLE_STAGE_PREVIEW } from '@/utils/dev-flags';
 import { getRenderedStageProgress } from '@/utils/pet-growth';
 import { PET_STAGES, TASKS_PER_STAGE } from '@/utils/pet-stage';
@@ -31,6 +34,14 @@ type PetProgressProps = {
   onResetPreview?: () => void;
 };
 
+const STAGE_KEYS: Record<string, StringKey> = {
+  Egg: 'stageEgg',
+  Hatchling: 'stageHatchling',
+  Baby: 'stageBaby',
+  Young: 'stageYoung',
+  Adult: 'stageAdult',
+};
+
 export function PetProgress({
   completedTaskCount,
   paidStageIndex = 0,
@@ -38,6 +49,7 @@ export function PetProgress({
   onPreviewStage,
   onResetPreview,
 }: PetProgressProps) {
+  const { t } = useT();
   const theme = useTheme();
   // Development builds only (the preview store itself also does nothing in production).
   const isPreviewEnabled = DEV_ENABLE_STAGE_PREVIEW && __DEV__ && !!onPreviewStage;
@@ -54,9 +66,9 @@ export function PetProgress({
   return (
     <ThemedView type="peachOverlay" style={styles.container}>
       <View style={styles.headerRow}>
-        <ThemedText type="smallBold">Pet Progress</ThemedText>
+        <ThemedText type="smallBold">{t('panelPetProgress')}</ThemedText>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          Level {level}
+          {t('progressLevel', { n: level })}
         </ThemedText>
       </View>
 
@@ -67,8 +79,8 @@ export function PetProgress({
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
         {isMaxStage
-          ? 'Max stage reached! 🎉'
-          : `${tasksIntoStage} / ${TASKS_PER_STAGE} tasks to next stage`}
+          ? t('progressMax')
+          : t('progressTasks', { done: tasksIntoStage, total: TASKS_PER_STAGE })}
       </ThemedText>
 
       <View style={styles.stagesRow}>
@@ -90,7 +102,7 @@ export function PetProgress({
                 <PetStageIcon stage={stage} size={40} />
               </View>
               <ThemedText type="small" themeColor="textSecondary">
-                {stage}
+                {STAGE_KEYS[stage] ? t(STAGE_KEYS[stage]) : stage}
               </ThemedText>
             </View>
           );

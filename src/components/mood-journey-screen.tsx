@@ -1,5 +1,8 @@
+import { getLocale, useT } from '@/i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import {
   CompletedBarChart,
@@ -25,11 +28,11 @@ import {
   subscribeToJournal,
   type Reflection,
 } from '@/utils/journal';
-import { MOODS, type Mood } from '@/utils/mood';
+import { MOODS, moodName, type Mood } from '@/utils/mood';
 import { getMoodLog, subscribeToMoodLog, type MoodEntry } from '@/utils/mood-log';
 import {
-  MONTH_NAMES,
-  MONTH_SHORT_NAMES,
+  monthNames,
+  monthShortNames,
   MOOD_COLORS,
   NO_ENTRY_COLOR,
   countByMood,
@@ -55,7 +58,6 @@ import { addDaysISO, formatFullDate, todayISO } from '@/utils/tasks';
 type View_ = 'day' | 'month' | 'year';
 
 const PAGE_BACKGROUND = '#EFE9FA';
-const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function parseISO(dateISO: string): { year: number; month0: number; day: number } {
   const [y, m, d] = dateISO.split('-').map(Number);
@@ -64,15 +66,17 @@ function parseISO(dateISO: string): { year: number; month0: number; day: number 
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString(getLocale(), { hour: 'numeric', minute: '2-digit' });
 }
 
 function moodSlices(entries: MoodEntry[]): PieSlice[] {
   const counts = countByMood(entries);
-  return MOODS.map((mood) => ({ key: mood, label: mood, value: counts[mood], color: MOOD_COLORS[mood] }));
+  return MOODS.map((mood) => ({ key: mood, label: moodName(mood), value: counts[mood], color: MOOD_COLORS[mood] }));
 }
 
 export function MoodJourneyScreen() {
+  const { t, tl } = useT();
+  const WEEKDAY_INITIALS = tl('weekdaysNarrow');
   const theme = useTheme();
   const [view, setView] = useState<View_>('day');
   const [selectedDate, setSelectedDate] = useState(todayISO());
@@ -152,7 +156,7 @@ export function MoodJourneyScreen() {
     if (dayEntries.length === 0) {
       return (
         <ThemedText type="small" themeColor="textSecondary">
-          No check-in recorded for this day — and that&apos;s perfectly okay.
+          {t('mjNoCheckin')}
         </ThemedText>
       );
     }
@@ -162,7 +166,7 @@ export function MoodJourneyScreen() {
           <View key={entry.id} style={styles.moodRow}>
             <MoodIcon mood={entry.mood} size={40} />
             <View style={styles.moodRowText}>
-              <ThemedText type="smallBold">{entry.mood}</ThemedText>
+              <ThemedText type="smallBold">{moodName(entry.mood)}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {formatTime(entry.at)}
               </ThemedText>
@@ -176,7 +180,7 @@ export function MoodJourneyScreen() {
   function Nav({ label, onPrev, onNext, extra }: { label: string; onPrev: () => void; onNext: () => void; extra?: React.ReactNode }) {
     return (
       <View style={styles.navRow}>
-        <Pressable onPress={onPrev} accessibilityRole="button" accessibilityLabel="Previous" style={({ pressed }) => pressed && styles.pressed}>
+        <Pressable onPress={onPrev} accessibilityRole="button" accessibilityLabel={t('histPrevious')} style={({ pressed }) => pressed && styles.pressed}>
           <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
             <ThemedText type="smallBold">‹</ThemedText>
           </ThemedView>
@@ -184,7 +188,7 @@ export function MoodJourneyScreen() {
         <ThemedText type="smallBold" style={styles.navLabel}>
           {label}
         </ThemedText>
-        <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next" style={({ pressed }) => pressed && styles.pressed}>
+        <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel={t('histNext')} style={({ pressed }) => pressed && styles.pressed}>
           <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
             <ThemedText type="smallBold">›</ThemedText>
           </ThemedView>
@@ -195,9 +199,9 @@ export function MoodJourneyScreen() {
   }
 
   const tabs: { id: View_; label: string }[] = [
-    { id: 'day', label: 'Day' },
-    { id: 'month', label: 'Month' },
-    { id: 'year', label: 'Year' },
+    { id: 'day', label: t('mjTabDay') },
+    { id: 'month', label: t('mjTabMonth') },
+    { id: 'year', label: t('mjTabYear') },
   ];
 
   // ----- Month view data -----
@@ -217,7 +221,7 @@ export function MoodJourneyScreen() {
   const yearEntries = entriesInYear(entries, year);
   const yearBuckets = monthlyCounts(entries, year).map((count, i) => ({
     dateISO: `${year}-${String(i + 1).padStart(2, '0')}`,
-    weekdayLabel: MONTH_SHORT_NAMES[i],
+    weekdayLabel: monthShortNames()[i],
     count,
   }));
   const yearDays = isLeapYear(year) ? 366 : 365;
@@ -226,27 +230,27 @@ export function MoodJourneyScreen() {
     <DetailPageShell>
       <DetailTitleCard
         icon={<MoodIcon mood="Happy" size={64} />}
-        title="My Mood Journey"
+        title={t('mjTitle')}
         backgroundColor={PAGE_BACKGROUND}
       />
 
       <SummaryRow>
-        <SummaryCard value={entries.length} label="mood check-ins" backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={distinctDays(entries)} label="days with a check-in" backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={entries.length} label={t('mjCheckins')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={distinctDays(entries)} label={t('mjDays')} backgroundColor={PAGE_BACKGROUND} />
         <View style={[styles.topMoodCard, { backgroundColor: PAGE_BACKGROUND }]}>
           {topMood ? <MoodIcon mood={topMood} size={44} /> : <ThemedText style={styles.dash}>–</ThemedText>}
-          <ThemedText type="smallBold">{topMood ?? 'No check-ins yet'}</ThemedText>
+          <ThemedText type="smallBold">{topMood ? moodName(topMood) : t('mjNoCheckinsYet')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            most recorded mood
+            {t('mjMostRecorded')}
           </ThemedText>
         </View>
       </SummaryRow>
 
-      <DetailPanel title="🌈 Your mood pattern">
+      <DetailPanel title={t('mjPattern')}>
         <ThemedText type="small" themeColor="textSecondary">
           {describeMoodPattern(entries)}
         </ThemedText>
-        <DetailNote>Your moods and reflections are saved only on this device.</DetailNote>
+        <DetailNote>{t('mjLocalNote')}</DetailNote>
       </DetailPanel>
 
       <View style={styles.tabRow}>
@@ -268,7 +272,7 @@ export function MoodJourneyScreen() {
 
       {view === 'day' ? (
         <>
-          <DetailPanel title="📅 Daily view">
+          <DetailPanel title={t('mjDailyView')}>
             <Nav
               label={formatFullDate(selectedDate)}
               onPrev={() => setSelectedDate(addDaysISO(selectedDate, -1))}
@@ -277,19 +281,19 @@ export function MoodJourneyScreen() {
                 selectedDate !== todayISO() ? (
                   <Pressable onPress={() => setSelectedDate(todayISO())} style={({ pressed }) => pressed && styles.pressed}>
                     <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
-                      <ThemedText type="smallBold">Today</ThemedText>
+                      <ThemedText type="smallBold">{t('mjToday')}</ThemedText>
                     </ThemedView>
                   </Pressable>
                 ) : null
               }
             />
-            <ThemedText type="smallBold">How you felt</ThemedText>
+            <ThemedText type="smallBold">{t('mjHowFelt')}</ThemedText>
             <MoodList dateISO={selectedDate} />
           </DetailPanel>
 
-          <DetailPanel title="📝 Daily reflection">
+          <DetailPanel title={t('mjReflection')}>
             <ThemedText type="small" themeColor="textSecondary">
-              What&apos;s something you&apos;d like to remember about today?
+              {t('mjReflectionPrompt')}
             </ThemedText>
             <TextInput
               value={draft}
@@ -299,7 +303,7 @@ export function MoodJourneyScreen() {
               }}
               multiline
               maxLength={MAX_REFLECTION_LENGTH}
-              placeholder="A feeling, something you're proud of, a little memory…"
+              placeholder={t('mjReflectionPlaceholder')}
               placeholderTextColor={theme.textSecondary}
               style={[
                 styles.input,
@@ -310,39 +314,39 @@ export function MoodJourneyScreen() {
               <Pressable onPress={handleSave} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="accent" style={[styles.actionButton, styles.pointer]}>
                   <ThemedText type="smallBold" style={styles.actionButtonText}>
-                    {reflectionForDay ? 'Update' : 'Save'}
+                    {reflectionForDay ? t('mjUpdate') : t('mjSave')}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
               {reflectionForDay ? (
                 <Pressable onPress={handleDelete} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
                   <ThemedView type="backgroundElement" style={[styles.actionButton, styles.pointer]}>
-                    <ThemedText type="smallBold">Delete</ThemedText>
+                    <ThemedText type="smallBold">{t('mjDelete')}</ThemedText>
                   </ThemedView>
                 </Pressable>
               ) : null}
               {saveStatus === 'saved' ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Saved ✓
+                  {t('mjSaved')}
                 </ThemedText>
               ) : null}
               {saveStatus === 'error' ? (
                 <ThemedText type="small" themeColor="accent">
-                  Couldn&apos;t save on this device — please try again.
+                  {t('mjSaveFailed')}
                 </ThemedText>
               ) : null}
             </View>
             <ThemedText type="small" themeColor="textSecondary">
-              {draft.length}/{MAX_REFLECTION_LENGTH} · writing is always optional
+              {t('mjCounter', { n: draft.length, max: MAX_REFLECTION_LENGTH })}
             </ThemedText>
           </DetailPanel>
 
-          <DetailPanel title="📖 Journal history">
+          <DetailPanel title={t('mjJournalHistory')}>
             {reflections.length === 0 ? (
               <DetailEmptyState
                 icon={<ThemedText style={styles.emoji}>📖</ThemedText>}
-                title="No reflections yet"
-                text="Whenever you'd like to remember a day, write a few words above."
+                title={t('mjNoReflections')}
+                text={t('mjNoReflectionsText')}
               />
             ) : (
               [...reflections]
@@ -365,8 +369,8 @@ export function MoodJourneyScreen() {
 
       {view === 'month' ? (
         <>
-          <DetailPanel title="🗓️ Monthly view">
-            <Nav label={`${MONTH_NAMES[month0]} ${year}`} onPrev={() => shiftMonth(-1)} onNext={() => shiftMonth(1)} />
+          <DetailPanel title={t('mjMonthly')}>
+            <Nav label={`${monthNames()[month0]} ${year}`} onPrev={() => shiftMonth(-1)} onNext={() => shiftMonth(1)} />
             <View style={styles.weekdayRow}>
               {WEEKDAY_INITIALS.map((letter, i) => (
                 <ThemedText key={i} type="small" themeColor="textSecondary" style={styles.weekdayCell}>
@@ -389,7 +393,7 @@ export function MoodJourneyScreen() {
                       setView('day');
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`${formatFullDate(dateISO)}${mood ? `, ${mood}` : ', no check-in'}`}
+                    accessibilityLabel={mood ? t('mjDayLabel', { date: formatFullDate(dateISO), mood: moodName(mood) }) : t('mjDayLabelNone', { date: formatFullDate(dateISO) })}
                     style={styles.calendarCell}>
                     <View
                       style={[
@@ -408,20 +412,20 @@ export function MoodJourneyScreen() {
               })}
             </View>
             <MoodLegend />
-            <DetailNote>If you checked in more than once on a day, the calendar shows the latest one. Tap a day to see all of them.</DetailNote>
+            <DetailNote>{t('mjCalendarNote')}</DetailNote>
           </DetailPanel>
 
-          <DetailPanel title="📊 Check-ins this month">
+          <DetailPanel title={t('mjCheckinsMonth')}>
             {monthEntries.length === 0 ? (
-              <DetailEmptyState icon={<ThemedText style={styles.emoji}>🌱</ThemedText>} title="No check-ins this month" text="Pick a mood on the Home page to start your month." />
+              <DetailEmptyState icon={<ThemedText style={styles.emoji}>🌱</ThemedText>} title={t('mjNoCheckinsMonth')} text={t('mjNoCheckinsMonthText')} />
             ) : (
               <CompletedBarChart buckets={monthBuckets} color="#B9A3E6" labelEvery={5} />
             )}
           </DetailPanel>
 
-          <DetailPanel title="🥧 Mood mix this month">
+          <DetailPanel title={t('mjMixMonth')}>
             {monthEntries.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">Nothing recorded yet this month.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{t('mjNothingMonth')}</ThemedText>
             ) : (
               <PieChart slices={moodSlices(monthEntries)} />
             )}
@@ -431,17 +435,17 @@ export function MoodJourneyScreen() {
 
       {view === 'year' ? (
         <>
-          <DetailPanel title="🌸 Yearly view">
+          <DetailPanel title={t('mjYearly')}>
             <Nav label={`${year}`} onPrev={() => shiftYear(-1)} onNext={() => shiftYear(1)} />
             <ThemedText type="small" themeColor="textSecondary">
-              {yearDays} days{isLeapYear(year) ? ' (leap year)' : ''} · {distinctDays(yearEntries)} with a check-in
+              {t('mjYearSummary', { days: yearDays, leap: isLeapYear(year) ? t('mjLeap') : '', n: distinctDays(yearEntries) })}
             </ThemedText>
             <MoodLegend />
             <View style={styles.yearGrid}>
               {Array.from({ length: 12 }, (_, m) => (
                 <View key={m} style={styles.yearRow}>
                   <ThemedText type="small" themeColor="textSecondary" style={styles.yearMonthLabel}>
-                    {MONTH_SHORT_NAMES[m]}
+                    {monthShortNames()[m]}
                   </ThemedText>
                   {Array.from({ length: 31 }, (_, d) => {
                     if (d + 1 > daysInMonth(year, m)) return <View key={d} style={styles.yearCell} />;
@@ -452,7 +456,7 @@ export function MoodJourneyScreen() {
                         key={d}
                         onPress={() => setSelectedDate(dateISO)}
                         accessibilityRole="button"
-                        accessibilityLabel={`${formatFullDate(dateISO)}${mood ? `, ${mood}` : ', no check-in'}`}
+                        accessibilityLabel={mood ? t('mjDayLabel', { date: formatFullDate(dateISO), mood: moodName(mood) }) : t('mjDayLabelNone', { date: formatFullDate(dateISO) })}
                         style={styles.yearCell}>
                         <View
                           style={[
@@ -468,7 +472,7 @@ export function MoodJourneyScreen() {
                 </View>
               ))}
             </View>
-            <DetailNote>Each square is one day (the latest mood that day). Grey squares just mean no check-in.</DetailNote>
+            <DetailNote>{t('mjYearNote')}</DetailNote>
           </DetailPanel>
 
           <DetailPanel title={`📍 ${formatFullDate(selectedDate)}`}>
@@ -478,22 +482,22 @@ export function MoodJourneyScreen() {
             ) : null}
             <Pressable onPress={() => setView('day')} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="backgroundElement" style={[styles.actionButton, styles.pointer, styles.selfStart]}>
-                <ThemedText type="smallBold">Open this day</ThemedText>
+                <ThemedText type="smallBold">{t('mjOpenDay')}</ThemedText>
               </ThemedView>
             </Pressable>
           </DetailPanel>
 
-          <DetailPanel title="🥧 Mood mix this year">
+          <DetailPanel title={t('mjMixYear')}>
             {yearEntries.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">Nothing recorded in {year} yet.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{t('mjNothingYear', { year })}</ThemedText>
             ) : (
               <PieChart slices={moodSlices(yearEntries)} />
             )}
           </DetailPanel>
 
-          <DetailPanel title="📊 Check-ins by month">
+          <DetailPanel title={t('mjByMonth')}>
             {yearEntries.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">Nothing recorded in {year} yet.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{t('mjNothingYear', { year })}</ThemedText>
             ) : (
               <CompletedBarChart buckets={yearBuckets} color="#B9A3E6" />
             )}
@@ -511,7 +515,7 @@ function MoodLegend() {
         <View key={mood} style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: MOOD_COLORS[mood] }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            {mood}
+            {moodName(mood)}
           </ThemedText>
         </View>
       ))}

@@ -9,7 +9,7 @@ export default function LifetimeStatPage() {
   const stat = slugToLifetimeStat(statParam);
 
   if (!stat) {
-    return <ComingSoonScreen title="Stat not found" />;
+    return <ComingSoonScreen title="nfStat" />;
   }
 
   return <LifetimeStatScreen stat={stat} />;

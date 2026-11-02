@@ -1,3 +1,4 @@
+import { getCurrentLanguage, getLocale, tr } from '@/i18n';
 import { categorizeTask, type TaskCategory } from '@/utils/categorize-task';
 import { isTaskRoom, type TaskRoom } from '@/utils/rooms';
 
@@ -15,17 +16,17 @@ export const REMINDER_OFFSETS: ReminderOffsetMinutes[] = [0, 10, 30, 60, 1440, 1
 export function reminderOffsetLabel(minutes: ReminderOffsetMinutes): string {
   switch (minutes) {
     case 0:
-      return 'At time';
+      return tr('reminderAtTime');
     case 10:
-      return '10 min before';
+      return tr('reminder10');
     case 30:
-      return '30 min before';
+      return tr('reminder30');
     case 60:
-      return '1 hour before';
+      return tr('reminder60');
     case 1440:
-      return '1 day before';
+      return tr('reminder1440');
     case 10080:
-      return '1 week before';
+      return tr('reminder10080');
   }
 }
 
@@ -155,12 +156,14 @@ export function addDaysISO(dateISO: string, delta: number): string {
 // e.g. "Friday, September 11, 2026" — shared by Home's date-under-the-title
 // and the Tasks-tab calendar's selected-day heading, so both read identically.
 export function formatFullDate(dateISO: string): string {
-  return new Date(`${dateISO}T00:00:00`).toLocaleDateString(undefined, {
+  const text = new Date(`${dateISO}T00:00:00`).toLocaleDateString(getLocale(), {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
+  // Spanish writes weekdays in lower case ("viernes, 11 de septiembre de 2026"); as a heading it starts with a capital.
+  return getCurrentLanguage() === 'es' ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
 // Repairs tasks saved before dates/repeats/events existed: stamps them with

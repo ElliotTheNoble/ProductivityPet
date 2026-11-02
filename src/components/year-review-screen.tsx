@@ -1,5 +1,8 @@
+import { getLocale, useT } from '@/i18n';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { CATEGORY_BAR_COLOR } from '@/components/category-accomplishments-screen';
 import {
@@ -18,14 +21,15 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { getAllCompletedEntries } from '@/utils/category-accomplishments';
 import { getReflections, subscribeToJournal, type Reflection } from '@/utils/journal';
-import { MOODS } from '@/utils/mood';
+import { MOODS, moodName } from '@/utils/mood';
+import { categoryLabel } from '@/utils/categorize-task';
 import { getMoodLog, subscribeToMoodLog, type MoodEntry } from '@/utils/mood-log';
 import {
-  MONTH_SHORT_NAMES,
   MOOD_COLORS,
   countByMood,
   entriesInYear,
   monthlyCounts,
+  monthShortNames,
   mostFrequentMood,
 } from '@/utils/mood-stats';
 import { getPetLabel } from '@/utils/pet-family';
@@ -61,10 +65,11 @@ function localDateOf(iso: string): string | null {
 }
 
 function formatPetDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(getLocale(), { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 export function YearReviewScreen() {
+  const { t, tn } = useT();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -150,7 +155,7 @@ export function YearReviewScreen() {
     .filter((c) => c.count > 0)
     .sort((a, b) => b.count - a.count);
   const maxCategory = Math.max(1, ...categoryCounts.map((c) => c.count));
-  const taskMonthBuckets = MONTH_SHORT_NAMES.map((label, i) => ({
+  const taskMonthBuckets = monthShortNames().map((label, i) => ({
     dateISO: `${year}-${String(i + 1).padStart(2, '0')}`,
     weekdayLabel: label,
     count: yearTasks.filter((e) => e.dateISO?.slice(5, 7) === String(i + 1).padStart(2, '0')).length,
@@ -161,14 +166,14 @@ export function YearReviewScreen() {
   const topMood = mostFrequentMood(yearMoods);
   const moodSlices: PieSlice[] = MOODS.map((mood) => ({
     key: mood,
-    label: mood,
+    label: moodName(mood),
     value: moodCounts[mood],
     color: MOOD_COLORS[mood],
   }));
   const moodMonthBuckets = monthlyCounts(yearMoods, year)
     .map((count, i) => ({
       dateISO: `${year}-${String(i + 1).padStart(2, '0')}`,
-      weekdayLabel: MONTH_SHORT_NAMES[i],
+      weekdayLabel: monthShortNames()[i],
       count,
     }))
     .slice(0, lastMonthShown);
@@ -185,18 +190,18 @@ export function YearReviewScreen() {
     .sort((a, b) => (a.iso < b.iso ? -1 : 1))
     .map((m) => {
       const date = formatPetDate(m.iso);
-      if (m.kind === 'arrived') return `${m.petLabel}’s egg arrived on ${date}`;
-      if (m.kind === 'born') return `${m.petLabel} was born on ${date}`;
-      if (m.kind === 'returned') return `${m.petLabel} came back on ${date}`;
-      return `${m.petLabel} passed away on ${date}`;
+      if (m.kind === 'arrived') return t('yrPetArrived', { pet: m.petLabel, date });
+      if (m.kind === 'born') return t('yrPetBorn', { pet: m.petLabel, date });
+      if (m.kind === 'returned') return t('yrPetReturned', { pet: m.petLabel, date });
+      return t('yrPetDied', { pet: m.petLabel, date });
     });
 
   // Paw Tokens earned this year (recorded history only) and streak facts.
   const yearTokenEvents = tokensInYear(tokenEvents, year).filter((e) => upToToday(e.dateISO));
   const tokensEarned = sumTokens(yearTokenEvents);
-  const tokenMonthBuckets = getTokenMonthBuckets(yearTokenEvents, year, MONTH_SHORT_NAMES).slice(0, lastMonthShown);
+  const tokenMonthBuckets = getTokenMonthBuckets(yearTokenEvents, year, monthShortNames()).slice(0, lastMonthShown);
   const trackingStartedLabel = tokensStartedAt
-    ? new Date(tokensStartedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+    ? new Date(tokensStartedAt).toLocaleDateString(getLocale(), { month: 'long', day: 'numeric', year: 'numeric' })
     : null;
   const { days: activeDaysAll, undatedCount: undatedForStreaks } = getActiveDays(tasks, today);
   const streakFacts = getYearStreakFacts(activeDaysAll, year);
@@ -221,7 +226,7 @@ export function YearReviewScreen() {
     <DetailPageShell>
       <DetailTitleCard
         icon={<ThemedText style={styles.titleEmoji}>🎉</ThemedText>}
-        title="My Year in Review"
+        title={t('yrTitle')}
         backgroundColor={PAGE_BACKGROUND}
       />
 
@@ -230,7 +235,7 @@ export function YearReviewScreen() {
           disabled={year <= minYear}
           onPress={() => setYear(year - 1)}
           accessibilityRole="button"
-          accessibilityLabel="Previous year"
+          accessibilityLabel={t('histPrevYear')}
           style={({ pressed }) => [pressed && styles.pressed, year <= minYear && styles.disabled]}>
           <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
             <ThemedText type="smallBold">‹</ThemedText>
@@ -241,7 +246,7 @@ export function YearReviewScreen() {
           disabled={year >= currentYear}
           onPress={() => setYear(year + 1)}
           accessibilityRole="button"
-          accessibilityLabel="Next year"
+          accessibilityLabel={t('histNextYear')}
           style={({ pressed }) => [pressed && styles.pressed, year >= currentYear && styles.disabled]}>
           <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
             <ThemedText type="smallBold">›</ThemedText>
@@ -250,38 +255,38 @@ export function YearReviewScreen() {
       </View>
 
       <View style={styles.headingBlock}>
-        <ThemedText style={styles.heading}>{isCurrentYear ? 'Your Year So Far' : 'Your Year in Review'}</ThemedText>
+        <ThemedText style={styles.heading}>{isCurrentYear ? t('yrHeadingNow') : t('yrHeadingPast')}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {isCurrentYear
-            ? `January 1 – ${new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}, ${year}`
-            : `January 1 – December 31, ${year}`}
+            ? t('yrRangeNow', { date: new Date().toLocaleDateString(getLocale(), { month: 'long', day: 'numeric' }), year })
+            : t('yrRangePast', { year })}
         </ThemedText>
       </View>
 
-      <DetailPanel title={isCurrentYear ? '💌 Your year so far, in words' : '💌 Your year, in words'}>
+      <DetailPanel title={isCurrentYear ? t('yrWordsNow') : t('yrWordsPast')}>
         <ThemedText style={styles.recap}>{recap}</ThemedText>
-        <DetailNote>Written on your device from what you&apos;ve recorded — nothing is sent anywhere.</DetailNote>
+        <DetailNote>{t('yrLocalNote')}</DetailNote>
       </DetailPanel>
 
       {hasAnyYearData(facts) ? (
         <>
           <SummaryRow>
-            <SummaryCard value={yearTasks.length} label="tasks completed" backgroundColor={PAGE_BACKGROUND} />
-            <SummaryCard value={yearMoods.length} label="mood check-ins" backgroundColor={PAGE_BACKGROUND} />
-            <SummaryCard value={yearReflections.length} label="reflections saved" backgroundColor={PAGE_BACKGROUND} />
+            <SummaryCard value={yearTasks.length} label={t('yrTasksDone')} backgroundColor={PAGE_BACKGROUND} />
+            <SummaryCard value={yearMoods.length} label={t('yrMoodCheckins')} backgroundColor={PAGE_BACKGROUND} />
+            <SummaryCard value={yearReflections.length} label={t('yrReflectionsSaved')} backgroundColor={PAGE_BACKGROUND} />
           </SummaryRow>
 
-          <DetailPanel title="✅ Tasks this year">
+          <DetailPanel title={t('yrTasksThisYear')}>
             {yearTasks.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No completed tasks with a recorded date in {year}.
+                {t('yrNoTasks', { year })}
               </ThemedText>
             ) : (
               <>
                 {categoryCounts.map(({ category, count }) => (
                   <View key={category} style={styles.breakdownRow}>
                     <ThemedText type="smallBold" style={styles.breakdownName}>
-                      {category}
+                      {categoryLabel(category)}
                     </ThemedText>
                     <View style={styles.breakdownTrack}>
                       <View
@@ -297,99 +302,95 @@ export function YearReviewScreen() {
                   </View>
                 ))}
                 <ThemedText type="smallBold" style={styles.subTitle}>
-                  Tasks by month
+                  {t('yrTasksByMonth')}
                 </ThemedText>
                 <CompletedBarChart buckets={taskMonthBuckets} color={MONTH_BAR_COLOR} />
               </>
             )}
             {undatedTaskCount > 0 ? (
               <DetailNote>
-                {undatedTaskCount} earlier {undatedTaskCount === 1 ? 'task was' : 'tasks were'} completed before
-                completion dates were recorded, so {undatedTaskCount === 1 ? 'it isn’t' : 'they aren’t'}{' '}
-                included in any year.
+                {tn('yrEarlier', undatedTaskCount)}
               </DetailNote>
             ) : null}
           </DetailPanel>
 
-          <DetailPanel title="🌈 Moods this year">
+          <DetailPanel title={t('yrMoodsYear')}>
             {yearMoods.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No mood check-ins recorded in {year}.
+                {t('yrNoMoods', { year })}
               </ThemedText>
             ) : (
               <>
                 <PieChart slices={moodSlices} />
                 <ThemedText type="smallBold" style={styles.subTitle}>
-                  Check-ins by month
+                  {t('yrCheckinsByMonth')}
                 </ThemedText>
                 <CompletedBarChart buckets={moodMonthBuckets} color="#B9A3E6" />
               </>
             )}
           </DetailPanel>
 
-          <DetailPanel title="🪙 Paw Tokens earned">
+          <DetailPanel title={t('yrTokensTitle')}>
             {tokensEarned === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No token earnings recorded in {year}.
+                {t('yrNoTokens', { year })}
               </ThemedText>
             ) : (
               <>
-                <ThemedText type="smallBold">{tokensEarned.toLocaleString()} tokens earned</ThemedText>
+                <ThemedText type="smallBold">{t('yrTokensEarned', { n: tokensEarned.toLocaleString(getLocale()) })}</ThemedText>
                 <ThemedText type="smallBold" style={styles.subTitle}>
-                  Tokens by month
+                  {t('yrTokensByMonth')}
                 </ThemedText>
                 <CompletedBarChart buckets={tokenMonthBuckets} color="#F3D77A" />
               </>
             )}
             {trackingStartedLabel ? (
               <DetailNote>
-                Token earnings are recorded from {trackingStartedLabel}; earlier earnings weren&apos;t logged, so they
-                aren&apos;t counted here.
+                {t('yrTokenNote', { date: trackingStartedLabel })}
               </DetailNote>
             ) : null}
           </DetailPanel>
 
-          <DetailPanel title="🔥 Consistency">
+          <DetailPanel title={t('yrConsistency')}>
             {streakFacts.activeDayCount === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No days with a completed task recorded in {year}.
+                {t('yrNoActive', { year })}
               </ThemedText>
             ) : (
               <>
                 <ThemedText type="small">
-                  Days with a completed task: <ThemedText type="smallBold">{streakFacts.activeDayCount}</ThemedText>
+                  {t('yrActiveDays')} <ThemedText type="smallBold">{streakFacts.activeDayCount}</ThemedText>
                 </ThemedText>
                 <ThemedText type="small">
-                  Longest streak {isCurrentYear ? 'so far' : 'that year'}:{' '}
+                  {isCurrentYear ? t('yrLongestNow') : t('yrLongestPast')}{' '}
                   <ThemedText type="smallBold">
-                    {streakFacts.longest} {streakFacts.longest === 1 ? 'day' : 'days'}
+                    {tn('yrDays', streakFacts.longest)}
                   </ThemedText>
                 </ThemedText>
                 {streakFacts.milestones.length > 0 ? (
                   <ThemedText type="small">
-                    Milestones reached: {streakFacts.milestones.map((m) => `${m}-day streak`).join(' · ')}
+                    {t('yrMilestones', { list: streakFacts.milestones.map((m) => t('yrMilestone', { n: m })).join(' · ') })}
                   </ThemedText>
                 ) : null}
               </>
             )}
             {undatedForStreaks > 0 ? (
               <DetailNote>
-                {undatedForStreaks} earlier {undatedForStreaks === 1 ? 'task was' : 'tasks were'} completed before
-                completion dates were recorded, so they can&apos;t be placed on a day.
+                {tn('yrUndatedStreak', undatedForStreaks)}
               </DetailNote>
             ) : null}
           </DetailPanel>
 
-          <DetailPanel title="📝 Reflections you saved">
+          <DetailPanel title={t('yrReflectionsTitle')}>
             {yearReflections.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No reflections saved in {year}.
+                {t('yrNoReflections', { year })}
               </ThemedText>
             ) : (
               yearReflections.slice(0, 5).map((r) => (
                 <View key={r.id} style={styles.quoteRow}>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {new Date(`${r.dateISO}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+                    {new Date(`${r.dateISO}T00:00:00`).toLocaleDateString(getLocale(), { month: 'long', day: 'numeric' })}
                   </ThemedText>
                   <ThemedText type="small">&ldquo;{snippet(r.text, 160)}&rdquo;</ThemedText>
                 </View>
@@ -397,10 +398,10 @@ export function YearReviewScreen() {
             )}
           </DetailPanel>
 
-          <DetailPanel title="🐱 Kitty milestones">
+          <DetailPanel title={t('yrKittyTitle')}>
             {petMilestones.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
-                No kitty dates were recorded in {year}.
+                {t('yrNoKitty', { year })}
               </ThemedText>
             ) : (
               petMilestones.map((text) => (
@@ -413,11 +414,11 @@ export function YearReviewScreen() {
 
         </>
       ) : (
-        <DetailPanel title="🌱 Nothing here yet">
+        <DetailPanel title={t('yrNothingTitle')}>
           <DetailEmptyState
             icon={<ThemedText style={styles.titleEmoji}>🌱</ThemedText>}
-            title={`No activity recorded in ${year}`}
-            text="Try another year, or come back after completing tasks, checking in with your mood, or writing a reflection."
+            title={t('yrNothingHead', { year })}
+            text={t('yrNothingText')}
           />
         </DetailPanel>
       )}

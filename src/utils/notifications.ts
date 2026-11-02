@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 
+import { getCurrentLanguage, tr, type LanguageCode } from '@/i18n';
 import { addDaysISO, isOccurrenceCompleted, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
 const CHANNEL_ID = 'task-reminders';
@@ -40,13 +41,14 @@ function ensureHandlerRegistered() {
   }
 }
 
-let channelReady = false;
+let channelReadyFor: LanguageCode | null = null;
 async function ensureAndroidChannel() {
-  if (channelReady) return;
-  channelReady = true;
+  const lang = getCurrentLanguage();
+  if (channelReadyFor === lang) return;
+  channelReadyFor = lang;
   try {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'Task & appointment reminders',
+      name: tr('ntChReminders'),
       importance: Notifications.AndroidImportance.HIGH,
     });
   } catch {
@@ -145,9 +147,16 @@ export async function cancelTaskNotification(task: Task): Promise<void> {
 // Every field besides scheduledNotificationId/scheduledNotificationFor is
 // passed through untouched — history, pet progress, Important status, etc.
 // are never affected by this pass.
+// A reminder's title is fixed when it is scheduled, so the first pass after the language is known or changes
+// re-schedules every reminder (otherwise an old English notification could still fire in Spanish).
+let lastSyncedLanguage: LanguageCode | null = null;
+
 export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
   const now = new Date();
   let changed = false;
+  const language = getCurrentLanguage();
+  const languageChanged = lastSyncedLanguage !== language;
+  lastSyncedLanguage = language;
 
   const updated = await Promise.all(
     tasks.map(async (task) => {
@@ -171,7 +180,7 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
         return task;
       }
 
-      if (task.scheduledNotificationId && task.scheduledNotificationFor === next.dateISO) {
+      if (!languageChanged && task.scheduledNotificationId && task.scheduledNotificationFor === next.dateISO) {
         // Already correctly scheduled for this occurrence — nothing to do.
         return task;
       }
@@ -182,10 +191,10 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
           content: {
             title:
               task.kind === 'event'
-                ? 'Appointment reminder'
+                ? tr('ntAppointment')
                 : task.kind === 'birthday'
-                  ? 'Birthday reminder'
-                  : 'Task reminder',
+                  ? tr('ntBirthday')
+                  : tr('ntTask'),
             body: task.text,
           },
           trigger: {

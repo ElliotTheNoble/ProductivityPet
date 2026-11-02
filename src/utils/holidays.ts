@@ -1,3 +1,4 @@
+import { tr, type StringKey } from '@/i18n';
 import { dateToISO } from '@/utils/tasks';
 
 export type Holiday = {
@@ -69,5 +70,29 @@ function getHolidaysForYear(year: number): Holiday[] {
 // most one match per date, so a single result is all that's ever needed.
 export function getHolidayForDate(dateISO: string): Holiday | undefined {
   const year = Number(dateISO.slice(0, 4));
-  return getHolidaysForYear(year).find((holiday) => holiday.date === dateISO);
+  const found = getHolidaysForYear(year).find((holiday) => holiday.date === dateISO);
+  // The holiday list is stored with English names; the name shown follows the current language.
+  return found ? { ...found, name: holidayDisplayName(found.name) } : undefined;
+}
+
+const HOLIDAY_NAME_KEYS: Record<string, StringKey> = {
+  "New Year's Day": 'holidayNewYearsDay',
+  "Martin Luther King Jr. Day": 'holidayMlkDay',
+  "Valentine's Day": 'holidayValentines',
+  "Presidents' Day": 'holidayPresidentsDay',
+  "Memorial Day": 'holidayMemorialDay',
+  "Juneteenth": 'holidayJuneteenth',
+  "Independence Day": 'holidayIndependenceDay',
+  "Labor Day": 'holidayLaborDay',
+  "Halloween": 'holidayHalloween',
+  "Veterans Day": 'holidayVeteransDay',
+  "Thanksgiving": 'holidayThanksgiving',
+  "Christmas Eve": 'holidayChristmasEve',
+  "Christmas Day": 'holidayChristmasDay',
+  "New Year's Eve": 'holidayNewYearsEve'
+};
+
+export function holidayDisplayName(englishName: string): string {
+  const key = HOLIDAY_NAME_KEYS[englishName];
+  return key ? tr(key) : englishName;
 }

@@ -1,3 +1,4 @@
+import { getLocale, tr } from '@/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { addDaysISO, dateToISO, todayISO } from '@/utils/tasks';
@@ -24,11 +25,20 @@ const TOKEN_HISTORY_STORAGE_KEY = '@ProductivityPet:tokenEarnings';
 
 export type TokenSource = 'task' | 'appointment' | 'kitty-catch' | 'memory-match';
 
+// Display names in the current language, read when needed (getters) so they follow a language change.
 export const TOKEN_SOURCE_LABELS: Record<TokenSource, string> = {
-  task: 'Completed a task',
-  appointment: 'Completed an appointment',
-  'kitty-catch': 'Kitty Catch',
-  'memory-match': 'Memory Match',
+  get task() {
+    return tr('thSrcTask');
+  },
+  get appointment() {
+    return tr('thSrcAppointment');
+  },
+  get 'kitty-catch'() {
+    return tr('thSrcKittyCatch');
+  },
+  get 'memory-match'() {
+    return tr('thSrcMemoryMatch');
+  },
 };
 
 export type TokenEvent = {
@@ -151,8 +161,8 @@ export function getTokenDailyBuckets(events: TokenEvent[], days: number) {
       dateISO,
       weekdayLabel:
         days <= 7
-          ? date.toLocaleDateString(undefined, { weekday: 'short' })
-          : date.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }),
+          ? date.toLocaleDateString(getLocale(), { weekday: 'short' })
+          : date.toLocaleDateString(getLocale(), { month: 'numeric', day: 'numeric' }),
       count: 0,
     });
   }

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { tr } from '@/i18n';
 import { endToySession, getToySession, startToySession } from '@/utils/pet-toy-session';
 import { getToy } from '@/utils/toys/toy-catalog';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
@@ -1168,7 +1169,7 @@ export function playWithToy(petId: string, toyId: string): ToyResult {
 export function getPetLabel(pet: PetRecord, all: PetRecord[]): string {
   if (pet.name) return pet.name;
   const order = [...all].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-  return `Kitty ${order.findIndex((p) => p.id === pet.id) + 1}`;
+  return tr('petLabelKitty', { n: order.findIndex((p) => p.id === pet.id) + 1 });
 }
 
 // Developer test helper: adds REAL growth (as completed-task credit) to the

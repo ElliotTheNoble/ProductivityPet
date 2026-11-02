@@ -1,0 +1,107 @@
+// English strings for Home: the pet's care buttons, needs, health banners, speech, mood, the two slide-out
+// panels and their cards. (Message POOLS that need several variants live in lists.en.ts.)
+export const homeEn = {
+  // care buttons and needs bars
+  careFeed: 'Feed',
+  careFeeding: 'Feeding…',
+  carePlay: 'Play',
+  carePlaying: 'Playing…',
+  careRest: 'Rest',
+  careResting: 'Resting…',
+  needHunger: 'Hunger',
+  needCleanliness: 'Cleanliness',
+  needHappiness: 'Happiness',
+  needEnergy: 'Energy',
+  // the same needs as they appear inside a sentence ("Check ...")
+  needRefHunger: 'Hunger',
+  needRefCleanliness: 'Cleanliness',
+  needRefHappiness: 'Happiness',
+
+  // poop piles
+  poopLeft: '{n} left!',
+  poopSizeSmall: 'small',
+  poopSizeMedium: 'medium',
+  poopSizeLarge: 'large',
+  poopCleanLabel: 'Clean up {size} poop pile',
+  poopCleanLabelMore: 'Clean up {size} poop pile, {n} clicks needed',
+
+  // health banner (family bar)
+  bannerCritical: '{name} needs urgent care',
+  bannerSick: "{name} isn't feeling well",
+  checkNeeds: 'Check {list}.',
+  listTwo: '{a} and {b}',
+  listThree: '{a}, {b}, and {c}',
+  bathroomSickHint: 'Too sick for a bath — gently drag the washcloth over her to freshen her up.',
+  timerDaysHours: '{d}d {h}h',
+  timerHoursMinutes: '{h}h {m}m',
+  timerMinutes: '{m}m',
+  dismissMemorial: 'Dismiss memorial message',
+
+  // pet life messages (speech bubble) and notification care text
+  memorialMessage: "Your pet's journey has come to an end. Their memories will always be in your Pet Album.",
+  resurrectionHappy: "I'm back! Thank you for bringing me home. I missed you! 💗",
+  lifeCriticalHunger: "I'm so weak... I really need something to eat. Please help! 💔",
+  lifeCriticalClean: 'I feel awful... I really need a gentle wipe-down in the Bathroom. Please help! 💔',
+  lifeCriticalHappy: "I'm so sad and lonely... please play with me. 💔",
+  lifeCriticalOther: "I'm still not well... please keep taking care of me. 💔",
+  lifeSickHunger: 'My tummy is so empty... could you feed me? 🍽️',
+  lifeSickClean: "I don't feel clean at all... could I have a gentle wipe-down in the Bathroom? 🧽",
+  lifeSickHappy: 'I feel so lonely... could we play together? 🧸',
+  lifeSickOther: "I'm not feeling very well... could you take care of me? 🤒",
+  askFeed: 'Feed her',
+  askWipe: 'give her a gentle wipe-down in the Bathroom',
+  askPlay: 'play with her',
+  askNone: 'Keep caring for her a little longer.',
+  askJoinTwo: '{a} and {b}',
+  askJoinMore: '{rest} and {last}',
+  askUntil: '{asks} until Hunger, Cleanliness and Happiness are all at 50 or more.',
+
+  // moods
+  todaysMood: "Today's Mood",
+  moodHappy: 'Happy',
+  moodCalm: 'Calm',
+  moodFocused: 'Focused',
+  moodStressed: 'Stressed',
+  moodTired: 'Tired',
+  moodSick: 'Sick',
+  moodExclaim: '{name}!',
+  uncheckMessage: 'Aww, not done yet? You got this! 💕',
+
+  // growth stages and pet progress
+  stageEgg: 'Egg',
+  stageHatchling: 'Hatchling',
+  stageBaby: 'Baby',
+  stageYoung: 'Young',
+  stageAdult: 'Adult',
+  panelPetProgress: 'Pet Progress',
+  panelHomeFeatures: 'Home Features',
+  progressLevel: 'Level {n}',
+  progressMax: 'Max stage reached! 🎉',
+  progressTasks: '{done} / {total} tasks to next stage',
+  panelOpen: 'Open {label}',
+  panelClose: 'Close {label}',
+  closeWord: 'Close',
+
+  // Home Features cards
+  todaysTasks: "Today's Tasks",
+  allTasksDone: 'All tasks complete! Amazing job! 🎉',
+  percentComplete: '{p}% complete',
+  noTasksToday: 'No tasks for today. Add one from the Tasks tab.',
+  todaysAppointments: "Today's Appointments",
+  noAppointmentsToday: 'No appointments for today. Add one from the Tasks tab.',
+  roomsWord: 'Rooms',
+  viewAll: 'View All →',
+  toysCardTitle: 'Toys',
+  toysNone: 'No toys yet — buy one in the Shop with Paw Tokens.',
+  toysOwn: 'You own: {n}',
+  toysHint: 'Play toys from their cards in the Shop.',
+  toysOutToPlay: '{name} is out to play…',
+
+  // room names (shared by Home, Tasks and Rooms)
+  roomLivingRoom: 'Living Room',
+  roomStudyRoom: 'Study Room',
+  roomGym: 'Gym',
+  roomBedroom: 'Bedroom',
+  roomBathroom: 'Bathroom',
+  roomKitchen: 'Kitchen',
+};

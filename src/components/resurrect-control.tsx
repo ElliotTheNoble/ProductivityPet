@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useT, type Msg } from '@/i18n';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ConfirmModal } from '@/components/confirm-modal';
@@ -16,19 +17,20 @@ import { RESURRECTION_COST } from '@/utils/pet-family-config';
 // free or the balance is short, no duplicate charges) live in resurrectPet in
 // @/utils/pet-family.ts; this only shows them and asks for confirmation.
 export function ResurrectControl({ petId }: { petId: string }) {
+  const { t } = useT();
   const family = usePetFamily();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Msg | null>(null);
   const [hover, setHover] = useState(false);
   if (!family) return null;
 
   const balance = family.wallet.pawTokens;
   const slotFree = canAdoptMore(family);
   const blocked = !slotFree
-    ? `Free a living-pet slot first (you have ${MAX_LIVING_PETS}).`
+    ? t('rezSlot', { max: MAX_LIVING_PETS })
     : balance < RESURRECTION_COST
-      ? `Needs ${RESURRECTION_COST - balance} more Paw Tokens.`
+      ? t('rezNeeds', { n: RESURRECTION_COST - balance })
       : null;
 
   async function confirm() {
@@ -42,14 +44,14 @@ export function ResurrectControl({ petId }: { petId: string }) {
     }
     setError(
       result.reason === 'insufficient'
-        ? `You need ${result.missing} more Paw Tokens. You have not been charged.`
+        ? { key: 'rezErrInsufficient', params: { n: result.missing ?? 0 } }
         : result.reason === 'no-slot'
-          ? `You already have ${MAX_LIVING_PETS} living pets. Free a slot first — you have not been charged.`
+          ? { key: 'rezErrNoSlot', params: { max: MAX_LIVING_PETS } }
           : result.reason === 'not-deceased'
-            ? 'This pet is already back with you. You have not been charged again.'
+            ? { key: 'rezErrNotDeceased' }
             : result.reason === 'busy'
-              ? 'Resurrection is already in progress.'
-              : "Couldn't save on this device. Nothing was changed and you have not been charged — please try again."
+              ? { key: 'rezErrBusy' }
+              : { key: 'rezErrSave' }
     );
   }
 
@@ -70,26 +72,28 @@ export function ResurrectControl({ petId }: { petId: string }) {
           style={[styles.button, styles.pointer, hover && blocked === null && styles.buttonHover]}>
           <PawTokenCoin size={18} />
           <ThemedText type="smallBold" style={styles.buttonText}>
-            Resurrect · {RESURRECTION_COST}
+            {t('rezButton', { cost: RESURRECTION_COST })}
           </ThemedText>
         </ThemedView>
       </Pressable>
       <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-        {blocked ?? "No time limit — you can bring them back whenever you're ready."}
+        {blocked ?? t('rezHint')}
       </ThemedText>
 
       <ConfirmModal
         visible={open}
-        title="Resurrect this pet?"
-        confirmLabel={`Resurrect for ${RESURRECTION_COST}`}
+        title={t('rezTitle')}
+        confirmLabel={t('rezConfirm', { cost: RESURRECTION_COST })}
         confirmDisabled={blocked !== null}
         busy={busy}
         onConfirm={confirm}
         onCancel={() => setOpen(false)}>
         <ThemedText type="small">
-          This costs exactly {RESURRECTION_COST} Paw Tokens, charged once. Your balance: {balance}
-          {balance < RESURRECTION_COST ? ` (${RESURRECTION_COST - balance} short)` : ''}. They come back with the same
-          name, birthday, level and accessories, and all four needs restored to 75.
+          {t('rezBody', {
+            cost: RESURRECTION_COST,
+            balance,
+            short: balance < RESURRECTION_COST ? t('rezShort', { n: RESURRECTION_COST - balance }) : '',
+          })}
         </ThemedText>
         {blocked ? (
           <ThemedText type="small" themeColor="accent">
@@ -98,7 +102,7 @@ export function ResurrectControl({ petId }: { petId: string }) {
         ) : null}
         {error ? (
           <ThemedText type="small" themeColor="accent">
-            {error}
+            {t(error.key, error.params)}
           </ThemedText>
         ) : null}
       </ConfirmModal>

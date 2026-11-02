@@ -1,3 +1,4 @@
+import { HoverPressable } from '@/components/hover-pressable';
 import { useRouter } from 'expo-router';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -10,6 +11,7 @@ import { RoomTaskPanel } from '@/components/room-task-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useT } from '@/i18n';
 import { BATHING_STEP_COUNTS, type BathingStep } from '@/utils/bathing-stage-art';
 import { getActiveSoapItem } from '@/utils/bathing-soap';
 import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
@@ -64,6 +66,7 @@ type RoomDetailScreenProps = {
 // on desktop by default, left for Kitchen, collapsible on mobile — see
 // @/components/room-task-panel.tsx).
 export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
+  const { t } = useT();
   const router = useRouter();
   // Needed by resolveRoomPetPlacement below (Bedroom's wide-desktop nudge
   // is the only placement that currently depends on it).
@@ -430,7 +433,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <Pressable
+        <HoverPressable
           onPress={() => router.push('/rooms')}
           style={({ pressed }) => [
             styles.backButtonPressable,
@@ -439,10 +442,10 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
           ]}>
           <ThemedView type="accent" style={[styles.backButton, isPhone && styles.backButtonPhone]}>
             <ThemedText type="smallBold" style={[styles.backButtonText, isPhone && styles.backButtonTextPhone]}>
-              ← Back to Rooms
+              {t('backToRooms')}
             </ThemedText>
           </ThemedView>
-        </Pressable>
+        </HoverPressable>
 
         {/* Every room now renders Kitty — Study Room/Gym/Bedroom/Kitchen
             via their own activity sprite art (see @/utils/room-pet-art.ts),
@@ -487,18 +490,18 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
             {room.slug === 'bathroom' && bathingPaused && displayedStage !== 'Egg' && !petDeceased && !wipeNeeded ? (
               <View style={styles.washclothNotice} pointerEvents="box-none">
                 <ThemedView type="peachOverlay" style={styles.washclothCard}>
-                  <ThemedText type="smallBold">Your kitty doesn't need a gentle bath right now.</ThemedText>
+                  <ThemedText type="smallBold">{t('wipeNotNeeded')}</ThemedText>
                 </ThemedView>
               </View>
             ) : null}
             {room.slug === 'bathroom' && bathingPaused && displayedStage !== 'Egg' && needsWashcloth ? (
               <View style={styles.washclothNotice} pointerEvents="box-none">
                 <ThemedView type="peachOverlay" style={styles.washclothCard}>
-                  <ThemedText type="smallBold">Your kitty needs a Gentle Washcloth.</ThemedText>
+                  <ThemedText type="smallBold">{t('wipeNeedsWashcloth')}</ThemedText>
                   <ThemedText type="small">
                     {tokens >= WASHCLOTH_PRICE
-                      ? `Get one in the Shop for ${WASHCLOTH_PRICE} Paw Tokens.`
-                      : 'Not enough Paw Tokens! Complete tasks to earn more.'}
+                      ? t('wipeBuyHint', { price: WASHCLOTH_PRICE })
+                      : t('wipeNotEnough')}
                   </ThemedText>
                   <View style={styles.washclothButtons}>
                     <Pressable
@@ -508,7 +511,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
                       style={({ pressed }) => pressed && styles.pressed}>
                       <ThemedView type="accent" style={[styles.washclothButton, shopButtonHover && styles.washclothButtonHover]}>
                         <ThemedText type="smallBold" style={styles.backButtonText}>
-                          Go to Shop
+                          {t('wipeGoShop')}
                         </ThemedText>
                       </ThemedView>
                     </Pressable>
@@ -578,8 +581,8 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
           <View style={styles.washButtonRow} pointerEvents="box-none">
             <ThemedView type="peachOverlay" style={styles.instructionBanner}>
               <ThemedText type="smallBold">
-                Too poorly for a bath — drag the washcloth gently over her to freshen her up
-                {petProfile ? ` (Cleanliness ${Math.round(petProfile.cleanliness)}%)` : ''}.
+                {t('wipeDragHint')}
+                {petProfile ? t('wipeCleanliness', { n: Math.round(petProfile.cleanliness) }) : ''}.
               </ThemedText>
             </ThemedView>
           </View>
@@ -595,13 +598,13 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
                 (no onPress, nothing to intercept). */}
             {activeTool ? (
               <ThemedView type="peachOverlay" style={styles.instructionBanner}>
-                <ThemedText type="smallBold">{BATHING_INSTRUCTIONS[activeTool]}</ThemedText>
+                <ThemedText type="smallBold">{t(BATHING_INSTRUCTIONS[activeTool])}</ThemedText>
               </ThemedView>
             ) : null}
             <View style={styles.toolButtonRow}>
               <BathingToolButton
                 icon={soapItem.icon}
-                label={soapItem.name}
+                label={soapItem.id === 'soap-default' ? t('bathSoapName') : soapItem.name}
                 percent={(soapCompletedCount / TOTAL_BATHING_TARGETS) * 100}
                 selected={activeTool === 'soap'}
                 // Deliberately never disabled, unlike Rinse/Blow Dry below
@@ -613,7 +616,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
               />
               <BathingToolButton
                 icon={HOSE_ICON}
-                label="Shower Hose"
+                label={t('bathHose')}
                 percent={(rinseCompletedCount / TOTAL_BATHING_TARGETS) * 100}
                 selected={activeTool === 'rinse'}
                 disabled={!isSoapDone || isRinseDone}
@@ -621,7 +624,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
               />
               <BathingToolButton
                 icon={BLOW_DRYER_ICON}
-                label="Blow Dryer"
+                label={t('bathDryer')}
                 percent={(blowDryCompletedCount / TOTAL_BATHING_TARGETS) * 100}
                 selected={activeTool === 'blowDry'}
                 disabled={!isRinseDone || isBlowDryDone}
@@ -638,7 +641,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
             her cleaning equipment. Every other room keeps the default
             (side omitted → 'right'). */}
         <RoomTaskPanel
-          roomName={room.name}
+          roomName={room.slug}
           tasks={roomTasks}
           onToggleTask={handleToggleRoomTask}
           onAddTask={handleAddRoomTask}
@@ -673,7 +676,7 @@ function BathingToolButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={disabled ? undefined : onPress} style={({ pressed }) => pressed && !disabled && styles.pressed}>
+    <HoverPressable onPress={disabled ? undefined : onPress} style={({ pressed }) => pressed && !disabled && styles.pressed}>
       <ThemedView type="sky" style={[styles.toolButton, selected && styles.toolButtonSelected, disabled && styles.toolButtonDisabled]}>
         <ThemedText type="smallBold">
           {icon} {label}
@@ -682,7 +685,7 @@ function BathingToolButton({
           <View style={[styles.toolProgressFill, { width: `${percent}%` }]} />
         </View>
       </ThemedView>
-    </Pressable>
+    </HoverPressable>
   );
 }
 

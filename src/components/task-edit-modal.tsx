@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, StyleSheet, TextInput, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getCurrentLanguage, tr, useT } from '@/i18n';
 import { ensureNotificationPermission } from '@/utils/notifications';
 import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
 import { reminderOffsetLabel, type ReminderOffsetMinutes, type RepeatRule, type TaskKind } from '@/utils/tasks';
 
-const WEEKDAY_TOGGLE_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 type RepeatOption = 'none' | 'daily' | 'weekly';
@@ -76,7 +78,7 @@ function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes 
 }
 
 function reminderOptionLabel(option: ReminderOption): string {
-  if (option === 'none') return 'None';
+  if (option === 'none') return tr('reminderNone');
   return reminderOffsetLabel(reminderOptionToMinutes(option) as ReminderOffsetMinutes);
 }
 
@@ -85,11 +87,11 @@ const KIND_OPTIONS: TaskKind[] = ['task', 'event', 'birthday'];
 function kindLabel(kind: TaskKind): string {
   switch (kind) {
     case 'task':
-      return 'Task';
+      return tr('kindTask');
     case 'event':
-      return 'Appointment';
+      return tr('kindAppointment');
     case 'birthday':
-      return 'Birthday';
+      return tr('kindBirthday');
   }
 }
 
@@ -145,6 +147,8 @@ export function TaskEditModal({
   onSave,
   onCancel,
 }: TaskEditModalProps) {
+  const { t, tl } = useT();
+  const WEEKDAY_TOGGLE_LABELS = tl('weekdaysNarrow');
   const theme = useTheme();
   const [selectedKind, setSelectedKind] = useState<TaskKind>(kind);
   const [text, setText] = useState(initialText);
@@ -231,12 +235,12 @@ export function TaskEditModal({
         <Pressable onPress={(event) => event.stopPropagation()}>
           <ThemedView type="background" style={[styles.modalBox, { borderColor: theme.backgroundSelected }]}>
             <ThemedText type="smallBold" style={styles.title}>
-              Edit {kindLabel(selectedKind)}
+              {t('editTitle')} {getCurrentLanguage() === 'es' ? kindLabel(selectedKind).toLowerCase() : kindLabel(selectedKind)}
             </ThemedText>
 
             <View style={styles.fieldGroup}>
               <ThemedText type="small" themeColor="textSecondary">
-                Type
+                {t('editType')}
               </ThemedText>
               <View style={styles.pillRow}>
                 {KIND_OPTIONS.map((option) => (
@@ -262,7 +266,7 @@ export function TaskEditModal({
 
             <View style={styles.fieldGroup}>
               <ThemedText type="small" themeColor="textSecondary">
-                Name
+                {t('editName')}
               </ThemedText>
               <TextInput
                 autoFocus
@@ -272,10 +276,10 @@ export function TaskEditModal({
                 ]}
                 placeholder={
                   selectedKind === 'task'
-                    ? 'What do you need to do?'
+                    ? t('placeholderTask')
                     : selectedKind === 'event'
-                      ? 'What is the appointment?'
-                      : "Whose birthday is it?"
+                      ? t('placeholderAppointment')
+                      : t('placeholderBirthday')
                 }
                 placeholderTextColor={theme.textSecondary}
                 value={text}
@@ -285,14 +289,14 @@ export function TaskEditModal({
 
             <View style={styles.fieldGroup}>
               <ThemedText type="small" themeColor="textSecondary">
-                Date (YYYY-MM-DD)
+                {t('editDate')}
               </ThemedText>
               <TextInput
                 style={[
                   styles.input,
                   { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
                 ]}
-                placeholder="YYYY-MM-DD"
+                placeholder={t('editDatePlaceholder')}
                 placeholderTextColor={theme.textSecondary}
                 value={date}
                 onChangeText={setDate}
@@ -301,14 +305,14 @@ export function TaskEditModal({
 
             <View style={styles.fieldGroup}>
               <ThemedText type="small" themeColor="textSecondary">
-                Time (optional)
+                {t('editTime')}
               </ThemedText>
               <TextInput
                 style={[
                   styles.input,
                   { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
                 ]}
-                placeholder="e.g. 3:00 PM"
+                placeholder={t('placeholderTimeShort')}
                 placeholderTextColor={theme.textSecondary}
                 value={time}
                 onChangeText={setTime}
@@ -318,7 +322,7 @@ export function TaskEditModal({
             {time.trim() ? (
               <View style={styles.fieldGroup}>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Reminder
+                  {t('reminderLabel')}
                 </ThemedText>
                 <View style={styles.pillRow}>
                   {(selectedKind === 'birthday' ? BIRTHDAY_REMINDER_UI_OPTIONS : REMINDER_UI_OPTIONS).map((option) => (
@@ -345,14 +349,14 @@ export function TaskEditModal({
 
             {selectedKind === 'birthday' ? (
               <ThemedText type="small" themeColor="textSecondary">
-                🎂 Repeats every year on this date
+                {t('birthdayRepeats')}
               </ThemedText>
             ) : null}
 
             {selectedKind === 'task' ? (
               <View style={styles.fieldGroup}>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Repeat
+                  {t('repeatLabel')}
                 </ThemedText>
                 <View style={styles.pillRow}>
                   {(['none', 'daily', 'weekly'] as RepeatOption[]).map((option) => (
@@ -368,7 +372,7 @@ export function TaskEditModal({
                         <ThemedText
                           type="small"
                           style={repeatOption === option ? styles.pillTextActive : undefined}>
-                          {option === 'none' ? 'Once' : option === 'daily' ? 'Daily' : 'Weekly'}
+                          {option === 'none' ? t('repeatOnce') : option === 'daily' ? t('repeatDaily') : t('repeatWeekly')}
                         </ThemedText>
                       </View>
                     </Pressable>
@@ -404,7 +408,7 @@ export function TaskEditModal({
             {selectedKind === 'task' ? (
               <View style={styles.fieldGroup}>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Assign to Room
+                  {t('assignToRoom')}
                 </ThemedText>
                 <View style={styles.pillRow}>
                   <Pressable onPress={() => setRoom(null)} style={({ pressed }) => pressed && styles.pressed}>
@@ -414,7 +418,7 @@ export function TaskEditModal({
                         { backgroundColor: displayedRoom === null ? theme.purple : theme.background },
                       ]}>
                       <ThemedText type="small" style={displayedRoom === null ? styles.pillTextActive : undefined}>
-                        Unassigned
+                        {t('unassigned')}
                       </ThemedText>
                     </View>
                   </Pressable>
@@ -444,13 +448,13 @@ export function TaskEditModal({
               <Pressable onPress={handleSave} style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="accent" style={styles.saveButton}>
                   <ThemedText type="smallBold" style={styles.saveButtonText}>
-                    Save
+                    {t('save')}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
               <Pressable onPress={onCancel} style={({ pressed }) => pressed && styles.pressed}>
                 <View style={[styles.cancelButton, { backgroundColor: theme.background }]}>
-                  <ThemedText type="smallBold">Cancel</ThemedText>
+                  <ThemedText type="smallBold">{t('cancel')}</ThemedText>
                 </View>
               </Pressable>
             </View>

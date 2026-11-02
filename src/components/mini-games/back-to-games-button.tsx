@@ -1,5 +1,8 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+
+import { useT } from '@/i18n';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -20,10 +23,11 @@ type BackToGamesButtonProps = {
 // already used for the "Exit Game" button on both games' results screens,
 // so it reads as the same kind of action.
 export function BackToGamesButton({ onPress }: BackToGamesButtonProps) {
+  const { t } = useT();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}>
       <ThemedView type="backgroundSelected" style={styles.pill}>
-        <ThemedText type="smallBold">← Back to Games</ThemedText>
+        <ThemedText type="smallBold">{t('mgBack')}</ThemedText>
       </ThemedView>
     </Pressable>
   );

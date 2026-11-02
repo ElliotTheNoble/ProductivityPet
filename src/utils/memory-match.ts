@@ -5,6 +5,8 @@
 // kitty-catch.ts/kitty-catch-rewards.ts — the two games share no code, so
 // nothing about this one can affect Kitty Catch.
 
+import { tr, type StringKey } from '@/i18n';
+
 export type MemoryMatchDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
 export const MEMORY_MATCH_DIFFICULTIES: MemoryMatchDifficulty[] = ['easy', 'medium', 'hard', 'expert'];
@@ -13,6 +15,11 @@ export type DifficultyInfo = { pairs: number; label: string };
 
 // Pairs selected (out of the 24 unique faces below) and total cards
 // (pairs * 2) per difficulty.
+// The difficulty's name in the current language (the stored key and `label` stay English).
+export function difficultyLabel(difficulty: MemoryMatchDifficulty): string {
+  return tr(`mm${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)}` as StringKey);
+}
+
 export const MEMORY_MATCH_DIFFICULTY_INFO: Record<MemoryMatchDifficulty, DifficultyInfo> = {
   easy: { pairs: 8, label: 'Easy' },
   medium: { pairs: 12, label: 'Medium' },

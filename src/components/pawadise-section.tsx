@@ -1,6 +1,9 @@
 import { Image } from 'expo-image';
+import { tr, useT, type Msg } from '@/i18n';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ConfirmModal } from '@/components/confirm-modal';
 import { DetailEmptyState, DetailPanel } from '@/components/detail-page-parts';
@@ -9,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { usePetFamily } from '@/hooks/use-pet-family';
+import { stageLabel } from '@/utils/pet-stage';
 import { buildAlbumEntries, type PetAlbumEntry } from '@/utils/pet-album';
 import { MAX_LIVING_PETS, canAdoptMore, retirePet, returnPetHome, type PawadiseResult } from '@/utils/pet-family';
 import { PawadiseFarewell } from '@/components/pawadise-farewell';
@@ -24,43 +28,44 @@ import { PAWADISE_SCENE, PAWADISE_SCENE_ASPECT_RATIO } from '@/utils/pawadise-ar
 
 const SCENE_CARD = '#E4F4F1'; // soft aqua
 
-function pawadiseError(result: Extract<PawadiseResult, { ok: false }>): string {
+function pawadiseError(result: Extract<PawadiseResult, { ok: false }>): Msg {
   switch (result.reason) {
     case 'not-healthy':
-      return 'Only healthy pets can go to Pawadise.';
+      return { key: 'pwErrNotHealthy' };
     case 'egg':
-      return "An egg can't go to Pawadise until it has hatched.";
+      return { key: 'pwErrEgg' };
     case 'last-pet':
-      return 'Keep at least one pet at home. Adopt another egg first.';
+      return { key: 'pwErrLastPet' };
     case 'no-slot':
-      return `You already have ${MAX_LIVING_PETS} pets at home. Free a slot first.`;
+      return { key: 'pwErrNoSlot', params: { max: MAX_LIVING_PETS } };
     case 'already-retired':
     case 'not-retired':
-      return 'That pet is already where it should be.';
+      return { key: 'pwErrAlready' };
     case 'busy':
-      return 'One moment — that is already happening.';
+      return { key: 'pwErrBusy' };
     default:
-      return "Couldn't save on this device. Nothing was changed — please try again.";
+      return { key: 'pwErrSave' };
   }
 }
 
 // Why an active pet can't be sent right now (null = it can).
 function sendBlocker(entry: PetAlbumEntry, activeCount: number): string | null {
-  if (entry.isEgg) return 'Eggs can go once they hatch.';
-  if (entry.lifeState !== 'healthy') return 'Only healthy pets can go.';
-  if (activeCount < 2) return 'Keep at least one pet at home.';
+  if (entry.isEgg) return tr('pwBlockEgg');
+  if (entry.lifeState !== 'healthy') return tr('pwBlockHealthy');
+  if (activeCount < 2) return tr('pwBlockLast');
   return null;
 }
 
 type Pending = { kind: 'retire' | 'return'; entry: PetAlbumEntry } | null;
 
 export function PawadiseSection() {
+  const { t } = useT();
   const family = usePetFamily();
   const [viewing, setViewing] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<Msg | null>(null);
+  const [notice, setNotice] = useState<Msg | null>(null);
   // The farewell scene (species of the pet that just retired) while it is showing.
   const [farewell, setFarewell] = useState<string | null>(null);
   if (!family) return null;
@@ -84,8 +89,8 @@ export function PawadiseSection() {
     if (result.ok) {
       setNotice(
         pending.kind === 'retire'
-          ? `${pending.entry.label} is now relaxing in Pet Pawadise.`
-          : `${pending.entry.label} is home again!`
+          ? { key: 'pwNoticeRetired', params: { pet: pending.entry.label } }
+          : { key: 'pwNoticeReturned', params: { pet: pending.entry.label } }
       );
       setPending(null);
       // Only after a SUCCESSFUL retirement, and only for species that have a farewell scene (cats).
@@ -100,28 +105,27 @@ export function PawadiseSection() {
       {farewellNode}
       {/* Resort scene (the player's own artwork, shown whole at its real proportions). */}
       <View style={styles.scene}>
-        <Image source={PAWADISE_SCENE} contentFit="cover" style={styles.sceneImage} accessibilityLabel="Pet Pawadise resort" />
+        <Image source={PAWADISE_SCENE} contentFit="cover" style={styles.sceneImage} accessibilityLabel={t('pwSceneAlt')} />
       </View>
       <ThemedView style={[styles.intro, { backgroundColor: SCENE_CARD }]}>
-        <ThemedText style={styles.introTitle}>🌴 Pet Pawadise</ThemedText>
+        <ThemedText style={styles.introTitle}>{t('pwIntroTitle')}</ThemedText>
         <ThemedText type="small" style={styles.introText}>
-          A peaceful retirement resort for healthy pets. While they relax here, their needs, growth and health are
-          paused, so nothing changes — and you can bring them home for free whenever you have a free pet slot.
+          {t('pwIntro')}
         </ThemedText>
       </ThemedView>
 
       {notice ? (
         <ThemedText type="smallBold" accessibilityRole="alert" style={styles.notice}>
-          {notice}
+          {t(notice.key, notice.params)}
         </ThemedText>
       ) : null}
 
-      <DetailPanel title="🏝️ Relaxing in Pawadise">
+      <DetailPanel title={t('pwRelaxingTitle')}>
         {retired.length === 0 ? (
           <DetailEmptyState
             icon={<ThemedText style={styles.emptyEmoji}>🌺</ThemedText>}
-            title="Pawadise is quiet right now"
-            text="When a healthy pet retires, they'll relax here, safe and happy, until you bring them home."
+            title={t('pwQuietTitle')}
+            text={t('pwQuietText')}
           />
         ) : (
           <View style={styles.grid}>
@@ -131,7 +135,7 @@ export function PawadiseSection() {
                 <Pressable
                   onPress={() => setViewing(entry.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${entry.label}'s Pawadise page`}
+                  accessibilityLabel={t('pwOpenPage', { pet: entry.label })}
                   style={({ pressed }) => [styles.petCardTap, styles.petCardInteractive, pressed && styles.pressed]}>
                 <View style={styles.petAvatar}>
                   <PetAvatar stage={entry.stage} equippedAccessoryIds={entry.isEgg ? [] : entry.equippedAccessoryIds} size={110} />
@@ -140,14 +144,14 @@ export function PawadiseSection() {
                   {entry.label}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {`Species: ${speciesLabel(entry.species)}`}
+                  {t('pwSpecies', { species: speciesLabel(entry.species) })}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {`Growth stage: ${entry.stage}`}
+                  {t('pwGrowth', { stage: stageLabel(entry.stage) })}
                 </ThemedText>
                 {formatDate(entry.retiredAt) ? (
                   <ThemedText type="small" themeColor="textSecondary">
-                    {`Retired ${formatDate(entry.retiredAt)}`}
+                    {t('pwRetiredOn', { date: formatDate(entry.retiredAt) ?? '' })}
                   </ThemedText>
                 ) : null}
                 </Pressable>
@@ -159,15 +163,15 @@ export function PawadiseSection() {
                     setPending({ kind: 'return', entry });
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Bring ${entry.label} home`}
+                  accessibilityLabel={t('pwBringAria', { pet: entry.label })}
                   style={({ pressed }) => [pressed && styles.pressed, !slotFree && styles.disabled]}>
                   <ThemedView type="mint" style={styles.button}>
-                    <ThemedText type="smallBold">Bring Home</ThemedText>
+                    <ThemedText type="smallBold">{t('pwBringHome')}</ThemedText>
                   </ThemedView>
                 </Pressable>
                 {!slotFree ? (
                   <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-                    {`You have ${MAX_LIVING_PETS} pets at home. Free a slot first.`}
+                    {t('pwFreeSlot', { max: MAX_LIVING_PETS })}
                   </ThemedText>
                 ) : null}
               </View>
@@ -176,10 +180,10 @@ export function PawadiseSection() {
         )}
       </DetailPanel>
 
-      <DetailPanel title="🧳 Send a pet to Pawadise">
+      <DetailPanel title={t('pwSendTitle')}>
         {active.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            You have no pets at home right now.
+            {t('pwNoPets')}
           </ThemedText>
         ) : (
           active.map((entry) => {
@@ -192,7 +196,7 @@ export function PawadiseSection() {
                 <View style={styles.sendInfo}>
                   <ThemedText type="smallBold">{entry.label}</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {blocker ?? `${entry.stage} · ready for a rest`}
+                    {blocker ?? t('pwReady', { stage: stageLabel(entry.stage) })}
                   </ThemedText>
                 </View>
                 <Pressable
@@ -203,11 +207,11 @@ export function PawadiseSection() {
                     setPending({ kind: 'retire', entry });
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Send ${entry.label} to Pet Pawadise`}
+                  accessibilityLabel={t('pwSendAria', { pet: entry.label })}
                   style={({ pressed }) => [pressed && styles.pressed, !!blocker && styles.disabled]}>
                   <ThemedView type="accent" style={styles.button}>
                     <ThemedText type="smallBold" style={styles.whiteText}>
-                      Send to Pawadise
+                      {t('pwSend')}
                     </ThemedText>
                   </ThemedView>
                 </Pressable>
@@ -221,12 +225,12 @@ export function PawadiseSection() {
         visible={pending !== null}
         title={
           pending?.kind === 'retire'
-            ? `Send ${pending.entry.label} to Pet Pawadise?`
+            ? t('pwConfirmSend', { pet: pending.entry.label })
             : pending
-              ? `Bring ${pending.entry.label} home?`
+              ? t('pwConfirmReturn', { pet: pending.entry.label })
               : ''
         }
-        confirmLabel={pending?.kind === 'retire' ? 'Send to Pawadise' : 'Bring Home'}
+        confirmLabel={pending?.kind === 'retire' ? t('pwSend') : t('pwBringHome')}
         busy={busy}
         onConfirm={confirm}
         onCancel={() => {
@@ -237,12 +241,12 @@ export function PawadiseSection() {
         }}>
         <ThemedText type="small">
           {pending?.kind === 'retire'
-            ? "They'll relax in Pawadise. Their needs, growth and health pause, so nothing changes while they're away, and everything about them is kept safe. You can bring them home for free whenever you have a free pet slot."
-            : "It's free. They'll pick up exactly where they left off — the time spent in Pawadise doesn't count."}
+            ? t('pwConfirmSendBody')
+            : t('pwConfirmReturnBody')}
         </ThemedText>
         {error ? (
           <ThemedText type="smallBold" accessibilityRole="alert">
-            {error}
+            {t(error.key, error.params)}
           </ThemedText>
         ) : null}
       </ConfirmModal>

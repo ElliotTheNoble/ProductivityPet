@@ -6,6 +6,7 @@ import { SpriteCrop } from '@/components/sprite-crop';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { tr, trName, useT } from '@/i18n';
 import { usePetFamily } from '@/hooks/use-pet-family';
 import {
   buyToy,
@@ -23,22 +24,22 @@ const ART_SIZE = 96;
 export function toyMessage(result: ToyResult, action: 'buy' | 'play', toy: ToyDef): string {
   if (result.ok) {
     return action === 'buy'
-      ? `Bought ${toy.name}!`
-      : `${toy.name} is out to play in the living room! +${toy.happiness} Happiness.`;
+      ? tr('toyBought', { name: trName(toy.name) })
+      : tr('toyPlaying', { name: trName(toy.name), happy: toy.happiness });
   }
   switch (result.reason) {
     case 'insufficient':
-      return 'Not enough Paw Tokens yet. Complete your tasks to earn more!';
+      return tr('toyNotEnough');
     case 'deceased':
-      return 'Toys are paused while your pet is resting in memory.';
+      return tr('toyPaused');
     case 'egg':
-      return 'Toys are for a pet that has hatched.';
+      return tr('toyEgg');
     case 'none-left':
-      return 'You have none left.';
+      return tr('toyNoneLeft');
     case 'busy':
-      return 'A toy is already out to play. Try again in a moment.';
+      return tr('toyBusy');
     default:
-      return 'That did not work. Please try again.';
+      return tr('toyFailed');
   }
 }
 
@@ -47,7 +48,9 @@ export function toyMessage(result: ToyResult, action: 'buy' | 'play', toy: ToyDe
 // played with from here or from Home's Home Features panel.
 export function ToyShopSection() {
   const family = usePetFamily();
-  const [message, setMessage] = useState<string | null>(null);
+  const { t } = useT();
+  // The last result is kept (not its text), so the message follows the language if it changes.
+  const [last, setLast] = useState<{ result: ToyResult; action: 'buy' | 'play'; toy: ToyDef } | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
   const pet = family ? getSelectedPet(family) : null;
@@ -64,10 +67,10 @@ export function ToyShopSection() {
       {TOY_SPECIES.map((species) => (
         <View key={species.id} style={styles.species}>
           <ThemedText type="smallBold" style={styles.title}>
-            {species.label}
+            {trName(species.label)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Play with toys to make your kitty happy! Toys are used up after playtime.
+            {t('toyIntro')}
           </ThemedText>
           <View style={styles.row}>
             {species.toys.map((toy) => {
@@ -87,12 +90,12 @@ export function ToyShopSection() {
                     <View style={styles.art}>
                       {art ? <SpriteCrop {...art} size={ART_SIZE} /> : null}
                     </View>
-                    <ThemedText type="smallBold">{toy.name}</ThemedText>
+                    <ThemedText type="smallBold">{trName(toy.name)}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {`+${toy.happiness} Happiness`}
+                      {t('toyHappiness', { happy: toy.happiness })}
                     </ThemedText>
-                    <ThemedText type="smallBold" accessibilityLabel={`You own ${owned}`}>
-                      {`You own: ${owned}`}
+                    <ThemedText type="smallBold" accessibilityLabel={t('careOwnLabel', { n: owned })}>
+                      {t('toyYouOwn', { n: owned })}
                     </ThemedText>
                     {/* Buy and Play side by side (wrapping only if a card is too narrow for both). */}
                     <View style={styles.buttonRow}>
@@ -100,9 +103,9 @@ export function ToyShopSection() {
                       disabled={deceased}
                       onHoverIn={() => setHoveredButton(`buy-${toy.id}`)}
                       onHoverOut={() => setHoveredButton(null)}
-                      onPress={() => setMessage(toyMessage(buyToy(toy.id), 'buy', toy))}
+                      onPress={() => setLast({ result: buyToy(toy.id), action: 'buy', toy })}
                       accessibilityRole="button"
-                      accessibilityLabel={`Buy ${toy.name} for ${toy.price} Paw Tokens`}
+                      accessibilityLabel={t('toyBuyLabel', { name: trName(toy.name), price: toy.price })}
                       style={({ pressed }) => [styles.btnWrap, pressed && styles.pressed, deceased && styles.disabled]}>
                       <ThemedView
                         type="accent"
@@ -117,14 +120,14 @@ export function ToyShopSection() {
                       disabled={!canPlay}
                       onHoverIn={() => setHoveredButton(`play-${toy.id}`)}
                       onHoverOut={() => setHoveredButton(null)}
-                      onPress={() => setMessage(toyMessage(playWithToy(pet.id, toy.id), 'play', toy))}
+                      onPress={() => setLast({ result: playWithToy(pet.id, toy.id), action: 'play', toy })}
                       accessibilityRole="button"
-                      accessibilityLabel={`Play with ${toy.name}`}
+                      accessibilityLabel={t('toyPlayLabel', { name: trName(toy.name) })}
                       style={({ pressed }) => [styles.btnWrap, pressed && styles.pressed, !canPlay && styles.disabled]}>
                       <ThemedView
                         type="mint"
                         style={[styles.button, hoveredButton === `play-${toy.id}` && canPlay && styles.buttonHover]}>
-                        <ThemedText type="smallBold">Play</ThemedText>
+                        <ThemedText type="smallBold">{t('toyPlay')}</ThemedText>
                       </ThemedView>
                     </Pressable>
                     </View>
@@ -137,16 +140,16 @@ export function ToyShopSection() {
       ))}
       {deceased ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Toys can't be bought or used while your pet is resting in memory.
+          {t('toyRestingNote')}
         </ThemedText>
       ) : !hatched ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Toys are for a pet that has hatched. You can still buy them now.
+          {t('toyEggNote')}
         </ThemedText>
       ) : null}
-      {message ? (
+      {last ? (
         <ThemedText type="smallBold" accessibilityRole="alert">
-          {message}
+          {toyMessage(last.result, last.action, last.toy)}
         </ThemedText>
       ) : null}
     </View>

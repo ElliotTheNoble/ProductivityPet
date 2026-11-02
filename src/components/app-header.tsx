@@ -9,12 +9,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT, type StringKey } from '@/i18n';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
 import { isRoomSlug } from '@/utils/rooms';
 
 type NavItem = {
   href: Href;
-  label: string;
+  labelKey: StringKey;
 };
 
 // assets/images/pawtoken.png is a 1536x1024 canvas with a lot of
@@ -35,14 +36,15 @@ const PAW_TOKEN_CROP_TOP = 23;
 const PAW_TOKEN_COIN_SIZE = 20;
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Home' },
-  { href: '/tasks', label: 'Tasks' },
-  { href: '/rooms', label: 'Rooms' },
-  { href: '/shop', label: 'Shop' },
-  { href: '/stats', label: 'Stats' },
+  { href: '/', labelKey: 'navHome' },
+  { href: '/tasks', labelKey: 'navTasks' },
+  { href: '/rooms', labelKey: 'navRooms' },
+  { href: '/shop', labelKey: 'navShop' },
+  { href: '/stats', labelKey: 'navStats' },
 ];
 
 export function AppHeader() {
+  const { t } = useT();
   const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -108,7 +110,7 @@ export function AppHeader() {
             <ThemedText style={styles.title}>Productivity Pet</ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            Small steps. A happier you.
+            {t('brandTagline')}
           </ThemedText>
         </View>
 
@@ -139,7 +141,7 @@ export function AppHeader() {
               pathname === item.href || (item.href === '/stats' && pathname.startsWith('/stats/'));
             return (
               <Pressable
-                key={item.label}
+                key={String(item.href)}
                 onPress={() => router.replace(item.href)}
                 style={(state) => [state.pressed && styles.pressed, hoverLift(state, !isActive)]}>
                 <View
@@ -150,7 +152,7 @@ export function AppHeader() {
                   <ThemedText
                     type="smallBold"
                     style={isActive ? styles.navLabelActive : undefined}>
-                    {item.label}
+                    {t(item.labelKey)}
                   </ThemedText>
                 </View>
               </Pressable>
@@ -165,7 +167,7 @@ export function AppHeader() {
               onHoverIn={() => setBellHovered(true)}
               onHoverOut={() => setBellHovered(false)}
               accessibilityRole="button"
-              accessibilityLabel="Pet Care & Alerts"
+              accessibilityLabel={t('navAlerts')}
               accessibilityState={{ selected: pathname === '/pet-alerts' }}
               style={(state) => [state.pressed && styles.pressed, hoverLift(state, pathname !== '/pet-alerts')]}>
               <View
@@ -184,7 +186,7 @@ export function AppHeader() {
             {bellHovered ? (
               <View style={styles.tooltip} pointerEvents="none">
                 <ThemedText type="small" style={styles.tooltipText}>
-                  Pet Care & Alerts
+                  {t('navAlerts')}
                 </ThemedText>
               </View>
             ) : null}

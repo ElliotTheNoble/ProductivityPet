@@ -13,6 +13,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
+import { categoryLabel } from '@/utils/categorize-task';
 import type { TaskCategory } from '@/utils/categorize-task';
 import { categoryToSlug, type LifetimeStat } from '@/utils/category-accomplishments';
 import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
@@ -21,7 +23,7 @@ import { getTokenHistory, subscribeToTokenHistory, sumTokens } from '@/utils/tok
 import { getEquippedAccessories, type EquippedAccessories } from '@/utils/pet-equipment';
 import { getRenderedStage, getRenderedStageProgress } from '@/utils/pet-growth';
 import { getPetProfile, subscribeToPetProfile, type PetProfile } from '@/utils/pet-profile';
-import { PET_STAGES, TASKS_PER_STAGE } from '@/utils/pet-stage';
+import { PET_STAGES, TASKS_PER_STAGE, stageLabel } from '@/utils/pet-stage';
 import { ALL_CATEGORIES, getCategoryCompletionCounts, getImportantCompletedCount } from '@/utils/stats';
 import { getCachedTasks } from '@/utils/task-storage';
 import { getCompletedTaskCount, type Task } from '@/utils/tasks';
@@ -172,16 +174,16 @@ const REFLECT_LINKS = [
     id: 'mood' as const,
     href: '/stats/mood' as const,
     emoji: '🌈',
-    title: 'My Mood Journey',
-    description: 'Look back at your mood check-ins and daily reflections.',
+    titleKey: 'statsMoodJourney' as const,
+    descKey: 'statsMoodJourneyDesc' as const,
     background: '#EFE9FA',
   },
   {
     id: 'review' as const,
     href: '/stats/review' as const,
     emoji: '🎉',
-    title: 'My Year in Review',
-    description: 'A personal recap of your year, from what you recorded.',
+    titleKey: 'statsYearReview' as const,
+    descKey: 'statsYearReviewDesc' as const,
     background: '#FBF3DC',
   },
 ];
@@ -222,6 +224,7 @@ const DECORATIONS: { glyph: string; top: Percent; left?: Percent; right?: Percen
 ];
 
 export function StatsHubScreen() {
+  const { t, tn } = useT();
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const isWide = width >= DESKTOP_MIN_WIDTH;
@@ -369,10 +372,8 @@ export function StatsHubScreen() {
   // always reads as two centered lines — "3 more tasks" / "to reach
   // Hatchling!" — regardless of the bubble's rendered width.
   const nextStageMessage = stageProgress.isMaxStage
-    ? 'Max stage reached! 🎉'
-    : `${stageProgress.tasksUntilNextStage} more ${
-        stageProgress.tasksUntilNextStage === 1 ? 'task' : 'tasks'
-      }\nto reach ${stageProgress.nextStage}!`;
+    ? t('statsNextMax')
+    : tn('statsNext', stageProgress.tasksUntilNextStage, { stage: stageProgress.nextStage ? stageLabel(stageProgress.nextStage) : '' });
 
   return (
     // Transparent so the full-screen background rendered in src/app/_layout.tsx
@@ -397,9 +398,9 @@ export function StatsHubScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.headingWrap}>
             <ThemedView type="backgroundElementOverlay" style={[styles.headingBanner, styles.shadow]}>
-              <ThemedText style={styles.heading}>Your Progress</ThemedText>
+              <ThemedText style={styles.heading}>{t('statsHeading')}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-                Look how much you and your pet have accomplished together!
+                {t('statsSubheading')}
               </ThemedText>
             </ThemedView>
           </View>
@@ -408,9 +409,9 @@ export function StatsHubScreen() {
             <ThemedView type="backgroundElementOverlay" style={styles.memorialCard}>
               <PetAvatar stage={memorialStage} size={96} healthState="deceased" />
               <View style={styles.memorialText}>
-                <ThemedText type="smallBold">{familyForMemorial ? getPetLabel(memorialPet, familyForMemorial.pets) : 'Your kitty'} — resting in memory</ThemedText>
+                <ThemedText type="smallBold">{t('statsMemorialTitle', { name: familyForMemorial ? getPetLabel(memorialPet, familyForMemorial.pets) : t('statsYourKitty') })}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Their memories will always be in your Pet Album. You can bring them back whenever you are ready.
+                  {t('statsMemorialText')}
                 </ThemedText>
                 <ResurrectControl petId={memorialPet.id} />
               </View>
@@ -423,7 +424,7 @@ export function StatsHubScreen() {
                 (stats_pet_background.png) behind the pet + info. */}
             <View style={[styles.column, isWide && styles.petColumnWide]}>
               <ThemedView type="skyOverlay" style={[styles.card, styles.petCard, styles.shadow]}>
-                <ThemedText style={styles.petCardTitle}>Pet Progress</ThemedText>
+                <ThemedText style={styles.petCardTitle}>{t('statsPetProgress')}</ThemedText>
 
                 <View style={styles.cloudSection}>
                   <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -459,11 +460,11 @@ export function StatsHubScreen() {
                     <View style={[styles.petInfo, isWide && styles.petInfoWide]}>
                       <ThemedView type="purple" style={styles.stagePill}>
                         <ThemedText type="smallBold" style={styles.stagePillText}>
-                          {renderedStage}
+                          {stageLabel(renderedStage)}
                         </ThemedText>
                       </ThemedView>
                       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.levelText}>
-                        Level {stageProgress.level}
+                        {t('statsLevel', { n: stageProgress.level })}
                       </ThemedText>
 
                       <View style={styles.progressGroup}>
@@ -477,7 +478,7 @@ export function StatsHubScreen() {
                           <View style={styles.progressSheen} pointerEvents="none" />
                         </View>
                         <ThemedText type="small" themeColor="textSecondary" style={styles.progressTasksText}>
-                          {stageProgress.tasksIntoStage} / {TASKS_PER_STAGE} tasks
+                          {t('statsTasksProgress', { done: stageProgress.tasksIntoStage, total: TASKS_PER_STAGE })}
                         </ThemedText>
                       </View>
 
@@ -502,7 +503,7 @@ export function StatsHubScreen() {
             {/* Lifetime Stats — pastel-pink card. */}
             <View style={[styles.column, isWide && styles.statsColumnWide]}>
               <ThemedView type="backgroundElementOverlay" style={[styles.card, styles.shadow]}>
-                <ThemedText style={styles.cardTitleLarge}>⭐ Lifetime Stats</ThemedText>
+                <ThemedText style={styles.cardTitleLarge}>{t('statsLifetime')}</ThemedText>
 
                 {/* Each Lifetime Stats card is fully clickable and opens its
                     own detail page; hover/press feedback matches the
@@ -512,7 +513,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredLifetimeStat('tasks')}
                   onHoverOut={() => setHoveredLifetimeStat(null)}
                   accessibilityRole="button"
-                  accessibilityLabel="View task completion history"
+                  accessibilityLabel={t('statsViewTasksLabel')}
                   style={({ pressed }) => [
                     styles.statPanel,
                     styles.statPanelInteractive,
@@ -525,7 +526,7 @@ export function StatsHubScreen() {
                       {completedTaskCount}
                     </ThemedText>
                     <ThemedText type="smallBold" themeColor="textSecondary">
-                      Tasks Completed
+                      {t('statsTasksCompleted')}
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={32} />
@@ -536,7 +537,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredLifetimeStat('important')}
                   onHoverOut={() => setHoveredLifetimeStat(null)}
                   accessibilityRole="button"
-                  accessibilityLabel="View important task history"
+                  accessibilityLabel={t('statsViewImportantLabel')}
                   style={({ pressed }) => [
                     styles.statPanel,
                     styles.statPanelInteractive,
@@ -549,7 +550,7 @@ export function StatsHubScreen() {
                       {importantCompletedCount}
                     </ThemedText>
                     <ThemedText type="smallBold" themeColor="textSecondary">
-                      Important Tasks Completed
+                      {t('statsImportantCompleted')}
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={PINK_ACCENT_CROP} size={32} />
@@ -561,7 +562,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredLifetimeStat('pets')}
                   onHoverOut={() => setHoveredLifetimeStat(null)}
                   accessibilityRole="button"
-                  accessibilityLabel="Open Pet Album"
+                  accessibilityLabel={t('statsOpenAlbumLabel')}
                   style={({ pressed }) => [
                     styles.statPanel,
                     styles.statPanelInteractive,
@@ -572,7 +573,7 @@ export function StatsHubScreen() {
                   <View style={styles.statPanelText}>
                     <ThemedText style={[styles.statPanelNumber, { color: theme.purple }]}>{petAlbumCount}</ThemedText>
                     <ThemedText type="smallBold" themeColor="textSecondary">
-                      {petAlbumCount === 1 ? 'Pet in Your Album' : 'Pets in Your Album'}
+                      {tn('statsPetsAlbum', petAlbumCount)}
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={PURPLE_ACCENT_CROP} size={32} />
@@ -584,7 +585,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredLifetimeStat('tokens')}
                   onHoverOut={() => setHoveredLifetimeStat(null)}
                   accessibilityRole="button"
-                  accessibilityLabel="Open token earnings history"
+                  accessibilityLabel={t('statsOpenTokensLabel')}
                   style={({ pressed }) => [
                     styles.statPanel,
                     styles.statPanelInteractive,
@@ -597,7 +598,7 @@ export function StatsHubScreen() {
                   <View style={styles.statPanelText}>
                     <ThemedText style={[styles.statPanelNumber, { color: theme.apricot }]}>{tokensEarned}</ThemedText>
                     <ThemedText type="smallBold" themeColor="textSecondary">
-                      Paw Tokens Earned
+                      {t('statsTokensEarned')}
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={YELLOW_ACCENT_CROP} size={32} />
@@ -609,7 +610,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredLifetimeStat('streak')}
                   onHoverOut={() => setHoveredLifetimeStat(null)}
                   accessibilityRole="button"
-                  accessibilityLabel="Open streak history"
+                  accessibilityLabel={t('statsOpenStreakLabel')}
                   style={({ pressed }) => [
                     styles.statPanel,
                     styles.statPanelInteractive,
@@ -624,7 +625,7 @@ export function StatsHubScreen() {
                       {getStreakSummary(tasks).current}
                     </ThemedText>
                     <ThemedText type="smallBold" themeColor="textSecondary">
-                      Day Streak
+                      {t('statsDayStreak')}
                     </ThemedText>
                   </View>
                   <AccentMarkIcon crop={GREEN_ACCENT_CROP} size={32} />
@@ -636,9 +637,9 @@ export function StatsHubScreen() {
           {/* Completed by Category — one large, near-white pale-pink panel. */}
           <View style={[styles.categoryPanel, styles.shadow]}>
             <View style={styles.categoryHeaderRow}>
-              <ThemedText style={styles.cardTitleLarge}>📊 Completed by Category</ThemedText>
+              <ThemedText style={styles.cardTitleLarge}>{t('statsByCategory')}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.categorySubtitleText}>
-                See which areas you've been focusing on!
+                {t('statsByCategorySub')}
               </ThemedText>
             </View>
 
@@ -656,7 +657,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredCategory(category)}
                   onHoverOut={() => setHoveredCategory(null)}
                   accessibilityRole="button"
-                  accessibilityLabel={`View ${category} accomplishments`}
+                  accessibilityLabel={t('statsViewCategoryLabel', { category: categoryLabel(category) })}
                   style={({ pressed }) => [
                     styles.categoryCard,
                     styles.categoryCardInteractive,
@@ -667,14 +668,14 @@ export function StatsHubScreen() {
                   ]}>
                   <StatsIcon crop={CATEGORY_ICON_CROP[category]} size={64} />
                   <ThemedText type="smallBold" style={styles.categoryName}>
-                    {category}
+                    {categoryLabel(category)}
                   </ThemedText>
                   <View style={styles.categoryNumberRow}>
                     <ThemedText style={styles.categoryNumber}>{categoryCounts[category]}</ThemedText>
                     <AccentMarkIcon crop={CATEGORY_ACCENT_CROP[category]} size={26} />
                   </View>
                   <ThemedText type="small" themeColor="textSecondary">
-                    completed tasks
+                    {t('statsCompletedTasksWord')}
                   </ThemedText>
                 </Pressable>
               ))}
@@ -684,7 +685,7 @@ export function StatsHubScreen() {
           {/* Reflect — the Mood Journey and Year in Review pages. Same hover /
               press behavior as the category cards above. */}
           <View style={[styles.categoryPanel, styles.shadow]}>
-            <ThemedText style={styles.cardTitleLarge}>💭 Reflect</ThemedText>
+            <ThemedText style={styles.cardTitleLarge}>{t('statsReflect')}</ThemedText>
             <View style={styles.categoryGrid}>
               {REFLECT_LINKS.map((link) => (
                 <Pressable
@@ -693,7 +694,7 @@ export function StatsHubScreen() {
                   onHoverIn={() => setHoveredReflect(link.id)}
                   onHoverOut={() => setHoveredReflect(null)}
                   accessibilityRole="button"
-                  accessibilityLabel={link.title}
+                  accessibilityLabel={t(link.titleKey)}
                   style={({ pressed }) => [
                     styles.categoryCard,
                     styles.categoryCardInteractive,
@@ -704,10 +705,10 @@ export function StatsHubScreen() {
                   ]}>
                   <ThemedText style={styles.reflectEmoji}>{link.emoji}</ThemedText>
                   <ThemedText type="smallBold" style={styles.categoryName}>
-                    {link.title}
+                    {t(link.titleKey)}
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary" style={styles.reflectText}>
-                    {link.description}
+                    {t(link.descKey)}
                   </ThemedText>
                 </Pressable>
               ))}

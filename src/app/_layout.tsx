@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { DarkTheme, DefaultTheme, Slot, ThemeProvider, usePathname } from 'expo-router';
+import { DarkTheme, DefaultTheme, Slot, ThemeProvider, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { AppState, StyleSheet, View, useColorScheme, useWindowDimensions } from 'react-native';
@@ -18,6 +18,7 @@ import { advanceAllPets } from '@/utils/pet-family';
 import { getRenderedStage } from '@/utils/pet-growth';
 import { startPetAlerts } from '@/utils/pet-alerts';
 import { startPawadiseMail } from '@/utils/pawadise-mail';
+import { ensureOnboardingLoaded, useOnboarding } from '@/utils/onboarding';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import { ROOMS, isRoomSlug } from '@/utils/rooms';
@@ -25,6 +26,10 @@ import { getCachedTasks } from '@/utils/task-storage';
 import { getCompletedTaskCount } from '@/utils/tasks';
 
 SplashScreen.preventAutoHideAsync();
+
+// Decide "new install or existing player?" RIGHT NOW, while this file loads, before anything below creates the
+// first pet. Existing players are never forced into onboarding (see @/utils/onboarding.ts).
+void ensureOnboardingLoaded().catch(() => {});
 
 const LIVING_ROOM_NORMAL = require('@/assets/images/rooms/living-room.png');
 const TASKS_NORMAL = require('@/assets/images/rooms/backgrounds/Task_Background.png');
@@ -65,6 +70,13 @@ function ImagePrefetchLayer() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const pathname = usePathname();
+  const router = useRouter();
+  const onboarding = useOnboarding();
+  const isWelcome = pathname === '/welcome';
+  // A brand-new install goes to the welcome flow until it is finished or skipped; everyone else is untouched.
+  useEffect(() => {
+    if (onboarding?.status === 'pending' && !isWelcome) router.replace('/welcome');
+  }, [onboarding?.status, isWelcome, router]);
   const isHome = pathname === '/';
   const isTasks = pathname === '/tasks';
   // Includes the per-category Accomplishments pages (/stats/<category>) so they
@@ -255,7 +267,7 @@ export default function RootLayout() {
           cachePolicy="memory-disk"
         />
       ) : null}
-      <AppHeader />
+      {isWelcome ? null : <AppHeader />}
       {showFamilyBar ? <PetFamilyBar /> : null}
       <Slot />
       <ResurrectionOverlay />

@@ -1,10 +1,14 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { categoryLabel } from '@/utils/categorize-task';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { TaskIcon } from '@/components/task-icon';
 import { TaskMenu, type TaskMenuItem } from '@/components/task-menu';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { tr, useT } from '@/i18n';
 import { useTheme } from '@/hooks/use-theme';
 import type { DisplayAppointment } from '@/utils/tasks';
 
@@ -29,18 +33,19 @@ export function AppointmentsCard({
   onStopRepeating,
   onRemoveToday,
 }: AppointmentsCardProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   return (
     <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.cardHeader}>
-        <ThemedText style={styles.cardTitle}>Today&apos;s Appointments</ThemedText>
+        <ThemedText style={styles.cardTitle}>{t('todaysAppointments')}</ThemedText>
       </View>
 
       <View style={styles.list}>
         {appointments.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No appointments for today. Add one from the Tasks tab.
+            {t('noAppointmentsToday')}
           </ThemedText>
         ) : (
           appointments.map((appointment, index) => (
@@ -59,7 +64,7 @@ export function AppointmentsCard({
                   <View style={styles.textGroup}>
                     <ThemedText>{appointment.text}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {appointment.time ? appointment.time : appointment.category}
+                      {appointment.time ? appointment.time : categoryLabel(appointment.category)}
                     </ThemedText>
                   </View>
                 </>
@@ -83,7 +88,7 @@ export function AppointmentsCard({
                       {appointment.text}
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {appointment.time ? appointment.time : appointment.category}
+                      {appointment.time ? appointment.time : categoryLabel(appointment.category)}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -111,19 +116,18 @@ function buildAppointmentMenuItems(
   onStopRepeating: (id: string) => void,
   onRemoveToday: (id: string) => void
 ): TaskMenuItem[] {
-  const label = appointment.kind === 'birthday' ? 'Birthday' : 'Appointment';
 
   if (appointment.isRepeating) {
     return [
       {
         key: 'stop-repeating',
-        label: '⏹ Stop Repeating From Here',
+        label: tr('menuStopRepeating'),
         onPress: () => onStopRepeating(appointment.id),
         destructive: true,
       },
       {
         key: 'remove-today',
-        label: '🗑️ Remove Just This Day',
+        label: tr('menuRemoveDay'),
         onPress: () => onRemoveToday(appointment.id),
         destructive: true,
       },
@@ -133,7 +137,7 @@ function buildAppointmentMenuItems(
   return [
     {
       key: 'delete',
-      label: `🗑️ Delete ${label}`,
+      label: appointment.kind === 'birthday' ? tr('menuDeleteBirthday') : tr('menuDeleteAppointment'),
       onPress: () => onDeleteAppointment(appointment.id),
       destructive: true,
     },

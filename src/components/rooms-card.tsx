@@ -1,9 +1,12 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ThemedText } from '@/components/themed-text';
+import { useT } from '@/i18n';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -67,6 +70,7 @@ const TAP_HIGHLIGHT_DELAY_MS = 250;
 // (the existing living room); the other 5 open their own detail page. The
 // cards' own look is unchanged — only a Pressable wrapper was added.
 export function RoomsCard() {
+  const { t } = useT();
   const theme = useTheme();
   const router = useRouter();
   const [tappedRoom, setTappedRoom] = useState<string | null>(null);
@@ -97,12 +101,12 @@ export function RoomsCard() {
   return (
     <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.headerRow}>
-        <ThemedText style={styles.title}>Rooms</ThemedText>
+        <ThemedText style={styles.title}>{t('roomsWord')}</ThemedText>
         <Pressable
           onPress={() => router.push('/rooms')}
           style={({ pressed }) => pressed && styles.pressed}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            View All →
+            {t('viewAll')}
           </ThemedText>
         </Pressable>
       </View>

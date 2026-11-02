@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { subscribeToLanguage, tr } from '@/i18n';
 import { ensureNotificationPermission } from '@/utils/notifications';
 import {
   ensureFamilyLoaded,
@@ -110,13 +111,13 @@ async function ensureChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
     await Notifications.setNotificationChannelAsync(HEALTH_CHANNEL, {
-      name: 'Pet health',
+      name: tr('ntChHealth'),
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#F6C99A',
     });
     await Notifications.setNotificationChannelAsync(EMERGENCY_CHANNEL, {
-      name: 'Pet emergencies',
+      name: tr('ntChEmergency'),
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 400, 200, 400, 200, 400],
       enableVibrate: true,
@@ -125,7 +126,7 @@ async function ensureChannels(): Promise<void> {
     });
     // Same alert without vibration, used when the player turns vibration off.
     await Notifications.setNotificationChannelAsync(EMERGENCY_QUIET_CHANNEL, {
-      name: 'Pet emergencies (no vibration)',
+      name: tr('ntChQuiet'),
       importance: Notifications.AndroidImportance.MAX,
       enableVibrate: false,
       sound: 'default',
@@ -141,14 +142,14 @@ type AlertKind = 'sick' | 'critical';
 function contentFor(kind: AlertKind, label: string, pet: PetRecord, useVibration: boolean) {
   if (kind === 'sick') {
     return {
-      title: `🤒 ${label} isn't feeling well`,
-      body: `${label} needs some attention. ${describeNeededCare(pet.profile)} It's free, and there's time.`,
+      title: tr('ntSickTitle', { pet: label }),
+      body: tr('ntSickBody', { pet: label, care: describeNeededCare(pet.profile) }),
       data: { petId: pet.id, kind },
     };
   }
   return {
-    title: `🚨 ${label} needs urgent care!`,
-    body: `${label} is in critical condition. Please feed, bathe or play with them soon — it's free, but time is running out.`,
+    title: tr('ntCritTitle', { pet: label }),
+    body: tr('ntCritBody', { pet: label }),
     data: { petId: pet.id, kind },
     sound: 'default' as const,
     priority: Notifications.AndroidNotificationPriority.MAX,
@@ -316,6 +317,11 @@ export function startPetAlerts(): () => void {
   const offLifecycle = subscribeToLifecycle((notice) => {
     void handleLifecycleNotice(notice);
   });
+  // Scheduled notifications hold their text, so they are rebuilt when the language changes.
+  const offLanguage = subscribeToLanguage(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void syncPetAlerts(), 500);
+  });
   const offFamily = subscribeToFamily((family) => {
     const signature = scheduleSignature(family);
     if (signature === lastSignature) return;
@@ -331,6 +337,7 @@ export function startPetAlerts(): () => void {
   return () => {
     started = false;
     offLifecycle();
+    offLanguage();
     offFamily();
     if (timer) clearTimeout(timer);
   };
@@ -345,8 +352,8 @@ export async function sendTestNotification(): Promise<boolean> {
     const current = await getAlertSettings();
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '🚨 Test: a pet needs urgent care',
-        body: 'This is how a critical pet alert looks. Nothing is wrong with your pets.',
+        title: tr('ntTestTitle'),
+        body: tr('ntTestBody'),
         sound: 'default',
       },
       trigger: Platform.OS === 'android' ? { channelId: channelFor('critical', current.vibration) } : null,

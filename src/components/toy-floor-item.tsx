@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
+import { trName, useT } from '@/i18n';
 import { SpriteCrop } from '@/components/sprite-crop';
 import { getToy, getToyArtFor } from '@/utils/toys/toy-catalog';
 
@@ -10,6 +11,7 @@ import { getToy, getToyArtFor } from '@/utils/toys/toy-catalog';
 // The gentle bounce is the default "animation"; a toy with its own animation can later be handled
 // here by toyId without touching the pet or the Shop.
 export function ToyFloorItem({ toyId }: { toyId: string }) {
+  const { t } = useT();
   const toy = getToy(toyId);
   const art = toy ? getToyArtFor(toy) : null;
   const [width, setWidth] = useState(0);
@@ -31,7 +33,7 @@ export function ToyFloorItem({ toyId }: { toyId: string }) {
   return (
     <View
       pointerEvents="none"
-      accessibilityLabel={toy ? `${toy.name} is out to play` : undefined}
+      accessibilityLabel={toy ? t('toyOutToPlay', { name: trName(toy.name) }) : undefined}
       style={[styles.slot, { aspectRatio: art.cropWidth / art.cropHeight }]}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {width > 0 ? (

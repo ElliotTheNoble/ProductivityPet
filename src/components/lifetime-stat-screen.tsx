@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { CATEGORY_BAR_COLOR } from '@/components/category-accomplishments-screen';
 import {
@@ -18,6 +20,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT, type StringKey } from '@/i18n';
+import { categoryLabel } from '@/utils/categorize-task';
 import {
   countThisMonth,
   getAllCompletedEntries,
@@ -35,43 +39,41 @@ import type { Task } from '@/utils/tasks';
 const STAT_CONFIG: Record<
   LifetimeStat,
   {
-    title: string;
+    titleKey: StringKey;
     crop: typeof CLIPBOARD_CROP;
     background: string;
     barColor: string;
-    totalLabel: string;
-    explanation: string;
-    emptyTitle: string;
-    emptyText: string;
+    totalKey: StringKey;
+    explainKey: StringKey;
+    emptyTitleKey: StringKey;
+    emptyTextKey: StringKey;
   }
 > = {
   tasks: {
-    title: 'Task Completion History',
+    titleKey: 'lifeTasksTitle' as const,
     crop: CLIPBOARD_CROP,
     background: '#E6F7EF',
     barColor: '#7FD9B6',
-    totalLabel: 'tasks completed in total',
-    explanation:
-      'Every task you have ever checked off, across all categories. Repeating tasks count once for each day you completed them. This is the same number that grows your pet.',
-    emptyTitle: 'No completed tasks yet',
-    emptyText: 'Finish a task on Home or the Tasks page and it will show up here!',
+    totalKey: 'lifeTasksTotal' as const,
+    explainKey: 'lifeTasksExplain' as const,
+    emptyTitleKey: 'lifeTasksEmptyTitle' as const,
+    emptyTextKey: 'lifeTasksEmptyText' as const,
   },
   important: {
-    title: 'Important Task History',
+    titleKey: 'lifeImportantTitle' as const,
     crop: STAR_CROP,
     background: '#FCEEF1',
     barColor: '#F4A6BB',
-    totalLabel: 'important tasks completed in total',
-    explanation:
-      'Every task you marked as Important and then completed. These are also included in your overall Tasks Completed total.',
-    emptyTitle: 'No important tasks completed yet',
-    emptyText: 'Mark a task as Important, finish it, and it will show up here!',
+    totalKey: 'lifeImportantTotal' as const,
+    explainKey: 'lifeImportantExplain' as const,
+    emptyTitleKey: 'lifeImportantEmptyTitle' as const,
+    emptyTextKey: 'lifeImportantEmptyText' as const,
   },
 };
 
 const RANGES = [
-  { days: 7, label: 'Last 7 days' },
-  { days: 30, label: 'Last 30 days' },
+  { days: 7, labelKey: 'lifeRange7' },
+  { days: 30, labelKey: 'lifeRange30' },
 ] as const;
 
 // Detail page for one Lifetime Stats card. Everything is derived from the
@@ -79,6 +81,7 @@ const RANGES = [
 // applies the exact counting rule behind the overview numbers — so the total
 // here always equals the card you tapped. Read-only; never writes.
 export function LifetimeStatScreen({ stat }: { stat: LifetimeStat }) {
+  const { t, tn } = useT();
   const theme = useTheme();
   const config = STAT_CONFIG[stat];
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -113,23 +116,23 @@ export function LifetimeStatScreen({ stat }: { stat: LifetimeStat }) {
     <DetailPageShell>
       <DetailTitleCard
         icon={<StatsIcon crop={config.crop} size={72} />}
-        title={config.title}
+        title={t(config.titleKey)}
         backgroundColor={config.background}
       />
 
       <SummaryRow>
-        <SummaryCard value={entries.length} label={config.totalLabel} backgroundColor={config.background} />
-        <SummaryCard value={weekCount} label="this week (last 7 days)" backgroundColor={config.background} />
-        <SummaryCard value={monthCount} label="this month" backgroundColor={config.background} />
+        <SummaryCard value={entries.length} label={t(config.totalKey)} backgroundColor={config.background} />
+        <SummaryCard value={weekCount} label={t('lifeWeekLabel')} backgroundColor={config.background} />
+        <SummaryCard value={monthCount} label={t('lifeMonthLabel')} backgroundColor={config.background} />
       </SummaryRow>
 
-      <DetailPanel title="💡 What this measures">
+      <DetailPanel title={t('lifeMeasures')}>
         <ThemedText type="small" themeColor="textSecondary">
-          {config.explanation}
+          {t(config.explainKey)}
         </ThemedText>
       </DetailPanel>
 
-      <DetailPanel title="📊 Completed over time">
+      <DetailPanel title={t('lifeOverTime')}>
         <View style={styles.rangeRow}>
           {RANGES.map((range) => {
             const selected = rangeDays === range.days;
@@ -144,7 +147,7 @@ export function LifetimeStatScreen({ stat }: { stat: LifetimeStat }) {
                   type={selected ? 'purple' : 'backgroundElement'}
                   style={[styles.rangePill, styles.pointer]}>
                   <ThemedText type="smallBold" style={selected ? styles.rangePillTextActive : undefined}>
-                    {range.label}
+                    {t(range.labelKey)}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
@@ -154,18 +157,16 @@ export function LifetimeStatScreen({ stat }: { stat: LifetimeStat }) {
         <CompletedBarChart buckets={buckets} color={config.barColor} labelEvery={rangeDays > 7 ? 5 : 1} />
         {undatedCount > 0 ? (
           <DetailNote>
-            {undatedCount} earlier {undatedCount === 1 ? 'task was' : 'tasks were'} completed before completion
-            dates were recorded, so {undatedCount === 1 ? 'it isn’t' : 'they aren’t'} shown on the chart or in
-            the week and month counts.
+            {tn('lifeEarlier', undatedCount)}
           </DetailNote>
         ) : null}
       </DetailPanel>
 
-      <DetailPanel title="🗂️ By category">
+      <DetailPanel title={t('lifeByCategory')}>
         {categoryCounts.map(({ category, count }) => (
           <View key={category} style={styles.breakdownRow}>
             <ThemedText type="smallBold" style={styles.breakdownName}>
-              {category}
+              {categoryLabel(category)}
             </ThemedText>
             <View style={[styles.breakdownTrack, { backgroundColor: theme.backgroundSelected }]}>
               <View
@@ -182,12 +183,12 @@ export function LifetimeStatScreen({ stat }: { stat: LifetimeStat }) {
         ))}
       </DetailPanel>
 
-      <DetailPanel title="✅ Completed tasks">
+      <DetailPanel title={t('lifeCompletedList')}>
         {entries.length === 0 ? (
           <DetailEmptyState
             icon={<StatsIcon crop={config.crop} size={64} />}
-            title={config.emptyTitle}
-            text={config.emptyText}
+            title={t(config.emptyTitleKey)}
+            text={t(config.emptyTextKey)}
           />
         ) : (
           entries.map((entry) => <CompletedEntryRow key={entry.key} entry={entry} showCategory />)

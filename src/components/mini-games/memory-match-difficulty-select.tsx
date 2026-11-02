@@ -1,5 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+
+import { useT } from '@/i18n';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -7,6 +10,7 @@ import { useTheme } from '@/hooks/use-theme';
 import {
   MEMORY_MATCH_DIFFICULTIES,
   MEMORY_MATCH_DIFFICULTY_INFO,
+  difficultyLabel,
   type MemoryMatchDifficulty,
 } from '@/utils/memory-match';
 
@@ -23,15 +27,16 @@ type MemoryMatchDifficultySelectProps = {
 // as part of the same app, while the pastel-per-card coloring gives
 // Memory Match its own identity within that.
 export function MemoryMatchDifficultySelect({ bestMoves, onSelect, onExit }: MemoryMatchDifficultySelectProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   return (
     <View style={styles.wrapper}>
       <ThemedText type="title" style={styles.heading}>
-        Kitty Memory Match
+        {t('mgMemory')}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-        Choose a difficulty to begin!
+        {t('mmChoose')}
       </ThemedText>
 
       <View style={styles.grid}>
@@ -44,15 +49,15 @@ export function MemoryMatchDifficultySelect({ bestMoves, onSelect, onExit }: Mem
                 type="backgroundElementOverlay"
                 style={[styles.card, { borderColor: theme.backgroundSelected }]}>
                 <ThemedText type="smallBold" style={styles.cardName}>
-                  {info.label}
+                  {difficultyLabel(difficulty)}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary" style={styles.cardSubtext}>
-                  {info.pairs} Pairs • {info.pairs * 2} Cards
+                  {t('mmPairs', { pairs: info.pairs, cards: info.pairs * 2 })}
                 </ThemedText>
                 {best !== undefined ? (
                   <ThemedView type="mint" style={styles.bestBadge}>
                     <ThemedText type="small" style={styles.bestBadgeText}>
-                      Best: {best} moves
+                      {t('mmBestMoves', { n: best })}
                     </ThemedText>
                   </ThemedView>
                 ) : null}
@@ -64,7 +69,7 @@ export function MemoryMatchDifficultySelect({ bestMoves, onSelect, onExit }: Mem
 
       <Pressable onPress={onExit} style={styles.exitPressable}>
         <ThemedText type="small" themeColor="textSecondary">
-          ← Back to Mini-Games
+          {t('mgBackMini')}
         </ThemedText>
       </Pressable>
     </View>

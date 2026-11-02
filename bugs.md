@@ -635,3 +635,28 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Separate finding (kept as a record):** some controls had no hover styling at ANY size, only pressed feedback: the header navigation pills and alerts bell, the pet chips and "Adopt an egg", the Shop category tabs and Feed/Play/Rest.
 - **Improvement:** those controls now lift on mouse hover using one shared look (`src/constants/hover.ts`, also used by the Pet Album tabs and Shop cards). Selected or active ones (current page, selected pet chip, selected Shop tab, disabled care buttons) don't lift; pressed feedback is unchanged; the effect only responds to a real mouse so touch taps can't leave a control stuck highlighted. Verified at the four sizes above.
 - **Not tested:** a real touchscreen.
+
+### [BUG-064] Pet Safety (Gentle Mode) and approval rewards are saved but not enforced (planned integration, OPEN)
+
+- **Status:** Open by design (2026-11-01). Not a defect in the new screens: the settings are stored and shown, and the dashboard says on screen that they are not enforced yet. NOT fixed and not claimed as fixed.
+- **Death trigger trace (for the future Gentle Mode work):** in normal play a pet can only become Deceased in ONE place: `evaluateLifecycle` in `src/utils/pet-lifecycle-core.ts`, when a Sick or Critical pet has been unwell for 96 hours (24 h Sick + 72 h Critical), computed from saved timestamps, so it also happens for time spent offline (via `advancePet` at launch, on resume and once a minute). The only other path is the development-only "Developer Health State" tool (`devSetSelectedHealthState`). Retired Pawadise pets are skipped. Gentle Mode would therefore be enforced in that one function (for example by keeping the pet Critical instead of deceased, still preserving its identity and progress), with the child's setting passed in per pet.
+- **What blocks it today:** pets, the wallet and the task list are one shared set, not per child, so a per-child setting has no pet to apply to.
+- **Approval rewards:** the reward system pays Paw Tokens and pet growth when a GLOBAL task is saved as complete (`reconcilePawTokenEarnings`); child tasks live in the child's profile on purpose so pending ones can never pay early. Paying on approval needs the per-child pet first.
+- **Other open item from this milestone:** profiles have no PIN or password (see FEATURE-083).
+
+### [BUG-065] Spanish task titles are not auto-categorised (FIXED 2026-11-01)
+
+- **Status:** Fixed (2026-11-01): Spanish keyword lists were added next to the English ones in `src/utils/categorize-task.ts` (accent- and case-insensitive whole-word matching). English detection is unchanged (the Spanish lists are only an extra OR in the same category order), a category is still only assigned when a task is created or its text is edited (saved tasks keep theirs), and the task text is never changed. Checked with 24 sample titles in both languages (0 mismatches) and in the browser (Estudiar -> Estudio, correr -> Ejercicio, vitaminas -> Salud, "Llamar a mamá" -> Personal). Mixed or ambiguous titles follow the same Study > Exercise > Clean > Health order as English, so "Clase de natación" is Study. Original report:  A task's category (Study, Exercise, Clean, Health, Personal) is guessed from English keywords in the title (`src/utils/categorize-task.ts`). A task typed in Spanish usually falls back to "Personal". The category NAMES are translated; the keyword matching is not. Fixing it needs a Spanish keyword list and a decision on mixed-language titles; it was not changed because it alters which category (and icon) tasks get.
+
+### [BUG-066] Mood Journey year legend showed English mood names in Spanish (FIXED)
+
+- **Status:** Fixed (2026-11-01). Found while checking the Stats pages in Español: the colour legend under the yearly grid printed the stored English mood key. It now uses the translated mood name. Verified by type-check only; the Spanish legend was not re-screenshotted after the fix.
+
+### [BUG-067] English leaks found in the final Spanish audit (FIXED)
+
+- **Status:** Fixed (2026-11-01). Found by walking every screen in Español: the task category on the Home task card and the appointment card (for example "Clean"); "tokens" / "Paw Tokens" in the Home adopt dialog and the Parent Dashboard rewards note instead of "fichas de patita"; the "YYYY-MM-DD" date placeholder in the task edit window. All three now follow the language. Verified in a web run; type-check clean.
+- **Follow-up (fixed 2026-11-01):** temporary one-line messages (Pawadise notice and errors, Resurrect errors, adopt errors, Pet Care & Alerts messages, Parent Dashboard note, Welcome name error) used to be stored as finished text and stayed in the old language after a switch. They are now stored as a key plus values and shown in the current language. Verified live on the Pet Care & Alerts page (Español -> English -> Español); the other messages use the same mechanism and were type-checked but not each triggered in the browser.
+
+### [BUG-068] Home mailbox's Open mail button cut off at the bottom in landscape (FIXED)
+
+- **Status:** Fixed (2026-11-01). At 844x390 the mailbox's resting area was only about 190 px tall, so with the bubble and button hanging under it they could pass the bottom of the screen (English and Spanish alike). Fixed in pawadise-mailbox.tsx with responsive bounds (see FEATURE-084): room is reserved for the bubble and button, or they go beside the mailbox when the area is too short, and a resize or rotation re-clamps it. Measured at four screen sizes in both languages, 24 of 24 stops fully visible. Not tested on a real phone.

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TaskCalendar } from '@/components/task-calendar';
@@ -10,6 +12,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { tr, useT } from '@/i18n';
+import { categoryLabel } from '@/utils/categorize-task';
 import { getHolidayForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
 import { getTaskRoom } from '@/utils/room-tasks';
@@ -45,7 +49,6 @@ import {
 const WIDE_LAYOUT_BREAKPOINT = 700;
 const WIDE_MAX_WIDTH = 1100;
 
-const WEEKDAY_TOGGLE_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 type RepeatOption = 'none' | 'daily' | 'weekly';
 
@@ -84,7 +87,7 @@ function reminderOptionToMinutes(option: ReminderOption): ReminderOffsetMinutes 
 }
 
 function reminderOptionLabel(option: ReminderOption): string {
-  if (option === 'none') return 'None';
+  if (option === 'none') return tr('reminderNone');
   return reminderOffsetLabel(reminderOptionToMinutes(option) as ReminderOffsetMinutes);
 }
 
@@ -93,15 +96,17 @@ const KIND_OPTIONS: TaskKind[] = ['task', 'event', 'birthday'];
 function kindLabel(kind: TaskKind): string {
   switch (kind) {
     case 'task':
-      return 'Task';
+      return tr('kindTask');
     case 'event':
-      return 'Appointment';
+      return tr('kindAppointment');
     case 'birthday':
-      return 'Birthday';
+      return tr('kindBirthday');
   }
 }
 
 export default function TasksScreen() {
+  const { t, tl, lang } = useT();
+  const WEEKDAY_TOGGLE_LABELS = tl('weekdaysNarrow');
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const isWideLayout = width >= WIDE_LAYOUT_BREAKPOINT;
@@ -180,7 +185,7 @@ export default function TasksScreen() {
         if (updated !== tasks) setTasks(updated);
       })
       .catch(() => {});
-  }, [tasks, isHydrated]);
+  }, [tasks, isHydrated, lang]);
 
   function resetDraft() {
     setDraftText('');
@@ -308,12 +313,12 @@ export default function TasksScreen() {
   function buildMenuItems(task: Task): TaskMenuItem[] {
     const importantItem: TaskMenuItem = {
       key: 'important',
-      label: task.important ? '⭐ Remove Important' : '⭐ Mark as Important',
+      label: task.important ? t('menuImportantOn') : t('menuImportantOff'),
       onPress: () => toggleImportant(task.id),
     };
     const editItem: TaskMenuItem = {
       key: 'edit',
-      label: '✏️ Edit Task',
+      label: t('menuEditTask'),
       onPress: () => setEditingItem(task),
     };
 
@@ -323,13 +328,13 @@ export default function TasksScreen() {
         editItem,
         {
           key: 'stop-repeating',
-          label: '⏹ Stop Repeating From Here',
+          label: t('menuStopRepeating'),
           onPress: () => handleStopRepeating(task.id),
           destructive: true,
         },
         {
           key: 'remove-day',
-          label: '🗑️ Remove Just This Day',
+          label: t('menuRemoveDay'),
           onPress: () => handleRemoveThisDay(task.id),
           destructive: true,
         },
@@ -341,7 +346,7 @@ export default function TasksScreen() {
       editItem,
       {
         key: 'delete',
-        label: '🗑️ Delete Task',
+        label: t('menuDeleteTask'),
         onPress: () => handleDelete(task.id),
         destructive: true,
       },
@@ -354,10 +359,9 @@ export default function TasksScreen() {
   // Remove Just This Day pair an appointment gets if it happens to repeat;
   // a one-time appointment just gets Delete.
   function buildNonTaskMenuItems(item: Task): TaskMenuItem[] {
-    const label = kindLabel(item.kind);
     const editItem: TaskMenuItem = {
       key: 'edit',
-      label: `✏️ Edit ${label}`,
+      label: item.kind === 'birthday' ? t('menuEditBirthday') : t('menuEditAppointment'),
       onPress: () => setEditingItem(item),
     };
 
@@ -366,13 +370,13 @@ export default function TasksScreen() {
         editItem,
         {
           key: 'stop-repeating',
-          label: '⏹ Stop Repeating From Here',
+          label: t('menuStopRepeating'),
           onPress: () => handleStopRepeating(item.id),
           destructive: true,
         },
         {
           key: 'remove-day',
-          label: '🗑️ Remove Just This Day',
+          label: t('menuRemoveDay'),
           onPress: () => handleRemoveThisDay(item.id),
           destructive: true,
         },
@@ -383,7 +387,7 @@ export default function TasksScreen() {
       editItem,
       {
         key: 'delete',
-        label: `🗑️ Delete ${label}`,
+        label: item.kind === 'birthday' ? t('menuDeleteBirthday') : t('menuDeleteAppointment'),
         onPress: () => handleDelete(item.id),
         destructive: true,
       },
@@ -413,7 +417,7 @@ export default function TasksScreen() {
           style={({ pressed }) => pressed && styles.pressed}>
           <ThemedView type="accent" style={styles.addButton}>
             <ThemedText type="smallBold" style={styles.addButtonText}>
-              + Add
+              {t('addButton')}
             </ThemedText>
           </ThemedView>
         </Pressable>
@@ -456,10 +460,10 @@ export default function TasksScreen() {
             ]}
             placeholder={
               draftKind === 'task'
-                ? 'What do you need to do?'
+                ? t('placeholderTask')
                 : draftKind === 'event'
-                  ? 'What is the appointment?'
-                  : 'Whose birthday is it?'
+                  ? t('placeholderAppointment')
+                  : t('placeholderBirthday')
             }
             placeholderTextColor={theme.textSecondary}
             value={draftText}
@@ -473,7 +477,7 @@ export default function TasksScreen() {
               styles.input,
               { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
             ]}
-            placeholder="Time (optional, e.g. 3:00 PM)"
+            placeholder={t('placeholderTime')}
             placeholderTextColor={theme.textSecondary}
             value={draftTime}
             onChangeText={setDraftTime}
@@ -484,7 +488,7 @@ export default function TasksScreen() {
           {draftTime.trim() ? (
             <View style={styles.repeatSection}>
               <ThemedText type="small" themeColor="textSecondary">
-                Reminder
+                {t('reminderLabel')}
               </ThemedText>
               <View style={styles.pillRow}>
                 {(draftKind === 'birthday' ? BIRTHDAY_REMINDER_UI_OPTIONS : REMINDER_UI_OPTIONS).map((option) => (
@@ -511,14 +515,14 @@ export default function TasksScreen() {
 
           {draftKind === 'birthday' ? (
             <ThemedText type="small" themeColor="textSecondary">
-              🎂 Repeats every year on this date
+              {t('birthdayRepeats')}
             </ThemedText>
           ) : null}
 
           {draftKind === 'task' ? (
             <View style={styles.repeatSection}>
               <ThemedText type="small" themeColor="textSecondary">
-                Repeat
+                {t('repeatLabel')}
               </ThemedText>
               <View style={styles.pillRow}>
                 {(['none', 'daily', 'weekly'] as RepeatOption[]).map((option) => (
@@ -534,7 +538,7 @@ export default function TasksScreen() {
                       <ThemedText
                         type="small"
                         style={draftRepeat === option ? styles.pillTextActive : undefined}>
-                        {option === 'none' ? 'Once' : option === 'daily' ? 'Daily' : 'Weekly'}
+                        {option === 'none' ? t('repeatOnce') : option === 'daily' ? t('repeatDaily') : t('repeatWeekly')}
                       </ThemedText>
                     </View>
                   </Pressable>
@@ -570,7 +574,7 @@ export default function TasksScreen() {
           {draftKind === 'task' ? (
             <View style={styles.repeatSection}>
               <ThemedText type="small" themeColor="textSecondary">
-                Assign to Room
+                {t('assignToRoom')}
               </ThemedText>
               <View style={styles.pillRow}>
                 <Pressable onPress={() => setDraftRoom(null)} style={({ pressed }) => pressed && styles.pressed}>
@@ -580,7 +584,7 @@ export default function TasksScreen() {
                       { backgroundColor: draftRoom === null ? theme.purple : theme.background },
                     ]}>
                     <ThemedText type="small" style={draftRoom === null ? styles.pillTextActive : undefined}>
-                      Unassigned
+                      {t('unassigned')}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -608,13 +612,13 @@ export default function TasksScreen() {
             <Pressable onPress={handleAdd} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="accent" style={styles.saveButton}>
                 <ThemedText type="smallBold" style={styles.addButtonText}>
-                  Save
+                  {t('save')}
                 </ThemedText>
               </ThemedView>
             </Pressable>
             <Pressable onPress={resetDraft} style={({ pressed }) => pressed && styles.pressed}>
               <View style={[styles.cancelButton, { backgroundColor: theme.background }]}>
-                <ThemedText type="smallBold">Cancel</ThemedText>
+                <ThemedText type="smallBold">{t('cancel')}</ThemedText>
               </View>
             </Pressable>
           </View>
@@ -623,11 +627,11 @@ export default function TasksScreen() {
 
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          Tasks
+          {t('sectionTasks')}
         </ThemedText>
         {dayTasks.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No tasks for this day.
+            {t('emptyTasksDay')}
           </ThemedText>
         ) : (
           dayTasks.map((task) => {
@@ -653,8 +657,8 @@ export default function TasksScreen() {
                       {task.text}
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {task.category}
-                      {task.repeat ? ` · ${task.repeat.kind === 'daily' ? 'Daily' : 'Weekly'}` : ''}
+                      {categoryLabel(task.category)}
+                      {task.repeat ? ` · ${task.repeat.kind === 'daily' ? t('repeatDaily') : t('repeatWeekly')}` : ''}
                       {task.time ? ` · ${task.time}` : ''}
                     </ThemedText>
                   </View>
@@ -671,11 +675,11 @@ export default function TasksScreen() {
 
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          Appointments
+          {t('sectionAppointments')}
         </ThemedText>
         {dayEvents.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No appointments for this day.
+            {t('emptyAppointmentsDay')}
           </ThemedText>
         ) : (
           dayEvents.map((event) => {
@@ -716,11 +720,11 @@ export default function TasksScreen() {
 
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          Birthdays
+          {t('sectionBirthdays')}
         </ThemedText>
         {dayBirthdays.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No birthdays for this day.
+            {t('emptyBirthdaysDay')}
           </ThemedText>
         ) : (
           dayBirthdays.map((birthday) => (
@@ -752,8 +756,7 @@ export default function TasksScreen() {
           showsVerticalScrollIndicator={false}>
           <View style={styles.introBackdrop}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
-              Pick a date to see, add, or check off tasks and appointments — including repeating
-              tasks that land on that day. 🗓️
+              {t('tasksIntro')}
             </ThemedText>
           </View>
 

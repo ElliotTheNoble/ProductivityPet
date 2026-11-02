@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
 import { getHolidayForDate } from '@/utils/holidays';
 import { dateToISO, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
@@ -13,23 +16,6 @@ type TaskCalendarProps = {
   selectedDate: string;
   onSelectDate: (dateISO: string) => void;
 };
-
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-const MONTH_LABELS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 type DayCell = { date: Date; iso: string } | null;
 
@@ -55,6 +41,9 @@ function getMonthGrid(year: number, month: number): DayCell[][] {
 }
 
 export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendarProps) {
+  const { t, tl } = useT();
+  const WEEKDAY_LABELS = tl('weekdaysNarrow');
+  const MONTH_LABELS = tl('months');
   const theme = useTheme();
   const initialSelected = new Date(`${selectedDate}T00:00:00`);
   const [viewYear, setViewYear] = useState(initialSelected.getFullYear());
@@ -113,7 +102,7 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
           <Pressable onPress={goToToday} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
             <ThemedView type="accent" style={styles.todayButton}>
               <ThemedText type="small" style={styles.todayButtonText}>
-                Today
+                {t('calendarToday')}
               </ThemedText>
             </ThemedView>
           </Pressable>
@@ -186,31 +175,31 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.sky }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            Holiday
+            {t('legendHoliday')}
           </ThemedText>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.accent }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            Appointment
+            {t('legendAppointment')}
           </ThemedText>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.peach }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            Birthday
+            {t('legendBirthday')}
           </ThemedText>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.purple }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            Important
+            {t('legendImportant')}
           </ThemedText>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.mint }]} />
           <ThemedText type="small" themeColor="textSecondary">
-            Task
+            {t('legendTask')}
           </ThemedText>
         </View>
       </View>

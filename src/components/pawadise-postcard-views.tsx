@@ -1,5 +1,8 @@
+import { getLocale, tr, useT } from '@/i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, PanResponder, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Modal, PanResponder, StyleSheet, View, useWindowDimensions } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { DetailEmptyState } from '@/components/detail-page-parts';
 import { SpriteCrop } from '@/components/sprite-crop';
@@ -16,11 +19,16 @@ import { sortPostcards, usePawadisePostcards, type PawadisePostcard } from '@/ut
 // component is used on the pet's Pawadise page and on its Pet Album profile, so the scrapbook is the
 // same wherever the pet is (retired or home) and keeps growing if the pet retires again.
 
-const SPECIES_LABELS: Record<string, string> = { cat: 'Cat' };
 const POSTCARD_BACKGROUND = '#FFF4E3';
 
 export function speciesLabel(species: string): string {
-  return SPECIES_LABELS[species] ?? species.charAt(0).toUpperCase() + species.slice(1);
+  return species === 'cat' ? tr('speciesCat') : species.charAt(0).toUpperCase() + species.slice(1);
+}
+
+// A postcard saved with the app's default English greeting is shown in the current language; any other title
+// (or message) is shown exactly as saved.
+export function postcardTitle(title: string): string {
+  return title === 'Greetings from Pawadise!' ? tr('pcDefaultTitle') : title;
 }
 
 export function formatDate(iso: string | null): string | null {
@@ -28,7 +36,7 @@ export function formatDate(iso: string | null): string | null {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? null
-    : date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    : date.toLocaleDateString(getLocale(), { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function Side({ design, region, width, height }: { design: PostcardDesign; region: PostcardRegion; width: number; height: number }) {
@@ -59,6 +67,7 @@ export function PostcardViewer({
   petLabel: string;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const { width, height } = useWindowDimensions();
   const reduced = useReducedMotion();
   const [side, setSide] = useState<'front' | 'back'>('front');
@@ -125,35 +134,35 @@ export function PostcardViewer({
     </View>
   ) : (
     <View style={styles.plainCard}>
-      <ThemedText style={styles.sheetMessage}>{card?.message || 'A postcard from Pawadise. 💌'}</ThemedText>
+      <ThemedText style={styles.sheetMessage}>{card?.message || t('pcPlain')}</ThemedText>
     </View>
   );
 
   const infoNode = (
     <View style={compact ? styles.sideColumn : styles.column}>
-      <ThemedText style={styles.sheetTitle}>{card?.title ?? 'Postcard'}</ThemedText>
+      <ThemedText style={styles.sheetTitle}>{card ? postcardTitle(card.title) : t('pcViewerTitle')}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-        {`From ${petLabel}${card && formatDate(card.receivedAt) ? ` · ${formatDate(card.receivedAt)}` : ''}`}
+        {`${t('pcFrom', { pet: petLabel })}${card && formatDate(card.receivedAt) ? ` · ${formatDate(card.receivedAt)}` : ''}`}
       </ThemedText>
       {compact ? null : cardNode}
       {design ? (
         <>
           <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-            {`${side === 'front' ? 'Front' : 'Back'} · Swipe to flip`}
+            {side === 'front' ? t('pcFront') : t('pcBack')}
           </ThemedText>
           <View style={styles.buttons}>
             <Pressable
               onPress={() => flipRef.current()}
               accessibilityRole="button"
-              accessibilityLabel={side === 'front' ? 'Flip postcard to see the back' : 'Flip postcard to see the front'}
+              accessibilityLabel={side === 'front' ? t('pcFlipToBack') : t('pcFlipToFront')}
               style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="mint" style={styles.button}>
-                <ThemedText type="smallBold">Flip</ThemedText>
+                <ThemedText type="smallBold">{t('pcFlip')}</ThemedText>
               </ThemedView>
             </Pressable>
-            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close postcard" style={({ pressed }) => pressed && styles.pressed}>
+            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('pcCloseAria')} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="backgroundElement" style={styles.button}>
-                <ThemedText type="smallBold">Close</ThemedText>
+                <ThemedText type="smallBold">{t('pcClose')}</ThemedText>
               </ThemedView>
             </Pressable>
           </View>
@@ -161,7 +170,7 @@ export function PostcardViewer({
       ) : (
         <Pressable onPress={onClose} accessibilityRole="button" style={styles.pressedWrap}>
           <ThemedView type="backgroundElement" style={styles.button}>
-            <ThemedText type="smallBold">Close</ThemedText>
+            <ThemedText type="smallBold">{t('pcClose')}</ThemedText>
           </ThemedView>
         </Pressable>
       )}
@@ -172,7 +181,7 @@ export function PostcardViewer({
     <Modal visible={card !== null} transparent animationType="fade" onRequestClose={onClose}>
       {/* The dim area is a SIBLING behind the sheet (not its parent), so the sheet's swipe gesture isn't fought over by a parent button. */}
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close postcard" />
+        <Pressable noHover style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('pcCloseAria')} />
         <View style={styles.sheetWrap}>
           <ThemedView type="background" style={[styles.sheet, compact && styles.sheetRow]}>
             {compact ? cardNode : null}
@@ -185,6 +194,7 @@ export function PostcardViewer({
 }
 
 export function PetPostcards({ petId, petLabel }: { petId: string; petLabel: string }) {
+  const { t } = useT();
   const all = usePawadisePostcards();
   const [open, setOpen] = useState<PawadisePostcard | null>(null);
   const cards = all ? sortPostcards(all.filter((c) => c.petId === petId)) : [];
@@ -193,8 +203,8 @@ export function PetPostcards({ petId, petLabel }: { petId: string; petLabel: str
     return (
       <DetailEmptyState
         icon={<ThemedText style={styles.emptyEmoji}>💌</ThemedText>}
-        title="No postcards yet!"
-        text={`${petLabel}'s adventures are just beginning. Every postcard they send will be kept here forever.`}
+        title={t('pcNoneTitle')}
+        text={t('pcNoneText', { pet: petLabel })}
       />
     );
   }
@@ -208,7 +218,7 @@ export function PetPostcards({ petId, petLabel }: { petId: string; petLabel: str
             key={card.id}
             onPress={() => setOpen(card)}
             accessibilityRole="button"
-            accessibilityLabel={`Open postcard: ${card.title}`}
+            accessibilityLabel={t('pcOpenAria', { title: postcardTitle(card.title) })}
             style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
             <View style={styles.thumb}>
               {design ? (
@@ -228,7 +238,7 @@ export function PetPostcards({ petId, petLabel }: { petId: string; petLabel: str
             </View>
             <View style={styles.cardText}>
               <ThemedText type="smallBold" numberOfLines={1}>
-                {card.title}
+                {postcardTitle(card.title)}
               </ThemedText>
               {card.message ? (
                 <ThemedText type="small" numberOfLines={2}>

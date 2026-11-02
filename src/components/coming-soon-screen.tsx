@@ -1,24 +1,26 @@
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useT, type StringKey } from '@/i18n';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 
 type ComingSoonScreenProps = {
-  title: string;
+  title: StringKey;
 };
 
 export function ComingSoonScreen({ title }: ComingSoonScreenProps) {
+  const { t } = useT();
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           <ThemedText type="subtitle" style={styles.title}>
-            {title}
+            {t(title)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Coming soon
+            {t('mgComingSoon')}
           </ThemedText>
         </View>
       </SafeAreaView>

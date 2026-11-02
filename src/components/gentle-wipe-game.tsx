@@ -3,6 +3,7 @@ import { Animated, PanResponder, Platform, StyleSheet, Text, View, type LayoutCh
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useT } from '@/i18n';
 
 // The Bathroom's "Gentle Wipe-Down" mini-game, used instead of the normal
 // soap / shower / blow-dry bath while a pet is Sick or Critical (see
@@ -31,6 +32,7 @@ type Props = {
 };
 
 export function GentleWipeGame({ onComplete, canWipeAgain }: Props) {
+  const { t } = useT();
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
   const [box, setBox] = useState({ width: 0, height: 0 });
@@ -155,14 +157,14 @@ export function GentleWipeGame({ onComplete, canWipeAgain }: Props) {
           <View style={[styles.barFill, { width: `${percent}%` }]} />
         </View>
         <ThemedText type="smallBold" style={styles.barLabel}>
-          {done ? 'All fresh! ✨' : `🧽 ${percent}%`}
+          {done ? t('wipeDone') : `🧽 ${percent}%`}
         </ThemedText>
       </View>
 
       {done && canWipeAgain ? (
         <View style={styles.againWrap} pointerEvents="box-none">
           <Text onPress={wipeAgain} accessibilityRole="button" style={styles.againButton}>
-            Wipe again
+            {t('wipeAgain')}
           </Text>
         </View>
       ) : null}

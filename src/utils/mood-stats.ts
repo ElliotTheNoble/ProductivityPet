@@ -1,4 +1,5 @@
-import { MOODS, type Mood } from '@/utils/mood';
+import { tn, tr, trList } from '@/i18n';
+import { MOODS, moodName, type Mood } from '@/utils/mood';
 import type { MoodEntry } from '@/utils/mood-log';
 
 // Pure helpers over the saved mood check-ins (see @/utils/mood-log.ts) for
@@ -91,38 +92,31 @@ export function monthlyCounts(entries: MoodEntry[], year: number): number[] {
   return counts;
 }
 
-export const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+// Month names in the current language (read when needed, so they follow a language change).
+export function monthNames(): string[] {
+  return trList('months');
+}
+export function monthShortNames(): string[] {
+  return trList('monthsShort');
+}
 
 // A short, neutral sentence about the recorded pattern — facts only, no
 // judgment and no guessing about why anything was felt.
 export function describeMoodPattern(entries: MoodEntry[]): string {
-  if (entries.length === 0) {
-    return 'No mood check-ins yet. Pick a mood on the Home page whenever you feel like checking in.';
-  }
+  if (entries.length === 0) return tr('mjPatternNone');
   const counts = countByMood(entries);
   const top = mostFrequentMood(entries);
   const days = distinctDays(entries);
   const parts = [
-    `You've checked in ${entries.length} ${entries.length === 1 ? 'time' : 'times'} across ${days} ${days === 1 ? 'day' : 'days'}.`,
+    tr('mjPatternMain', {
+      times: tn('mjPatternTimes', entries.length),
+      days: tn('mjPatternDays', days),
+    }),
   ];
   if (top) {
-    parts.push(`${top} is the mood you've recorded most (${counts[top]} of ${entries.length}).`);
+    parts.push(tr('mjPatternTop', { mood: moodName(top), n: counts[top], total: entries.length }));
   }
   const variety = MOODS.filter((mood) => counts[mood] > 0).length;
-  if (variety > 1) parts.push(`You've recorded ${variety} different moods so far.`);
+  if (variety > 1) parts.push(tr('mjPatternVariety', { n: variety }));
   return parts.join(' ');
 }

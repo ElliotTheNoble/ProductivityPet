@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -49,7 +51,7 @@ export function TaskMenu({ items }: TaskMenuProps) {
       </Pressable>
 
       <Modal visible={anchor !== null} transparent animationType="fade" onRequestClose={close}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} />
+        <Pressable noHover style={StyleSheet.absoluteFill} onPress={close} />
         {anchor ? (
           <ThemedView
             type="background"

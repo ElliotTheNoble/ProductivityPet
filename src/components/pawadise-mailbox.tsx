@@ -1,7 +1,10 @@
 import { Image } from 'expo-image';
 import { usePathname } from 'expo-router';
+import { useT } from '@/i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { PostcardViewer } from '@/components/pawadise-postcard-views';
 import { ThemedText } from '@/components/themed-text';
@@ -32,6 +35,10 @@ const EDGE = 46; // keeps clear of the side-panel tabs
 // visible part comes out about 5% bigger than the kitty. The mailbox picture itself has almost no empty
 // margin (its visible part is about 93% of the file).
 const KITTY_VISUAL_FACTOR = 1.05;
+// Room kept below the mailbox for its "Double-tap to open" bubble and the Open mail button (they hang under it
+// once it stops), plus a small margin, so they are never pushed past the bottom of the screen.
+const STOPPED_EXTRAS_H = 76;
+const BOTTOM_MARGIN = 8;
 const MAILBOX_VISIBLE_FRACTION = 0.926;
 
 function rand(min: number, max: number): number {
@@ -39,6 +46,7 @@ function rand(min: number, max: number): number {
 }
 
 export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) {
+  const { t } = useT();
   const pending = usePendingMail();
   const family = usePetFamily();
   const pathname = usePathname();
@@ -74,7 +82,7 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
 
   const labelFor = (petId: string) => {
     const pet = family?.pets.find((p) => p.id === petId);
-    return pet && family ? getPetLabel(pet, family.pets) : 'your pet';
+    return pet && family ? getPetLabel(pet, family.pets) : t('mbYourPet');
   };
 
   // A new piece of mail (or the next one in the queue) starts moving again (still, if motion is reduced).
@@ -94,7 +102,13 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
   // a jump stays inside the Home area.
   const hopHeight = Math.max(36, Math.min(boxH * 0.4, 80));
   const minY = hopHeight + 6;
-  const maxY = Math.max(minY + 10, area.h * 0.5 - boxH * 0.6);
+  // The "Double-tap to open" bubble and Open mail button normally hang UNDER the mailbox. On a short area
+  // (landscape) there is no room for that, so they go BESIDE it instead (on the side with more space), and the
+  // mailbox may rest lower. `safeMaxY` is the lowest resting spot that keeps whichever layout inside the area.
+  const extrasBelowFit = area.h - boxH - STOPPED_EXTRAS_H - BOTTOM_MARGIN - minY >= 30;
+  const extrasBeside = area.h > 0 && !extrasBelowFit;
+  const safeMaxY = extrasBeside ? area.h - boxH - BOTTOM_MARGIN : area.h - boxH - STOPPED_EXTRAS_H - BOTTOM_MARGIN;
+  const maxY = Math.max(minY, Math.min(Math.max(minY + 10, area.h * 0.5 - boxH * 0.6), safeMaxY));
 
   // Hop from spot to spot until tapped: crouch -> jump (up and down in an arc while moving sideways) ->
   // land with a squash-and-bounce -> rest a moment -> repeat. Sideways movement only happens in the air.
@@ -164,6 +178,15 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced, area.w, stage]);
+
+  // If the screen changes size (rotation, resizing) while the mailbox is waiting, keep it inside the new bounds.
+  useEffect(() => {
+    if (area.w === 0 || !placed.current || stage === 'moving' || stage === 'viewer') return;
+    const x = Math.min(Math.max(current.current.x, minX), maxX);
+    const y = Math.min(Math.max(current.current.y, minY), maxY);
+    if (x !== current.current.x || y !== current.current.y) pos.setValue({ x, y });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [area.w, area.h, size]);
 
   // A soft pulse when the mailbox stops.
   useEffect(() => {
@@ -243,6 +266,11 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
 
   const envelopeW = Math.min(width - 2 * Spacing.four, 460, (height - 220) * ENVELOPE_ASPECT_RATIO);
   const stopped = stage === 'stopped';
+  // Beside layout: the side with more room (left when the mailbox is in the right half).
+  const extrasOnLeft = current.current.x + size / 2 > area.w / 2;
+  const extrasSideStyle = extrasBeside
+    ? { position: 'absolute' as const, top: Math.max(0, boxH / 2 - 30), width: 150, marginTop: 0, ...(extrasOnLeft ? { right: size + 4 } : { left: size + 4 }) }
+    : null;
 
   return (
     <>
@@ -254,7 +282,7 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
             <Pressable
               onPress={onMailboxPress}
               accessibilityRole="button"
-              accessibilityLabel={stopped ? 'Mailbox with a postcard. Double-tap to open, or use the Open mail button.' : 'A postcard has arrived! Tap the mailbox to stop it.'}
+              accessibilityLabel={stopped ? t('mbAriaStopped') : t('mbAriaMoving')}
               style={styles.hit}>
               <Animated.View
                 style={{
@@ -270,16 +298,16 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
               </Animated.View>
             </Pressable>
             {stopped ? (
-              <View style={styles.stopped}>
+              <View style={[styles.stopped, extrasSideStyle]}>
                 <ThemedView type="backgroundElement" style={styles.bubble}>
                   <ThemedText type="smallBold" numberOfLines={1} style={styles.bubbleText}>
-                    Double-tap to open
+                    {t('mbDoubleTap')}
                   </ThemedText>
                 </ThemedView>
-                <Pressable onPress={() => setStage('envelope')} accessibilityRole="button" accessibilityLabel="Open mail" style={({ pressed }) => pressed && styles.pressed}>
+                <Pressable onPress={() => setStage('envelope')} accessibilityRole="button" accessibilityLabel={t('mbOpenMail')} style={({ pressed }) => pressed && styles.pressed}>
                   <ThemedView type="accent" style={styles.openButton}>
                     <ThemedText type="smallBold" numberOfLines={1} style={styles.whiteText}>
-                      Open mail
+                      {t('mbOpenMail')}
                     </ThemedText>
                   </ThemedView>
                 </Pressable>
@@ -294,12 +322,12 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
         <View style={styles.backdrop}>
           <View style={styles.envelopeWrap}>
             <ThemedText style={styles.envelopeTitle}>
-              {active ? `A postcard from ${labelFor(active.petId)}!` : ''}
+              {active ? t('mbEnvelopeTitle', { pet: labelFor(active.petId) }) : ''}
             </ThemedText>
             <Pressable
               onPress={onEnvelopePress}
               accessibilityRole="button"
-              accessibilityLabel="Envelope. Double-tap to open, or use the Open button."
+              accessibilityLabel={t('mbEnvelopeAria')}
               style={{ width: envelopeW, height: envelopeW / ENVELOPE_ASPECT_RATIO }}>
               <Animated.View
                 style={{
@@ -311,19 +339,19 @@ export function PawadiseMailbox({ kittyVisiblePx }: { kittyVisiblePx: number }) 
               </Animated.View>
             </Pressable>
             <ThemedText type="smallBold" style={styles.envelopeHint}>
-              Double-tap the envelope to open it
+              {t('mbEnvelopeHint')}
             </ThemedText>
             <View style={styles.envelopeButtons}>
-              <Pressable onPress={() => void openEnvelope()} accessibilityRole="button" accessibilityLabel="Open" style={({ pressed }) => pressed && styles.pressed}>
+              <Pressable onPress={() => void openEnvelope()} accessibilityRole="button" accessibilityLabel={t('mbOpen')} style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="accent" style={styles.openButton}>
                   <ThemedText type="smallBold" style={styles.whiteText}>
-                    Open
+                    {t('mbOpen')}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
-              <Pressable onPress={() => setStage('stopped')} accessibilityRole="button" accessibilityLabel="Close the envelope for now" style={({ pressed }) => pressed && styles.pressed}>
+              <Pressable onPress={() => setStage('stopped')} accessibilityRole="button" accessibilityLabel={t('mbLaterAria')} style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="backgroundElement" style={styles.openButton}>
-                  <ThemedText type="smallBold">Later</ThemedText>
+                  <ThemedText type="smallBold">{t('mbLater')}</ThemedText>
                 </ThemedView>
               </Pressable>
             </View>

@@ -1,10 +1,14 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { categoryLabel } from '@/utils/categorize-task';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { TaskIcon } from '@/components/task-icon';
 import { TaskMenu, type TaskMenuItem } from '@/components/task-menu';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { tr, useT } from '@/i18n';
 import { useTheme } from '@/hooks/use-theme';
 import type { DisplayTask } from '@/utils/tasks';
 
@@ -31,6 +35,7 @@ export function TaskCard({
   onRemoveToday,
   isCelebrating,
 }: TaskCardProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   const completedCount = tasks.filter((task) => task.completed).length;
@@ -41,7 +46,7 @@ export function TaskCard({
     <ThemedView type="backgroundElementOverlay" style={styles.card}>
       <View style={styles.cardHeader}>
         <View>
-          <ThemedText style={styles.cardTitle}>Today&apos;s Tasks</ThemedText>
+          <ThemedText style={styles.cardTitle}>{t('todaysTasks')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {dateLabel}
           </ThemedText>
@@ -50,7 +55,7 @@ export function TaskCard({
 
       <View style={styles.progressSection}>
         <ThemedText type="smallBold" themeColor={isCelebrating ? 'accent' : 'textSecondary'}>
-          {isCelebrating ? 'All tasks complete! Amazing job! 🎉' : `${completionPercent}% complete`}
+          {isCelebrating ? t('allTasksDone') : t('percentComplete', { p: completionPercent })}
         </ThemedText>
         <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
           <View style={{ flex: completionPercent, backgroundColor: theme.mint }} />
@@ -61,7 +66,7 @@ export function TaskCard({
       <View style={styles.list}>
         {tasks.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No tasks for today. Add one from the Tasks tab.
+            {t('noTasksToday')}
           </ThemedText>
         ) : (
           tasks.map((task, index) => (
@@ -95,7 +100,7 @@ export function TaskCard({
                     {task.text}
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {task.category}
+                    {categoryLabel(task.category)}
                     {task.time ? ` · ${task.time}` : ''}
                   </ThemedText>
                 </View>
@@ -134,7 +139,7 @@ function buildTaskMenuItems(
 ): TaskMenuItem[] {
   const importantItem: TaskMenuItem = {
     key: 'important',
-    label: task.important ? '⭐ Remove Important' : '⭐ Mark as Important',
+    label: task.important ? tr('menuImportantOn') : tr('menuImportantOff'),
     onPress: () => onToggleImportant(task.id),
   };
 
@@ -143,13 +148,13 @@ function buildTaskMenuItems(
       importantItem,
       {
         key: 'stop-repeating',
-        label: '⏹ Stop Repeating From Here',
+        label: tr('menuStopRepeating'),
         onPress: () => onStopRepeating(task.id),
         destructive: true,
       },
       {
         key: 'remove-today',
-        label: '🗑️ Remove Just This Day',
+        label: tr('menuRemoveDay'),
         onPress: () => onRemoveToday(task.id),
         destructive: true,
       },
@@ -160,7 +165,7 @@ function buildTaskMenuItems(
     importantItem,
     {
       key: 'delete',
-      label: '🗑️ Delete Task',
+      label: tr('menuDeleteTask'),
       onPress: () => onDeleteTask(task.id),
       destructive: true,
     },

@@ -1,11 +1,14 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { MoodIcon } from '@/components/mood-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { MOODS, type Mood } from '@/utils/mood';
+import { useT } from '@/i18n';
+import { MOODS, moodName, type Mood } from '@/utils/mood';
 
 type TodayMoodProps = {
   mood: Mood;
@@ -14,16 +17,17 @@ type TodayMoodProps = {
 };
 
 export function TodayMood({ mood, message, onSelectMood }: TodayMoodProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   return (
     <ThemedView type="backgroundElementOverlay" style={styles.card}>
-      <ThemedText style={styles.title}>Today&apos;s Mood</ThemedText>
+      <ThemedText style={styles.title}>{t('todaysMood')}</ThemedText>
 
       <View style={styles.selectedRow}>
         <MoodIcon mood={mood} size={72} />
         <View style={styles.selectedTextGroup}>
-          <ThemedText type="smallBold">{mood}!</ThemedText>
+          <ThemedText type="smallBold">{t('moodExclaim', { name: moodName(mood) })}</ThemedText>
           <ThemedView type="background" style={styles.bubble}>
             <ThemedText type="small">{message}</ThemedText>
           </ThemedView>
@@ -35,6 +39,7 @@ export function TodayMood({ mood, message, onSelectMood }: TodayMoodProps) {
           <Pressable
             key={option}
             onPress={() => onSelectMood(option)}
+            accessibilityLabel={moodName(option)}
             style={({ pressed }) => pressed && styles.pressed}>
             <View
               style={[

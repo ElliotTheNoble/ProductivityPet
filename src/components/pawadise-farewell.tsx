@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useT } from '@/i18n';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
@@ -33,7 +34,10 @@ const ADVANCE_LOCK_MS = 350;
 
 export function PawadiseFarewell({ species, onDone }: { species: string; onDone: () => void }) {
   const scenes = getFarewellScenes(species);
-  const messages = useMemo(() => pickFarewellMessages(), []);
+  const { t, tl } = useT();
+  const messageIndexes = useMemo(() => pickFarewellMessages(), []);
+  const pool = tl('farewell');
+  const messages = messageIndexes.map((i) => pool[i] ?? pool[0]);
   const reduced = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -134,7 +138,7 @@ export function PawadiseFarewell({ species, onDone }: { species: string; onDone:
     <Image
       source={scenes.character}
       contentFit="contain"
-      accessibilityLabel="Your kitty waving goodbye with her suitcase"
+      accessibilityLabel={t('fwAlt')}
       style={{ position: 'absolute', left: charLeft, bottom: charBottomPx, width: charW, height: charH }}
     />
   );
@@ -168,7 +172,7 @@ export function PawadiseFarewell({ species, onDone }: { species: string; onDone:
             style={StyleSheet.absoluteFill}
             onPress={advance}
             accessibilityRole="button"
-            accessibilityLabel="Farewell. Tap anywhere to continue."
+            accessibilityLabel={t('fwAriaTap')}
           />
         ) : null}
 
@@ -184,18 +188,18 @@ export function PawadiseFarewell({ species, onDone }: { species: string; onDone:
                   onHoverIn={() => setHover('continue')}
                   onHoverOut={() => setHover(null)}
                   accessibilityRole="button"
-                  accessibilityLabel={index < messages.length - 1 ? 'Tap to Continue to the next message' : 'Tap to Continue to the goodbye'}
+                  accessibilityLabel={index < messages.length - 1 ? t('fwAriaNext') : t('fwAriaGoodbye')}
                   style={({ pressed }) => [
                     styles.continueButton,
                     hover === 'continue' && styles.continueHover,
                     pressed && styles.continuePressed,
                   ]}>
                   <ThemedText type="smallBold" style={styles.continueText}>
-                    Tap to Continue
+                    {t('fwContinue')}
                   </ThemedText>
                 </Pressable>
                 <ThemedText type="smallBold" style={styles.counter}>
-                  {`${index + 1} of ${messages.length}`}
+                  {t('fwCounter', { i: index + 1, n: messages.length })}
                 </ThemedText>
               </View>
             </View>
@@ -208,14 +212,14 @@ export function PawadiseFarewell({ species, onDone }: { species: string; onDone:
           onHoverIn={() => setHover('skip')}
           onHoverOut={() => setHover(null)}
           accessibilityRole="button"
-          accessibilityLabel="Skip the farewell"
+          accessibilityLabel={t('fwSkipAria')}
           style={({ pressed }) => [
             styles.skip,
             { top: insets.top + Spacing.three, right: Math.max(insets.right, 0) + Spacing.three },
             hover === 'skip' && styles.skipHover,
             pressed && styles.skipPressed,
           ]}>
-          <ThemedText style={styles.skipText}>Skip</ThemedText>
+          <ThemedText style={styles.skipText}>{t('fwSkip')}</ThemedText>
         </Pressable>
       </View>
     </Modal>

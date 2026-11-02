@@ -9,8 +9,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { tr, useT } from '@/i18n';
 import { getRoomTasks } from '@/utils/room-tasks';
-import type { TaskRoom } from '@/utils/rooms';
+import { roomNameLabel, type TaskRoom } from '@/utils/rooms';
 import { getCachedTasks } from '@/utils/task-storage';
 import { occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
@@ -120,11 +121,12 @@ function countRoomTasks(roomSlug: RoomPreview['slug'], todaysTasks: Task[]): num
 }
 
 function taskBadgeLabel(count: number): string {
-  if (count === 0) return 'No tasks today';
-  return `${count} ${count === 1 ? 'task' : 'tasks'} today`;
+  if (count === 0) return tr('hubNoTasks');
+  return tr(count === 1 ? 'hubTasks_one' : 'hubTasks_other', { count });
 }
 
 export function RoomHubScreen() {
+  const { t } = useT();
   const router = useRouter();
   const theme = useTheme();
   const columns = useColumnCount();
@@ -175,7 +177,7 @@ export function RoomHubScreen() {
         onHoverIn={() => setHoveredRoom(room.name)}
         onHoverOut={() => setHoveredRoom(null)}
         accessibilityRole="button"
-        accessibilityLabel={`Enter ${room.name}`}
+        accessibilityLabel={t('hubEnterLabel', { room: roomNameLabel(room.name) })}
         style={({ pressed }) => [styles.cardWrap, { width }, pressed && styles.pressed]}>
         {/* Room name/description live inside the artwork itself (each
             preview already has its own baked-in rounded nameplate pill) —
@@ -195,7 +197,7 @@ export function RoomHubScreen() {
               <View style={styles.hoverOverlay} pointerEvents="none">
                 <ThemedView type="accent" style={styles.enterPill}>
                   <ThemedText type="smallBold" style={styles.enterPillText}>
-                    Enter Room →
+                    {t('hubEnterRoom')}
                   </ThemedText>
                 </ThemedView>
               </View>
@@ -234,9 +236,9 @@ export function RoomHubScreen() {
       ) : null}
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <ThemedText style={styles.heading}>🏠 Explore Your Home</ThemedText>
+          <ThemedText style={styles.heading}>{t('hubHeading')}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-            Each room helps you focus on a different part of your life. Tap a room to enter!
+            {t('hubSubheading')}
           </ThemedText>
 
           {columns === 3 ? (

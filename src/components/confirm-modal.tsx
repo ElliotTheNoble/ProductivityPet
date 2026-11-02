@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useT } from '@/i18n';
 
 // A small pastel confirmation dialog (used for adopting an egg and for paying
 // to resurrect a pet). `busy` disables both buttons while an action is
@@ -27,6 +30,7 @@ export function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
@@ -36,7 +40,7 @@ export function ConfirmModal({
           <View style={styles.buttons}>
             <Pressable onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
-                <ThemedText type="smallBold">Cancel</ThemedText>
+                <ThemedText type="smallBold">{t('cancel')}</ThemedText>
               </ThemedView>
             </Pressable>
             <Pressable
@@ -45,7 +49,7 @@ export function ConfirmModal({
               style={({ pressed }) => [pressed && styles.pressed, (busy || confirmDisabled) && styles.disabled]}>
               <ThemedView type="accent" style={[styles.button, styles.pointer]}>
                 <ThemedText type="smallBold" style={styles.confirmText}>
-                  {busy ? 'Please wait…' : confirmLabel}
+                  {busy ? t('pleaseWait') : confirmLabel}
                 </ThemedText>
               </ThemedView>
             </Pressable>

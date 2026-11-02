@@ -1,5 +1,8 @@
+import { getLocale, tr, useT } from '@/i18n';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import {
   CompletedBarChart,
@@ -15,7 +18,7 @@ import { PawTokenCoin } from '@/components/paw-token-coin';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { MONTH_SHORT_NAMES } from '@/utils/mood-stats';
+import { monthShortNames } from '@/utils/mood-stats';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
 import {
   TOKEN_SOURCE_LABELS,
@@ -41,28 +44,29 @@ const BAR_COLOR = '#F3D77A';
 const MAX_LIST = 100;
 
 const RANGES = [
-  { id: 'week', label: 'Weekly' },
-  { id: 'month', label: 'Monthly' },
-  { id: 'year', label: 'Yearly' },
+  { id: 'week', labelKey: 'thWeekly' },
+  { id: 'month', labelKey: 'thMonthly' },
+  { id: 'year', labelKey: 'thYearly' },
 ] as const;
 type RangeId = (typeof RANGES)[number]['id'];
 
 function formatWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  return `${date.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' })} · ${date.toLocaleTimeString(getLocale(), { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function sourceLabel(event: TokenEvent): string {
   const base = TOKEN_SOURCE_LABELS[event.source];
-  if (event.refId === 'high-score-bonus') return `${base} · high-score bonus`;
-  if (event.refId === 'new-best-bonus') return `${base} · new best bonus`;
-  if (event.refId === 'round-reward') return `${base} · round reward`;
-  if (event.refId === 'completion-reward') return `${base} · game completed`;
+  if (event.refId === 'high-score-bonus') return tr('thHighScore', { base });
+  if (event.refId === 'new-best-bonus') return tr('thNewBest', { base });
+  if (event.refId === 'round-reward') return tr('thRound', { base });
+  if (event.refId === 'completion-reward') return tr('thGame', { base });
   return base;
 }
 
 export function TokenHistoryScreen() {
+  const { t } = useT();
   const [events, setEvents] = useState<TokenEvent[]>([]);
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -103,7 +107,7 @@ export function TokenHistoryScreen() {
       ? getTokenDailyBuckets(events, 7)
       : range === 'month'
         ? getTokenDailyBuckets(events, 30)
-        : getTokenMonthBuckets(events, year, MONTH_SHORT_NAMES);
+        : getTokenMonthBuckets(events, year, monthShortNames());
 
   const bySource = (Object.keys(TOKEN_SOURCE_LABELS) as TokenSource[])
     .map((source) => ({ source, amount: sumTokens(events.filter((e) => e.source === source)) }))
@@ -112,42 +116,37 @@ export function TokenHistoryScreen() {
   const maxSource = Math.max(1, ...bySource.map((row) => row.amount));
   const newestFirst = [...events].sort((a, b) => (a.at < b.at ? 1 : -1));
   const startedLabel = startedAt
-    ? new Date(startedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+    ? new Date(startedAt).toLocaleDateString(getLocale(), { month: 'long', day: 'numeric', year: 'numeric' })
     : null;
 
   return (
     <DetailPageShell>
       <DetailTitleCard
         icon={<PawTokenCoin size={64} />}
-        title="Token Earnings History"
+        title={t('thTitle')}
         backgroundColor={PAGE_BACKGROUND}
       />
 
       <SummaryRow>
-        <SummaryCard value={total} label="tokens earned (recorded)" backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={balance ?? 0} label="current balance" backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={total} label={t('thTotal')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={balance ?? 0} label={t('thBalance')} backgroundColor={PAGE_BACKGROUND} />
       </SummaryRow>
       <SummaryRow>
-        <SummaryCard value={week} label="earned this week" backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={month} label="earned this month" backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={thisYear} label={`earned in ${year}`} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={week} label={t('thWeek')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={month} label={t('thMonth')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={thisYear} label={t('thYear', { year })} backgroundColor={PAGE_BACKGROUND} />
       </SummaryRow>
 
-      <DetailPanel title="💡 What this measures">
+      <DetailPanel title={t('histWhatMeasures')}>
         <ThemedText type="small" themeColor="textSecondary">
-          Every Paw Token you earn — from completing tasks and appointments, Kitty Catch, and Memory Match — is
-          logged here with its date and source. Your current balance is separate: spending tokens lowers the
-          balance but never lowers what you&apos;ve earned.
+          {t('thExplain')}
         </ThemedText>
         {startedLabel ? (
-          <DetailNote>
-            Earnings are recorded from {startedLabel}. Tokens earned before that weren&apos;t logged, so they
-            aren&apos;t included in these totals (they are still part of your balance).
-          </DetailNote>
+          <DetailNote>{t('thStarted', { date: startedLabel })}</DetailNote>
         ) : null}
       </DetailPanel>
 
-      <DetailPanel title="📊 Tokens earned over time">
+      <DetailPanel title={t('thOverTime')}>
         <View style={styles.rangeRow}>
           {RANGES.map((option) => {
             const selected = range === option.id;
@@ -160,7 +159,7 @@ export function TokenHistoryScreen() {
                 style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type={selected ? 'purple' : 'backgroundElement'} style={[styles.rangePill, styles.pointer]}>
                   <ThemedText type="smallBold" style={selected ? styles.rangePillTextActive : undefined}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
@@ -170,18 +169,18 @@ export function TokenHistoryScreen() {
         {events.length === 0 ? (
           <DetailEmptyState
             icon={<PawTokenCoin size={56} />}
-            title="No earnings recorded yet"
-            text="Complete a task or play a mini-game and your first earning will appear here!"
+            title={t('thNone')}
+            text={t('thNoneText')}
           />
         ) : (
           <CompletedBarChart buckets={buckets} color={BAR_COLOR} labelEvery={range === 'month' ? 5 : 1} />
         )}
       </DetailPanel>
 
-      <DetailPanel title="🗂️ By source">
+      <DetailPanel title={t('thBySource')}>
         {bySource.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Sources will show up here once tokens are earned.
+            {t('thNoSources')}
           </ThemedText>
         ) : (
           bySource.map(({ source, amount }) => (
@@ -200,10 +199,10 @@ export function TokenHistoryScreen() {
         )}
       </DetailPanel>
 
-      <DetailPanel title="🪙 Recorded earnings">
+      <DetailPanel title={t('thRecorded')}>
         {newestFirst.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Nothing recorded yet.
+            {t('thNothing')}
           </ThemedText>
         ) : (
           <>
@@ -219,7 +218,7 @@ export function TokenHistoryScreen() {
               </View>
             ))}
             {newestFirst.length > MAX_LIST ? (
-              <DetailNote>Showing the latest {MAX_LIST} of {newestFirst.length} earnings.</DetailNote>
+              <DetailNote>{t('thShowing', { max: MAX_LIST, total: newestFirst.length })}</DetailNote>
             ) : null}
           </>
         )}

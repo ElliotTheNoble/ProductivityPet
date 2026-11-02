@@ -1,5 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+
+import { useT } from '@/i18n';
 import { PawTokenCoin } from '@/components/paw-token-coin';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -22,20 +25,21 @@ type KittyCatchResultsProps = {
 // and already saved; this component never grants or calculates any reward
 // itself, only explains what happened and why.
 export function KittyCatchResults({ result, onPlayAgain, onExit }: KittyCatchResultsProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   const playRewardLine = result.playReward.awarded
-    ? `+${result.playReward.amount} Playing Reward`
+    ? t('kcPlayReward', { n: result.playReward.amount })
     : result.playReward.reason === 'daily-limit-reached'
-      ? 'Daily Paw Token limit reached! 🐾\nKeep playing for fun and high scores!'
+      ? t('mgDailyLimit')
       : null;
 
   const highScoreBonusLine = result.highScoreBonus.awarded
-    ? `+${result.highScoreBonus.amount} New High Score Bonus`
+    ? t('kcHsBonus', { n: result.highScoreBonus.amount })
     : result.highScoreBonus.eligible && result.highScoreBonus.reason === 'daily-limit-reached'
-      ? `Daily high-score bonus limit reached (${KITTY_CATCH_DAILY_HIGH_SCORE_BONUS_LIMIT}/day) — your new best is still saved!`
+      ? t('kcHsLimit', { limit: KITTY_CATCH_DAILY_HIGH_SCORE_BONUS_LIMIT })
       : result.isNewHighScore && !result.highScoreBonus.eligible
-        ? `Scores need to be at least ${KITTY_CATCH_MIN_SCORE_FOR_BONUS} to earn the High Score Bonus — your new best is still saved!`
+        ? t('kcHsMin', { min: KITTY_CATCH_MIN_SCORE_FOR_BONUS })
         : null;
 
   // happinessAwarded is the exact real delta applied to the stored (float,
@@ -47,19 +51,19 @@ export function KittyCatchResults({ result, onPlayAgain, onExit }: KittyCatchRes
   // bars (Math.round(hunger), etc.) — never shown as a raw float here.
   const roundedHappinessAwarded = Math.round(result.happinessAwarded);
   const happinessLine =
-    roundedHappinessAwarded > 0 ? `+${roundedHappinessAwarded} Happiness` : 'Happiness is already full 💛';
+    roundedHappinessAwarded > 0 ? t('mgHappy', { n: roundedHappinessAwarded }) : t('mgHappyFull');
 
   return (
     <View style={styles.wrapper}>
       <ThemedView type="peachOverlay" style={styles.card}>
         <ThemedText type="subtitle" style={styles.title}>
-          {result.isNewHighScore ? 'New High Score! 🎉' : 'Game Over'}
+          {result.isNewHighScore ? t('kcNewHigh') : t('kcOver')}
         </ThemedText>
 
         <View style={styles.scoreRow}>
           <View style={styles.scoreBlock}>
             <ThemedText type="small" themeColor="textSecondary">
-              Round Score
+              {t('kcRoundScore')}
             </ThemedText>
             <ThemedText type="title" style={styles.scoreNumber}>
               {result.score}
@@ -67,7 +71,7 @@ export function KittyCatchResults({ result, onPlayAgain, onExit }: KittyCatchRes
           </View>
           <View style={styles.scoreBlock}>
             <ThemedText type="small" themeColor="textSecondary">
-              Best Score
+              {t('kcBestScore')}
             </ThemedText>
             <ThemedText type="title" style={styles.scoreNumber}>
               {result.highScore}
@@ -80,7 +84,7 @@ export function KittyCatchResults({ result, onPlayAgain, onExit }: KittyCatchRes
 
           <View style={styles.tokensRow}>
             <PawTokenCoin size={18} />
-            <ThemedText type="smallBold">{result.totalPawTokensAwarded} Paw Tokens earned</ThemedText>
+            <ThemedText type="smallBold">{t('mgTokens', { n: result.totalPawTokensAwarded })}</ThemedText>
           </View>
 
           {playRewardLine ? (
@@ -99,13 +103,13 @@ export function KittyCatchResults({ result, onPlayAgain, onExit }: KittyCatchRes
           <Pressable onPress={onPlayAgain} style={styles.buttonPressable}>
             <ThemedView type="accent" style={styles.button}>
               <ThemedText type="smallBold" style={styles.buttonTextLight}>
-                Play Again
+                {t('mgPlayAgain')}
               </ThemedText>
             </ThemedView>
           </Pressable>
           <Pressable onPress={onExit} style={styles.buttonPressable}>
             <ThemedView type="backgroundSelected" style={styles.button}>
-              <ThemedText type="smallBold">Exit Game</ThemedText>
+              <ThemedText type="smallBold">{t('mgExit')}</ThemedText>
             </ThemedView>
           </Pressable>
         </View>

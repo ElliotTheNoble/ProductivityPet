@@ -1,8 +1,13 @@
+import { LanguageCard } from '@/components/language-card';
+import { useT, type StringKey } from '@/i18n';
+import { FamilyModeCard } from '@/components/family-mode-card';
 import { devDeliverPawadiseMailNow } from '@/utils/pawadise-mail';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -55,11 +60,11 @@ const SHOW_DEVELOPER_TOOLS = DEV_ENABLE_LIFECYCLE_TEST_CONTROLS && __DEV__;
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 // Simple line icons (Ionicons outline set) — one per care action.
-const CARE_ACTIONS: { icon: IconName; label: string }[] = [
-  { icon: 'restaurant-outline', label: 'Feed' },
-  { icon: 'water-outline', label: 'Bathe' },
-  { icon: 'game-controller-outline', label: 'Play' },
-  { icon: 'moon-outline', label: 'Rest' },
+const CARE_ACTIONS: { icon: IconName; label: StringKey }[] = [
+  { icon: 'restaurant-outline', label: 'alFeed' },
+  { icon: 'water-outline', label: 'alBathe' },
+  { icon: 'game-controller-outline', label: 'alPlay' },
+  { icon: 'moon-outline', label: 'alRest' },
 ];
 
 // The page's pastel palette.
@@ -501,14 +506,15 @@ function DeveloperTools({
 }
 
 export function PetAlertsScreen() {
+  const { t } = useT();
   const router = useRouter();
   const family = usePetFamily();
   const [settings, setSettings] = useState<PetAlertSettings>(DEFAULT_ALERT_SETTINGS);
   // The switches stay disabled until the player's SAVED choices have loaded, so
   // nothing can be changed (or shown wrongly) before they are known.
   const [loaded, setLoaded] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [helpMessage, setHelpMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<StringKey | null>(null);
+  const [helpMessage, setHelpMessage] = useState<StringKey | null>(null);
   // Developer Tools: the actual stage waiting for the player's confirmation.
   const [pendingStageIndex, setPendingStageIndex] = useState<number | null>(null);
 
@@ -528,11 +534,7 @@ export function PetAlertsScreen() {
 
   async function handleNotifications(next: boolean) {
     const ok = await setNotificationsEnabled(next);
-    setMessage(
-      ok
-        ? null
-        : "Reminders are blocked for this app. You can allow them in your phone's settings, then try again."
-    );
+    setMessage(ok ? null : 'alMsgBlocked');
   }
 
   async function handleFlash(next: boolean) {
@@ -542,32 +544,26 @@ export function PetAlertsScreen() {
       return;
     }
     if (Platform.OS === 'web') {
-      setMessage('The flashlight warning only works in the phone app.');
+      setMessage('alMsgFlashWeb');
       return;
     }
     try {
       const { Camera } = require('expo-camera') as typeof import('expo-camera');
       const result = await Camera.requestCameraPermissionsAsync();
       if (!result.granted) {
-        setMessage(
-          'The flashlight warning needs permission to use the camera light, so it stays off. It never takes photos.'
-        );
+        setMessage('alMsgFlashPermission');
         return;
       }
       await saveAlertSettings({ flash: true });
       setMessage(null);
     } catch {
-      setMessage("The flashlight warning isn't available in this version of the app.");
+      setMessage('alMsgFlashUnavailable');
     }
   }
 
   async function handleTestNotification() {
     const ok = await sendTestNotification();
-    setHelpMessage(
-      ok
-        ? 'Sent! If nothing shows up, check that notifications are allowed for this app.'
-        : "Couldn't send a test message here (notifications may be blocked or unavailable in this version of the app)."
-    );
+    setHelpMessage(ok ? 'alMsgTestSent' : 'alMsgTestFailed');
   }
 
   const selected = family ? getSelectedPet(family) : null;
@@ -584,14 +580,14 @@ export function PetAlertsScreen() {
               <View style={[styles.back, styles.pointer]}>
                 <Ionicons name="arrow-back" size={14} color={INK} />
                 <ThemedText type="smallBold" style={styles.backText}>
-                  Home
+                  {t('alHome')}
                 </ThemedText>
               </View>
             </Pressable>
 
             <View style={styles.titleRow}>
               <Ionicons name="paw" size={20} color="#E39ABB" />
-              <ThemedText style={styles.title}>Pet Care & Alerts</ThemedText>
+              <ThemedText style={styles.title}>{t('alTitle')}</ThemedText>
             </View>
 
             {/* 1. Keep Your Pets Happy! */}
@@ -604,54 +600,53 @@ export function PetAlertsScreen() {
                 </>
               }>
               <View style={styles.headingRow}>
-                <ThemedText style={styles.heading}>Keep Your Pets Happy!</ThemedText>
+                <ThemedText style={styles.heading}>{t('alKeepHappy')}</ThemedText>
                 <Ionicons name="paw" size={14} color="#E39ABB" />
               </View>
               <ThemedText type="small" style={styles.subheading}>
-                A little love goes a long way.
+                {t('alLittleLove')}
               </ThemedText>
               <View style={styles.careRow}>
                 {CARE_ACTIONS.map((action) => (
-                  <View key={action.label} style={styles.careItem} accessible accessibilityLabel={action.label}>
+                  <View key={action.label} style={styles.careItem} accessible accessibilityLabel={t(action.label)}>
                     <View style={styles.careCircle}>
                       <Ionicons name={action.icon} size={24} color={ICON_COLOR} />
                     </View>
                     <ThemedText type="smallBold" style={styles.careLabel}>
-                      {action.label}
+                      {t(action.label)}
                     </ThemedText>
                   </View>
                 ))}
               </View>
               <ThemedText type="small" style={styles.bodyText}>
-                Feed, bathe, play with and rest your pets. If one gets too hungry, dirty or sad it can feel poorly —
-                a little care makes it better, and it&apos;s free!
+                {t('alCareBody')}
               </ThemedText>
             </Card>
 
             {/* 2. Pet Alerts */}
             <Card tint={LAVENDER} deco={<Sparkle name="paw" style={{ top: 8, right: 12 }} />}>
-              <ThemedText style={styles.heading}>Pet Alerts</ThemedText>
+              <ThemedText style={styles.heading}>{t('alPetAlerts')}</ThemedText>
               <View>
                 <Toggle
                   icon="notifications-outline"
-                  label="Remind me to care for my pets"
-                  description="Get a message when a pet needs help."
+                  label={t('alRemindLabel')}
+                  description={t('alRemindDesc')}
                   value={settings.notifications}
                   onChange={handleNotifications}
                   disabled={!loaded}
                 />
                 <Toggle
                   icon="phone-portrait-outline"
-                  label="Vibrate my phone"
-                  description="Buzz when a pet needs help right now."
+                  label={t('alVibrateLabel')}
+                  description={t('alVibrateDesc')}
                   value={settings.vibration}
                   onChange={(v) => saveAlertSettings({ vibration: v })}
                   disabled={!loaded}
                 />
                 <Toggle
                   icon="flashlight-outline"
-                  label="Flashlight warning"
-                  description="Flash the light 3 times for urgent help (while the app is open)."
+                  label={t('alFlashLabel')}
+                  description={t('alFlashDesc')}
                   value={settings.flash}
                   onChange={handleFlash}
                   disabled={!loaded}
@@ -660,63 +655,62 @@ export function PetAlertsScreen() {
               </View>
               {message ? (
                 <ThemedText type="small" themeColor="accent">
-                  {message}
+                  {t(message)}
                 </ThemedText>
               ) : null}
             </Card>
 
             {/* 3. You're in Control! */}
             <Card tint={MINT} deco={<Sparkle name="heart" style={{ top: 8, right: 12 }} />}>
-              <ThemedText style={styles.heading}>You&apos;re in Control!</ThemedText>
+              <ThemedText style={styles.heading}>{t('alControl')}</ThemedText>
               <ThemedText type="small" style={styles.bodyText}>
-                Change these any time. The flashlight warning is optional and may not work on every phone.
+                {t('alControlBody')}
               </ThemedText>
             </Card>
 
-            <Collapsible title="How Pet Health Works" icon="heart-outline">
+            <Collapsible title={t('alHealthTitle')} icon="heart-outline">
               <ThemedText type="small" style={styles.bodyText}>
-                If Hunger, Cleanliness or Happiness reaches 0, that pet becomes{' '}
-                <ThemedText type="smallBold">Sick</ThemedText> and stops growing. After {ALERT_HOURS.sickToCritical}{' '}
-                hours it becomes <ThemedText type="smallBold">Critical</ThemedText>, and if it still isn&apos;t cared
-                for it passes away {ALERT_HOURS.criticalToDeath} hours later ({ALERT_HOURS.sickToCritical + ALERT_HOURS.criticalToDeath}{' '}
-                hours in total). Getting Hunger, Cleanliness and Happiness all to {RECOVERY_NEED_THRESHOLD} or more
-                heals a sick pet for free.
+                {t('alHealth1')} <ThemedText type="smallBold">{t('alSickWord')}</ThemedText>{' '}
+                {t('alHealth2', { h1: ALERT_HOURS.sickToCritical })}{' '}
+                <ThemedText type="smallBold">{t('alCriticalWord')}</ThemedText>
+                {t('alHealth3', {
+                  h2: ALERT_HOURS.criticalToDeath,
+                  total: ALERT_HOURS.sickToCritical + ALERT_HOURS.criticalToDeath,
+                  n: RECOVERY_NEED_THRESHOLD,
+                })}
               </ThemedText>
               <ThemedText type="small" style={styles.mutedText}>
-                Energy is different: at 0 your pet simply falls asleep from exhaustion and wakes once rested. Each
-                pet has its own timers, and they keep running while the app is closed. A pet that has passed away can
-                be brought back later from the Pet Album.
+                {t('alHealthEnergy')}
               </ThemedText>
             </Collapsible>
 
-            <Collapsible title="Phone Help & Testing" icon="help-circle-outline">
+            <Collapsible title={t('alPhoneTitle')} icon="help-circle-outline">
               <ThemedText type="smallBold" style={styles.bodyText}>
-                Samsung phones
+                {t('alSamsung')}
               </ThemedText>
               <ThemedText type="small" style={styles.bodyText}>
-                Many Samsung phones can flash the camera light for every notification, including pet reminders, using
-                the phone&apos;s own Flash notification feature. ProductivityPet can&apos;t turn it on for you — open
-                your phone&apos;s Settings, then Accessibility, then Advanced settings, then Flash notification, and
-                turn on Camera flash. Menu names can differ by phone and software version, and not every phone has it.
+                {t('alSamsungBody')}
               </ThemedText>
               <ThemedText type="small" style={styles.mutedText}>
-                Android doesn&apos;t reliably let apps use the flashlight while they&apos;re closed, so the app&apos;s
-                own flashlight warning only works while the app is open. To test reminders, use a development or
-                production build of the app (not Expo Go).
+                {t('alAndroidNote')}
               </ThemedText>
               <ThemedText type="smallBold" style={styles.bodyText}>
-                Try it out
+                {t('alTryIt')}
               </ThemedText>
               <View style={styles.buttonRow}>
-                <SmallButton label="Send a test reminder" onPress={handleTestNotification} />
-                <SmallButton label="Test vibration & flashlight" onPress={triggerTestCriticalAlert} />
+                <SmallButton label={t('alSendTest')} onPress={handleTestNotification} />
+                <SmallButton label={t('alTestVib')} onPress={triggerTestCriticalAlert} />
               </View>
               {helpMessage ? (
                 <ThemedText type="small" style={styles.mutedText}>
-                  {helpMessage}
+                  {t(helpMessage)}
                 </ThemedText>
               ) : null}
             </Collapsible>
+
+            <LanguageCard />
+
+            <FamilyModeCard />
 
             {SHOW_DEVELOPER_TOOLS && selected ? <DeveloperTools selected={selected} onPickStage={setPendingStageIndex} /> : null}
           </View>

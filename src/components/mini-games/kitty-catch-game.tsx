@@ -8,6 +8,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 
+import { useT } from '@/i18n';
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
 import { KittyCatchResults } from '@/components/mini-games/kitty-catch-results';
 import { SpriteCrop } from '@/components/sprite-crop';
@@ -84,6 +85,7 @@ type KittyCatchGameProps = {
 };
 
 export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
@@ -337,7 +339,7 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
       <ScrollView style={styles.endedScroll} contentContainerStyle={styles.endedScrollContent}>
         {isSubmittingRound || !roundResult ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Saving your round…
+            {t('mgSaving')}
           </ThemedText>
         ) : (
           <KittyCatchResults result={roundResult} onPlayAgain={handlePlayAgain} onExit={onExit} />
@@ -359,9 +361,9 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
     <View style={styles.screen}>
       <ThemedView type="backgroundElementOverlay" style={styles.hud}>
         <BackToGamesButton onPress={onExit} />
-        <ThemedText type="smallBold">Score: {score}</ThemedText>
+        <ThemedText type="smallBold">{t('mgScore', { n: score })}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Best: {bestScoreBeforeRound ?? '—'}
+          {t('mgBest', { n: bestScoreBeforeRound ?? '—' })}
         </ThemedText>
       </ThemedView>
 
@@ -396,7 +398,7 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
       </View>
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-        {Platform.OS === 'web' ? '← → or A/D to move' : 'Drag to move the kitty'}
+        {Platform.OS === 'web' ? t('mgHintKeys') : t('mgHintDrag')}
       </ThemedText>
     </View>
   );

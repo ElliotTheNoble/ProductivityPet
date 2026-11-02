@@ -1,3 +1,5 @@
+import { tr, type StringKey } from '@/i18n';
+
 export type RoomSlug = 'study-room' | 'gym' | 'bedroom' | 'bathroom' | 'kitchen';
 
 export type RoomInfo = {
@@ -21,36 +23,56 @@ export type RoomInfo = {
 export const ROOMS: Record<RoomSlug, RoomInfo> = {
   'study-room': {
     slug: 'study-room',
-    name: 'Study Room',
-    description: 'Where focused minds (and whiskers) get things done. 📚',
+    get name() {
+      return tr('roomStudyRoom');
+    },
+    get description() {
+      return tr('roomDescStudy');
+    },
     image: require('@/assets/images/rooms/backgrounds/Study_Room.png'),
     aspectRatio: 1672 / 941,
   },
   gym: {
     slug: 'gym',
-    name: 'Gym',
-    description: 'Time to stretch those little paws and get moving! 💪',
+    get name() {
+      return tr('roomGym');
+    },
+    get description() {
+      return tr('roomDescGym');
+    },
     image: require('@/assets/images/rooms/backgrounds/Gym_Room.png'),
     aspectRatio: 1672 / 941,
   },
   bedroom: {
     slug: 'bedroom',
-    name: 'Bedroom',
-    description: 'Sweet dreams and starry nights await. 🌙',
+    get name() {
+      return tr('roomBedroom');
+    },
+    get description() {
+      return tr('roomDescBedroom');
+    },
     image: require('@/assets/images/rooms/backgrounds/Bedroom.png'),
     aspectRatio: 1672 / 941,
   },
   bathroom: {
     slug: 'bathroom',
-    name: 'Bathroom',
-    description: 'Bubbles, bath time, and squeaky-clean fur. 🛁',
+    get name() {
+      return tr('roomBathroom');
+    },
+    get description() {
+      return tr('roomDescBathroom');
+    },
     image: require('@/assets/images/rooms/backgrounds/Bath_Room.png'),
     aspectRatio: 1671 / 941,
   },
   kitchen: {
     slug: 'kitchen',
-    name: 'Kitchen',
-    description: 'Whisking up something delicious together. 🍳',
+    get name() {
+      return tr('roomKitchen');
+    },
+    get description() {
+      return tr('roomDescKitchen');
+    },
     image: require('@/assets/images/rooms/backgrounds/Kitchen_Room.png'),
     aspectRatio: 1672 / 941,
   },
@@ -74,14 +96,62 @@ export type TaskRoom = RoomSlug | 'living-room';
 
 export const TASK_ROOMS: TaskRoom[] = ['living-room', ...ROOM_ORDER];
 
+// Display names are looked up when read (getters), so they follow the current language.
 export const TASK_ROOM_LABELS: Record<TaskRoom, string> = {
-  'living-room': 'Living Room',
-  'study-room': 'Study Room',
-  gym: 'Gym',
-  bedroom: 'Bedroom',
-  bathroom: 'Bathroom',
-  kitchen: 'Kitchen',
+  get 'living-room'() {
+    return tr('roomLivingRoom');
+  },
+  get 'study-room'() {
+    return tr('roomStudyRoom');
+  },
+  get gym() {
+    return tr('roomGym');
+  },
+  get bedroom() {
+    return tr('roomBedroom');
+  },
+  get bathroom() {
+    return tr('roomBathroom');
+  },
+  get kitchen() {
+    return tr('roomKitchen');
+  },
 };
+
+// The room card on Home identifies rooms by their English name; this gives the name to show.
+const ROOM_NAME_KEYS: Record<string, StringKey> = {
+  'Living Room': 'roomLivingRoom',
+  'Study Room': 'roomStudyRoom',
+  Gym: 'roomGym',
+  Bedroom: 'roomBedroom',
+  Bathroom: 'roomBathroom',
+  Kitchen: 'roomKitchen',
+};
+
+// "Tareas del cuarto de estudio": the room-task panel heading for each room (a whole phrase, because the
+// grammar of the room name changes in Spanish).
+const ROOM_TASKS_TITLE_KEYS: Record<string, StringKey> = {
+  'living-room': 'roomTasksLiving',
+  'study-room': 'roomTasksStudy',
+  gym: 'roomTasksGym',
+  bedroom: 'roomTasksBedroom',
+  bathroom: 'roomTasksBathroom',
+  kitchen: 'roomTasksKitchen',
+};
+
+export function roomTasksTitle(slug: string): string {
+  const key = ROOM_TASKS_TITLE_KEYS[slug];
+  return key ? tr(key) : slug;
+}
+
+export function roomShortName(slug: string): string {
+  return TASK_ROOM_LABELS[slug as TaskRoom] ?? slug;
+}
+
+export function roomNameLabel(englishName: string): string {
+  const key = ROOM_NAME_KEYS[englishName];
+  return key ? tr(key) : englishName;
+}
 
 export function isTaskRoom(value: unknown): value is TaskRoom {
   return typeof value === 'string' && (TASK_ROOMS as string[]).includes(value);

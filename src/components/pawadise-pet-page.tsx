@@ -1,4 +1,9 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { useT } from '@/i18n';
+import { stageLabel } from '@/utils/pet-stage';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { DetailPanel } from '@/components/detail-page-parts';
 import { formatDate, PetPostcards, speciesLabel } from '@/components/pawadise-postcard-views';
@@ -13,12 +18,13 @@ import type { PetAlbumEntry } from '@/utils/pet-album';
 const PAGE_CARD = '#E4F4F1';
 
 export function PawadisePetPage({ entry, onBack }: { entry: PetAlbumEntry; onBack: () => void }) {
+  const { t } = useT();
   const since = formatDate(entry.retiredAt);
   return (
     <View style={styles.wrap}>
       <Pressable onPress={onBack} accessibilityRole="button" style={({ pressed }) => [styles.backWrap, pressed && styles.pressed]}>
         <ThemedView type="backgroundElement" style={styles.backButton}>
-          <ThemedText type="smallBold">← Back to Pawadise</ThemedText>
+          <ThemedText type="smallBold">{t('pwBackTo')}</ThemedText>
         </ThemedView>
       </Pressable>
 
@@ -28,15 +34,15 @@ export function PawadisePetPage({ entry, onBack }: { entry: PetAlbumEntry; onBac
         </View>
         <View style={styles.heroText}>
           <ThemedText style={styles.name}>{entry.label}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">{`Species: ${speciesLabel(entry.species)}`}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">{`Growth stage: ${entry.stage}`}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">{t('pwSpecies', { species: speciesLabel(entry.species) })}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">{t('pwGrowth', { stage: stageLabel(entry.stage) })}</ThemedText>
           <ThemedText type="smallBold">
-            {entry.isRetired ? `🌴 Relaxing in Pawadise${since ? ` since ${since}` : ''}` : '🏠 Home again'}
+            {entry.isRetired ? (since ? t('pwRelaxingSince', { date: since }) : t('pwRelaxing')) : t('pwHomeAgain')}
           </ThemedText>
         </View>
       </View>
 
-      <DetailPanel title="💌 Postcards">
+      <DetailPanel title={t('pwPostcardsTitle')}>
         <PetPostcards petId={entry.id} petLabel={entry.label} />
       </DetailPanel>
     </View>

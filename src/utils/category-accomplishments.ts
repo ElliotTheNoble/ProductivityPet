@@ -1,3 +1,4 @@
+import { getLocale } from '@/i18n';
 import type { TaskCategory } from '@/utils/categorize-task';
 import { ALL_CATEGORIES } from '@/utils/stats';
 import { addDaysISO, dateToISO, todayISO, type Task } from '@/utils/tasks';
@@ -112,8 +113,8 @@ export function getDailyBuckets(entries: CompletedEntry[], days = 7): DayBucket[
       // Weekday names for a week; short month/day for longer ranges.
       weekdayLabel:
         days <= 7
-          ? new Date(`${dateISO}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' })
-          : new Date(`${dateISO}T00:00:00`).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }),
+          ? new Date(`${dateISO}T00:00:00`).toLocaleDateString(getLocale(), { weekday: 'short' })
+          : new Date(`${dateISO}T00:00:00`).toLocaleDateString(getLocale(), { month: 'numeric', day: 'numeric' }),
       count: 0,
     });
   }

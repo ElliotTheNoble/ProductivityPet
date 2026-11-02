@@ -1,5 +1,8 @@
+import { getLocale, useT } from '@/i18n';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import {
   CompletedBarChart,
@@ -15,7 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { MONTH_NAMES, MONTH_SHORT_NAMES, daysInMonth, pad2, toISO } from '@/utils/mood-stats';
+import { daysInMonth, monthNames, monthShortNames, pad2, toISO } from '@/utils/mood-stats';
 import { getStreakSummary } from '@/utils/streaks';
 import { getCachedTasks } from '@/utils/task-storage';
 import { todayISO, type Task } from '@/utils/tasks';
@@ -27,13 +30,14 @@ import { todayISO, type Task } from '@/utils/tasks';
 const PAGE_BACKGROUND = '#E6F7EF';
 const ACTIVE_COLOR = '#7FD9B6';
 const INACTIVE_COLOR = 'rgba(150, 130, 160, 0.14)';
-const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function StreakHistoryScreen() {
+  const { t, tn, tl } = useT();
+  const WEEKDAY_INITIALS = tl('weekdaysNarrow');
   const theme = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const today = todayISO();
@@ -68,7 +72,7 @@ export function StreakHistoryScreen() {
     const prefix = `${year}-${pad2(month0 + 1)}-`;
     return {
       dateISO: `${year}-${pad2(month0 + 1)}`,
-      weekdayLabel: MONTH_SHORT_NAMES[month0],
+      weekdayLabel: monthShortNames()[month0],
       count: summary.activeDays.filter((d) => d.startsWith(prefix)).length,
     };
   });
@@ -82,43 +86,38 @@ export function StreakHistoryScreen() {
     <DetailPageShell>
       <DetailTitleCard
         icon={<ThemedText style={styles.emoji}>🔥</ThemedText>}
-        title="Streak History"
+        title={t('shTitle')}
         backgroundColor={PAGE_BACKGROUND}
       />
 
       <SummaryRow>
-        <SummaryCard value={summary.current} label={summary.current === 1 ? 'day current streak' : 'days current streak'} backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={summary.longest} label={summary.longest === 1 ? 'day longest streak' : 'days longest streak'} backgroundColor={PAGE_BACKGROUND} />
-        <SummaryCard value={summary.activeDays.length} label="active days in total" backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={summary.current} label={tn('shCurrent', summary.current, {}).replace(/^\d+\s*/, '')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={summary.longest} label={tn('shLongest', summary.longest, {}).replace(/^\d+\s*/, '')} backgroundColor={PAGE_BACKGROUND} />
+        <SummaryCard value={summary.activeDays.length} label={t('shActiveTotal')} backgroundColor={PAGE_BACKGROUND} />
       </SummaryRow>
 
-      <DetailPanel title="💡 What this measures">
+      <DetailPanel title={t('histWhatMeasures')}>
         <ThemedText type="small" themeColor="textSecondary">
-          A day counts as active when you complete at least one task on it (finishing several still counts as
-          one day). A streak is a run of consecutive active days, and a day with no completed task ends it. Your
-          current streak stays alive today until the day is over, so it won&apos;t break before you&apos;ve had
-          the chance to complete something.
+          {t('shExplain')}
         </ThemedText>
         {summary.undatedCount > 0 ? (
           <DetailNote>
-            {summary.undatedCount} earlier {summary.undatedCount === 1 ? 'task was' : 'tasks were'} completed before
-            completion dates were recorded, so {summary.undatedCount === 1 ? 'it can’t' : 'they can’t'} be placed on a day.
-            Older streaks may therefore look shorter than they really were.
+            {tn('shEarlier', summary.undatedCount)}
           </DetailNote>
         ) : null}
       </DetailPanel>
 
-      <DetailPanel title="🗓️ Active days">
+      <DetailPanel title={t('shActiveDays')}>
         <View style={styles.navRow}>
-          <Pressable onPress={() => shiftMonth(-1)} accessibilityRole="button" accessibilityLabel="Previous month" style={({ pressed }) => pressed && styles.pressed}>
+          <Pressable onPress={() => shiftMonth(-1)} accessibilityRole="button" accessibilityLabel={t('histPrevMonth')} style={({ pressed }) => pressed && styles.pressed}>
             <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
               <ThemedText type="smallBold">‹</ThemedText>
             </ThemedView>
           </Pressable>
           <ThemedText type="smallBold" style={styles.navLabel}>
-            {MONTH_NAMES[cursor.month0]} {cursor.year}
+            {monthNames()[cursor.month0]} {cursor.year}
           </ThemedText>
-          <Pressable onPress={() => shiftMonth(1)} accessibilityRole="button" accessibilityLabel="Next month" style={({ pressed }) => pressed && styles.pressed}>
+          <Pressable onPress={() => shiftMonth(1)} accessibilityRole="button" accessibilityLabel={t('histNextMonth')} style={({ pressed }) => pressed && styles.pressed}>
             <ThemedView type="backgroundElement" style={[styles.navButton, styles.pointer]}>
               <ThemedText type="smallBold">›</ThemedText>
             </ThemedView>
@@ -141,7 +140,7 @@ export function StreakHistoryScreen() {
             return (
               <View key={dateISO} style={styles.cell}>
                 <View
-                  accessibilityLabel={`${formatDay(dateISO)}${active ? ', active' : ''}`}
+                  accessibilityLabel={`${formatDay(dateISO)}${active ? t('shActiveSuffix') : ''}`}
                   style={[
                     styles.day,
                     { backgroundColor: active ? ACTIVE_COLOR : INACTIVE_COLOR },
@@ -155,32 +154,32 @@ export function StreakHistoryScreen() {
             );
           })}
         </View>
-        <DetailNote>Green days had at least one completed task. Other days simply have no record.</DetailNote>
+        <DetailNote>{t('shGreen')}</DetailNote>
       </DetailPanel>
 
-      <DetailPanel title="📊 Active days per month">
+      <DetailPanel title={t('shPerMonth')}>
         {summary.activeDays.length === 0 ? (
           <DetailEmptyState
             icon={<ThemedText style={styles.emoji}>🌱</ThemedText>}
-            title="No active days yet"
-            text="Complete a task today to start your first streak!"
+            title={t('shNone')}
+            text={t('shNoneText')}
           />
         ) : (
           <CompletedBarChart buckets={monthBuckets} color={ACTIVE_COLOR} />
         )}
       </DetailPanel>
 
-      <DetailPanel title="🏅 Streaks">
+      <DetailPanel title={t('shStreaks')}>
         {previousRuns.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Streaks of 2 or more days will be listed here as you build them.
+            {t('shNoRuns')}
           </ThemedText>
         ) : (
           previousRuns.map((run) => (
             <View key={run.startISO} style={styles.runRow}>
               <View style={styles.runText}>
                 <ThemedText type="smallBold">
-                  {run.length} days{run.endISO === currentRunEnd ? ' · current' : ''}
+                  {t('shRun', { n: run.length, current: run.endISO === currentRunEnd ? t('shRunCurrent') : '' })}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
                   {formatDay(run.startISO)} – {formatDay(run.endISO)}

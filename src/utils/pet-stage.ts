@@ -1,6 +1,24 @@
+import { tr } from '@/i18n';
+
 export type PetStage = 'Egg' | 'Hatchling' | 'Baby' | 'Young' | 'Adult';
 
 export const PET_STAGES: PetStage[] = ['Egg', 'Hatchling', 'Baby', 'Young', 'Adult'];
+
+// A growth stage's name in the current language (the stored/compared value is always the English name).
+export function stageLabel(stage: PetStage): string {
+  switch (stage) {
+    case 'Egg':
+      return tr('stageEgg');
+    case 'Hatchling':
+      return tr('stageHatchling');
+    case 'Baby':
+      return tr('stageBaby');
+    case 'Young':
+      return tr('stageYoung');
+    case 'Adult':
+      return tr('stageAdult');
+  }
+}
 
 // The Hatchling and Baby kitty ARTWORK are swapped: the Hatchling stage shows
 // the picture that used to be the Baby's, and the Baby stage shows the one

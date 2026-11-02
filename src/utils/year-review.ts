@@ -1,3 +1,7 @@
+import { getLocale, tn, tr } from '@/i18n';
+import { categoryLabel, type TaskCategory } from '@/utils/categorize-task';
+import { moodName, type Mood } from '@/utils/mood';
+
 // Builds the written "My Year in Review" recap from the player's REAL saved
 // data — a local template, not an AI service, so nothing private ever leaves
 // the device. Every sentence is only included when the data for it exists;
@@ -25,14 +29,11 @@ export type YearReviewFacts = {
   petMilestones: string[];
 };
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
+// "a and b" / "a, b, and c" in the current language.
 function joinList(items: string[]): string {
   if (items.length <= 1) return items.join('');
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+  if (items.length === 2) return tr('yrJoin2', { a: items[0], b: items[1] });
+  return tr('yrJoin3', { a: items.slice(0, -1).join(', '), c: items[items.length - 1] });
 }
 
 export function hasAnyYearData(facts: YearReviewFacts): boolean {
@@ -47,42 +48,37 @@ export function snippet(text: string, max = 90): string {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
+// The written recap is assembled from translated sentence templates (see history.en.ts / history.es.ts); the
+// player's own reflection quotes, pet names and category/mood names are inserted afterwards.
 export function buildYearRecap(facts: YearReviewFacts): string {
+  const now = facts.isCurrentYear;
   if (!hasAnyYearData(facts)) {
-    return facts.isCurrentYear
-      ? `Your ${facts.year} is just getting started — nothing is recorded yet. As you complete tasks, check in with your mood, and write reflections, your story so far will build up here.`
-      : `There isn't anything recorded for ${facts.year} yet.`;
+    return now ? tr('yrRecapEmptyNow', { year: facts.year }) : tr('yrRecapEmptyPast', { year: facts.year });
   }
   const sentences: string[] = [];
 
-  // "You completed 180 tasks, earned 1,250 tokens, and stayed productive on
-  // 92 different days" — each piece only when its data exists.
   const pieces: string[] = [];
-  if (facts.taskCount > 0) pieces.push(`completed ${plural(facts.taskCount, 'task', 'tasks')}`);
+  if (facts.taskCount > 0) pieces.push(tn(now ? 'yrPieceTasksNow' : 'yrPieceTasksPast', facts.taskCount));
   if (facts.tokensEarned > 0) {
-    pieces.push(`earned ${facts.tokensEarned.toLocaleString()} Paw ${facts.tokensEarned === 1 ? 'Token' : 'Tokens'}`);
+    pieces.push(tn(now ? 'yrPieceTokensNow' : 'yrPieceTokensPast', facts.tokensEarned, { n: facts.tokensEarned.toLocaleString(getLocale()) }));
   }
-  if (facts.activeDays > 0) {
-    pieces.push(`stayed productive on ${facts.activeDays} different ${facts.activeDays === 1 ? 'day' : 'days'}`);
-  }
+  if (facts.activeDays > 0) pieces.push(tn(now ? 'yrPieceActiveNow' : 'yrPieceActivePast', facts.activeDays));
   if (pieces.length > 0) {
-    const topNames = facts.topCategories.slice(0, 2).map((c) => c.category);
+    const topNames = facts.topCategories.slice(0, 2).map((c) => categoryLabel(c.category as TaskCategory));
     sentences.push(
-      `${facts.isCurrentYear ? `So far in ${facts.year}, you have` : `In ${facts.year}, you`} ${joinList(pieces)}` +
-        (facts.taskCount > 0 && topNames.length > 0 ? `, with the most accomplishments in ${joinList(topNames)}` : '') +
+      tr(now ? 'yrLeadNow' : 'yrLeadPast', { year: facts.year, list: joinList(pieces) }) +
+        (facts.taskCount > 0 && topNames.length > 0 ? tr('yrTopCats', { list: joinList(topNames) }) : '') +
         '.'
     );
   }
   if (facts.longestStreak >= 2) {
-    sentences.push(
-      `Your longest streak ${facts.isCurrentYear ? 'so far' : 'that year'} was ${facts.longestStreak} days in a row.`
-    );
+    sentences.push(tr(now ? 'yrStreakNow' : 'yrStreakPast', { n: facts.longestStreak }));
   }
 
   if (facts.moodCount > 0) {
     sentences.push(
-      `You recorded ${plural(facts.moodCount, 'mood check-in', 'mood check-ins')}` +
-        (facts.topMood ? `, and ${facts.topMood} was the mood you recorded most` : '') +
+      tn('yrRecapMood', facts.moodCount) +
+        (facts.topMood ? tr('yrRecapMoodTop', { mood: moodName(facts.topMood as Mood) }) : '') +
         '.'
     );
   }
@@ -90,20 +86,16 @@ export function buildYearRecap(facts: YearReviewFacts): string {
   if (facts.reflectionCount > 0) {
     const quoted = facts.highlights.slice(0, 2).map((text) => `“${text}”`);
     sentences.push(
-      `You saved ${plural(facts.reflectionCount, 'personal reflection', 'personal reflections')}` +
-        (quoted.length > 0 ? `. In your own words: ${joinList(quoted)}` : '') +
+      tn('yrRecapRefl', facts.reflectionCount) +
+        (quoted.length > 0 ? tr('yrRecapQuote', { list: joinList(quoted) }) : '') +
         '.'
     );
   }
 
   if (facts.petMilestones.length > 0) {
-    sentences.push(`Along the way: ${joinList(facts.petMilestones)}.`);
+    sentences.push(tr('yrRecapAlong', { list: joinList(facts.petMilestones) }));
   }
 
-  sentences.push(
-    facts.isCurrentYear
-      ? 'Your year is still being written — every little step counts. Keep going! 💗'
-      : 'Thank you for taking a moment to look back — every little step counts. 💗'
-  );
+  sentences.push(tr(now ? 'yrEndNow' : 'yrEndPast'));
   return sentences.join(' ');
 }

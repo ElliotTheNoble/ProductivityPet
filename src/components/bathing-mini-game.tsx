@@ -81,10 +81,11 @@ const PHASE_COLORS: Record<BathingPhase, { glow: string; fill: string }> = {
 // The small instruction line shown above the tool-select row while a
 // tool is selected (see room-detail-screen.tsx) — per instructions, its
 // wording changes with which tool is active.
-export const BATHING_INSTRUCTIONS: Record<BathingPhase, string> = {
-  soap: '🧼 Hover over the glowing circle to soap your kitty!',
-  rinse: '🚿 Hover over the glowing circle to rinse your kitty!',
-  blowDry: '💨 Hover over the glowing circle to dry your kitty!',
+// Translation keys (see rooms.en.ts); the screen looks them up in the current language.
+export const BATHING_INSTRUCTIONS: Record<BathingPhase, 'bathSoapHint' | 'bathRinseHint' | 'bathDryHint'> = {
+  soap: 'bathSoapHint',
+  rinse: 'bathRinseHint',
+  blowDry: 'bathDryHint',
 };
 
 type BathingMiniGameProps = {

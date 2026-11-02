@@ -1,12 +1,16 @@
 import { useRouter, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getLocale, useT } from '@/i18n';
+import { categoryLabel } from '@/utils/categorize-task';
 import type { CompletedEntry, DayBucket } from '@/utils/category-accomplishments';
 
 // Shared building blocks for the Stats section's detail pages — the
@@ -25,13 +29,15 @@ const CHART_BAR_AREA_HEIGHT = 140;
 export function DetailPageShell({
   children,
   backHref = '/stats',
-  backLabel = '← Back to Stats',
+  backLabel,
 }: {
   children: ReactNode;
   backHref?: Href;
   backLabel?: string;
 }) {
   const router = useRouter();
+  const { t } = useT();
+  const backText = backLabel ?? t('backToStats');
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -40,10 +46,10 @@ export function DetailPageShell({
             <Pressable
               onPress={() => router.replace(backHref)}
               accessibilityRole="button"
-              accessibilityLabel={backLabel.replace('← ', '')}
+              accessibilityLabel={backText.replace('← ', '')}
               style={({ pressed }) => [styles.backButtonWrap, pressed && styles.pressed]}>
               <ThemedView type="backgroundElementOverlay" style={styles.backButton}>
-                <ThemedText type="smallBold">{backLabel}</ThemedText>
+                <ThemedText type="smallBold">{backText}</ThemedText>
               </ThemedView>
             </Pressable>
             {children}
@@ -173,7 +179,7 @@ export function DetailNote({ children }: { children: ReactNode }) {
 }
 
 function formatShortDate(dateISO: string): string {
-  return new Date(`${dateISO}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${dateISO}T00:00:00`).toLocaleDateString(getLocale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -183,6 +189,7 @@ function formatShortDate(dateISO: string): string {
 // One completed task row. `showCategory` adds the task's category (used on
 // the cross-category Lifetime pages).
 export function CompletedEntryRow({ entry, showCategory = false }: { entry: CompletedEntry; showCategory?: boolean }) {
+  const { t } = useT();
   const theme = useTheme();
   return (
     <View style={[styles.entryRow, { borderColor: theme.backgroundSelected }]}>
@@ -193,8 +200,8 @@ export function CompletedEntryRow({ entry, showCategory = false }: { entry: Comp
           {entry.important ? '  ⭐' : ''}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          {showCategory ? `${entry.category} · ` : ''}
-          {entry.dateISO ? formatShortDate(entry.dateISO) : 'Date not recorded'}
+          {showCategory ? `${categoryLabel(entry.category)} · ` : ''}
+          {entry.dateISO ? formatShortDate(entry.dateISO) : t('statsDateNotRecorded')}
         </ThemedText>
       </View>
     </View>

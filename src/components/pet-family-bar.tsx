@@ -1,3 +1,4 @@
+import { HoverPressable } from '@/components/hover-pressable';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePathname } from 'expo-router';
@@ -12,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { usePetFamily } from '@/hooks/use-pet-family';
 import { useTheme } from '@/hooks/use-theme';
+import { tr, useT, type Msg } from '@/i18n';
 import {
   MAX_LIVING_PETS,
   adoptNewEgg,
@@ -30,7 +32,7 @@ import {
   SICK_TO_CRITICAL_HOURS,
 } from '@/utils/pet-family-config';
 import { getRenderedStage } from '@/utils/pet-growth';
-import { MEMORIAL_MESSAGE } from '@/utils/pet-life-messages';
+import { getMemorialMessage } from '@/utils/pet-life-messages';
 
 // The pet family bar: a slim, pastel strip under the header on the pet pages
 // (Home, Rooms, Shop, Stats) where the player switches between pets, adopts a
@@ -56,14 +58,20 @@ function formatRemaining(ms: number): string {
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (days > 0) return tr('timerDaysHours', { d: days, h: hours });
+  if (hours > 0) return tr('timerHoursMinutes', { h: hours, m: minutes });
+  return tr('timerMinutes', { m: minutes });
 }
 
 const MEMORIAL_SEEN_KEY = '@ProductivityPet:memorialSeen';
 const MEMORIAL_TOAST_MS = 5000;
-const BATHROOM_SICK_HINT = 'Too sick for a bath — gently drag the washcloth over her to freshen her up.';
+// Words for a pet's health state (used in the chip's spoken label).
+const STATE_KEYS = {
+  healthy: 'stateHealthy',
+  sick: 'stateSick',
+  critical: 'stateCritical',
+  deceased: 'stateDeceased',
+} as const;
 
 export function PetFamilyBar() {
   const theme = useTheme();
@@ -75,9 +83,10 @@ export function PetFamilyBar() {
   const inBathroom = usePathname().endsWith('/rooms/bathroom');
   const family = usePetFamily();
   const [now, setNow] = useState(() => Date.now());
+  const { t } = useT();
   const [adoptOpen, setAdoptOpen] = useState(false);
   const [adoptBusy, setAdoptBusy] = useState(false);
-  const [adoptError, setAdoptError] = useState<string | null>(null);
+  const [adoptError, setAdoptError] = useState<Msg | null>(null);
   // The memorial message is a temporary notification: shown once when a pet passes away (it is
   // remembered per death so it doesn't return on tab changes or refreshes), gone after ~5 seconds or
   // when tapped. The permanent memorial + Resurrect lives in Stats.
@@ -128,17 +137,20 @@ export function PetFamilyBar() {
   // When none is, no warning line is shown and the normal recovery check handles the change.
   const lowNeeds = (
     [
-      ['Hunger', selected.profile.hunger],
-      ['Cleanliness', selected.profile.cleanliness],
-      ['Happiness', selected.profile.happiness],
+      ['needRefHunger', selected.profile.hunger],
+      ['needRefCleanliness', selected.profile.cleanliness],
+      ['needRefHappiness', selected.profile.happiness],
     ] as const
   )
     .filter(([, value]) => value < RECOVERY_NEED_THRESHOLD)
-    .map(([name]) => name);
-  const needsAttention =
-    lowNeeds.length === 0
-      ? null
-      : `Check ${lowNeeds.length === 1 ? lowNeeds[0] : lowNeeds.length === 2 ? lowNeeds.join(' and ') : `${lowNeeds[0]}, ${lowNeeds[1]}, and ${lowNeeds[2]}`}.`;
+    .map(([key]) => t(key));
+  const needsList =
+    lowNeeds.length === 1
+      ? lowNeeds[0]
+      : lowNeeds.length === 2
+        ? t('listTwo', { a: lowNeeds[0], b: lowNeeds[1] })
+        : t('listThree', { a: lowNeeds[0], b: lowNeeds[1], c: lowNeeds[2] });
+  const needsAttention = lowNeeds.length === 0 ? null : t('checkNeeds', { list: needsList });
   const sickSinceMs = selected.lifecycle.sickSince ? new Date(selected.lifecycle.sickSince).getTime() : NaN;
 
   async function handleAdopt() {
@@ -151,10 +163,10 @@ export function PetFamilyBar() {
     } else {
       setAdoptError(
         result.reason === 'limit'
-          ? `You already have ${MAX_LIVING_PETS} living pets.`
+          ? { key: 'adoptLimit', params: { max: MAX_LIVING_PETS } }
           : result.reason === 'busy'
-            ? 'Adoption is already in progress.'
-            : "Couldn't save the new egg on this device. Nothing was changed — please try again."
+            ? { key: 'adoptBusy' }
+            : { key: 'adoptFail' }
       );
     }
   }
@@ -171,7 +183,7 @@ export function PetFamilyBar() {
               onPress={() => selectPet(pet.id)}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`${getPetLabel(pet, family.pets)}, ${pet.lifecycle.state}`}
+              accessibilityLabel={t('petChipLabel', { name: getPetLabel(pet, family.pets), state: t(STATE_KEYS[pet.lifecycle.state]) })}
               style={(state) => [state.pressed && styles.pressed, hoverLift(state, !isSelected)]}>
               <ThemedView
                 type="backgroundElementOverlay"
@@ -206,10 +218,10 @@ export function PetFamilyBar() {
               setAdoptOpen(true);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Adopt a new egg"
+            accessibilityLabel={t('adoptEggLabel')}
             style={(state) => [state.pressed && styles.pressed, hoverLift(state)]}>
             <ThemedView type="mint" style={[styles.adoptChip, styles.pointer]}>
-              <ThemedText type="smallBold">＋ Adopt an egg</ThemedText>
+              <ThemedText type="smallBold">{t('adoptEgg')}</ThemedText>
             </ThemedView>
           </Pressable>
         ) : null}
@@ -227,13 +239,13 @@ export function PetFamilyBar() {
           <View style={styles.healthText}>
             <ThemedText type="smallBold">
               {state === 'critical'
-                ? `${getPetLabel(selected, family.pets)} needs urgent care`
-                : `${getPetLabel(selected, family.pets)} isn't feeling well`}
+                ? t('bannerCritical', { name: getPetLabel(selected, family.pets) })
+                : t('bannerSick', { name: getPetLabel(selected, family.pets) })}
             </ThemedText>
             {needsAttention ? (
               <ThemedText type="small" themeColor="textSecondary">
                 {needsAttention}
-                {inBathroom && selected.profile.cleanliness < RECOVERY_NEED_THRESHOLD && getCareSupplies(family).washcloth > 0 ? ` ${BATHROOM_SICK_HINT}` : ''}
+                {inBathroom && selected.profile.cleanliness < RECOVERY_NEED_THRESHOLD && getCareSupplies(family).washcloth > 0 ? ` ${t('bathroomSickHint')}` : ''}
               </ThemedText>
             ) : null}
           </View>
@@ -251,32 +263,31 @@ export function PetFamilyBar() {
       ) : null}
 
       {state === 'deceased' && memorialToast ? (
-        <Pressable
+        <HoverPressable
           onPress={() => setMemorialToast(null)}
           accessibilityRole="alert"
-          accessibilityLabel="Dismiss memorial message"
+          accessibilityLabel={t('dismissMemorial')}
           style={styles.memorialToastWrap}>
           <View style={[styles.healthPanel, styles.memorialToast, { backgroundColor: '#EFE9FA', borderColor: STATUS_COLORS.deceased }]}>
             <Ionicons name="heart" size={16} color={STATUS_COLORS.deceased} />
             <ThemedText type="small" style={styles.healthText}>
-              {MEMORIAL_MESSAGE}
+              {getMemorialMessage()}
             </ThemedText>
           </View>
-        </Pressable>
+        </HoverPressable>
       ) : null}
 
       <ConfirmModal
         visible={adoptOpen}
-        title="Adopt a new egg?"
-        confirmLabel="Adopt"
+        title={t('adoptTitle')}
+        confirmLabel={t('adoptConfirm')}
         busy={adoptBusy}
         onConfirm={handleAdopt}
         onCancel={() => setAdoptOpen(false)}>
         <ThemedText type="small">
-          A new egg will join your family. Your other pets, tasks, tokens and history stay exactly as they are.
-          You can care for up to {MAX_LIVING_PETS} living pets at once ({living.length} now).
+          {t('adoptBody', { max: MAX_LIVING_PETS, count: living.length })}
         </ThemedText>
-        {adoptError ? <ThemedText type="small" themeColor="accent">{adoptError}</ThemedText> : null}
+        {adoptError ? <ThemedText type="small" themeColor="accent">{t(adoptError.key, adoptError.params)}</ThemedText> : null}
       </ConfirmModal>
 
     </View>

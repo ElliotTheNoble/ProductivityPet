@@ -1,21 +1,14 @@
 // The Pet Pawadise farewell: what is said and which species have a farewell scene.
 
-// Seven affectionate messages; each farewell shows three DIFFERENT ones, in random order.
-export const FAREWELL_MESSAGES = [
-  'Thank you for taking such good care of me!',
-  "I'm going to make so many new friends!",
-  "Don't worry! I'll send you postcards!",
-  "I'll miss our adventures together!",
-  "This isn't goodbye forever! See you soon!",
-  'I can\'t wait to tell you all about Pawadise!',
-  "I'll write to you soon!",
-];
+// The seven affectionate messages live in the translation lists (`farewell` in lists.en.ts / lists.es.ts); each
+// farewell shows three DIFFERENT ones, in random order. They are picked as INDEXES, so they follow a language change.
+export const FAREWELL_POOL_SIZE = 7;
 
 export const FAREWELL_MESSAGE_COUNT = 3;
 
-// Picks `count` distinct messages (a shuffle, so none repeats within one farewell).
-export function pickFarewellMessages(count: number = FAREWELL_MESSAGE_COUNT, rng: () => number = Math.random): string[] {
-  const pool = [...FAREWELL_MESSAGES];
+// Picks `count` distinct message indexes (a shuffle, so none repeats within one farewell).
+export function pickFarewellMessages(count: number = FAREWELL_MESSAGE_COUNT, rng: () => number = Math.random): number[] {
+  const pool = Array.from({ length: FAREWELL_POOL_SIZE }, (_, i) => i);
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];

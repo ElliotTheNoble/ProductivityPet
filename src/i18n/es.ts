@@ -1,0 +1,110 @@
+import type { FamilyStrings } from './en';
+
+// Spanish strings (same keys as English; TypeScript reports any that are missing).
+export const familyEs: FamilyStrings = {
+  appName: 'ProductivityPet',
+  back: 'Atrás',
+  continue: 'Continuar',
+  cancel: 'Cancelar',
+  save: 'Guardar',
+  edit: 'Editar',
+  add: 'Añadir',
+  select: 'Elegir',
+  selected: 'Elegido',
+  remove: 'Quitar',
+  comingSoon: 'Próximamente',
+  skipForNow: 'Omitir por ahora y usar la app como está',
+
+  welcomeLanguageTitle: '¡Bienvenido a ProductivityPet!',
+  welcomeLanguageSubtitle: 'Elige tu idioma',
+
+  modeTitle: '¿Para quién es?',
+  modeSubtitle: 'Podrás cambiarlo más tarde.',
+  modeParent: 'Madre / Padre / Tutor',
+  modeParentDesc: 'Configura y cuida una familia: añade niños, asigna tareas y revísalas.',
+  modeChild: 'Niño o niña',
+  modeChildDesc: 'Una cuenta infantil que un adulto configura primero.',
+  modeIndependent: 'Usuario independiente (16+)',
+  modeIndependentDesc: 'Usa ProductivityPet por tu cuenta.',
+  placeholderTitle: 'Próximamente',
+  placeholderChild:
+    'La experiencia para niños aún no está lista. Un padre, madre o tutor configurará los perfiles infantiles desde el modo Madre / Padre / Tutor. No se creó nada.',
+  placeholderIndependent:
+    'La experiencia independiente (16+) aún no está lista. No se creó nada y tu app actual no cambió.',
+
+  parentSetupTitle: 'Configura tu perfil de adulto',
+  parentSetupExplain:
+    'El Panel familiar es donde añades niños, les das tareas, revisas las tareas terminadas y eliges los ajustes de cada niño. Este perfil se guarda solo en este dispositivo. No es una cuenta en línea y no tiene contraseña.',
+  parentNameLabel: 'Tu nombre o apodo',
+  parentNamePlaceholder: 'Por ejemplo: Mamá, Sam',
+  familyNameLabel: 'Nombre de la familia (opcional)',
+  familyNamePlaceholder: 'Por ejemplo: La familia García',
+  privacyNote: 'Solo pedimos apodos. Por favor, no escribas nombres legales completos, fechas de nacimiento, correos ni direcciones.',
+  finishSetup: 'Terminar',
+  nameRequired: 'Escribe un nombre o apodo.',
+
+  dashboardTitle: 'Panel familiar',
+  dashboardFor: 'Familia',
+  localProfileNote: 'Los perfiles se guardan solo en este dispositivo. No son cuentas seguras en línea.',
+  children: 'Niños',
+  addChild: 'Añadir un niño',
+  childNickname: 'Apodo del niño',
+  childNicknamePlaceholder: 'Un apodo, no el nombre completo',
+  noChildrenTitle: 'Aún no hay niños',
+  noChildrenText: 'Añade un niño para empezar a asignar tareas.',
+  selectChildFirst: 'Elige un niño para ver sus tareas y ajustes.',
+  childProfiles: 'Perfiles de niños',
+  tasksWord: 'tareas',
+  editChild: 'Editar niño',
+  saveChild: 'Guardar',
+
+  assignedTasks: 'Tareas asignadas',
+  pendingApprovals: 'Pendientes de aprobación',
+  completedTasks: 'Tareas completadas',
+  noAssigned: 'No hay nada asignado ahora.',
+  noPending: 'Nada espera tu aprobación.',
+  noCompleted: 'Aún no hay tareas completadas.',
+  addTask: 'Añadir una tarea',
+  taskPlaceholder: '¿Qué debe hacer?',
+  assign: 'Asignar',
+  approve: 'Aprobar',
+  sendBack: 'Devolver',
+  deleteTask: 'Eliminar',
+  createdByChild: 'Añadida por el niño',
+  createdByParent: 'Añadida por ti',
+  waitingForApproval: 'Esperando aprobación',
+  approvedOn: 'Aprobada',
+  previewAsChild: 'Prueba: el niño la marca como hecha',
+  previewNote:
+    'Todavía no hay pantalla para niños, así que este botón finge ser el niño para hacer pruebas. Solo se puede aprobar aquí, en el Panel familiar.',
+  rewardsNote: 'Las recompensas (fichas de patita y crecimiento de la mascota) aún no están conectadas a las aprobaciones, así que aprobar todavía no paga nada.',
+
+  childSettings: 'Ajustes del niño',
+  childCanCreate: 'El niño puede crear tareas',
+  requireApproval: 'Completar requiere mi aprobación',
+  requireApprovalHelp: 'Si está activado, una tarea terminada espera tu aprobación en lugar de contar enseguida.',
+  on: 'Sí',
+  off: 'No',
+  noteChildCreateOff: 'El niño puede crear tareas: No',
+
+  petSafety: 'Seguridad de la mascota',
+  gentleMode: 'Modo suave',
+  gentleDesc:
+    'Las mascotas no pueden morir para siempre. Pueden tener hambre, cansancio, suciedad o enfermarse, y los cuidados las ayudan a recuperarse. (Recomendado)',
+  classicMode: 'Modo clásico',
+  classicDesc: 'Las reglas originales, incluida la posibilidad de que una mascota muera si no se cuida, y la resurrección de pago.',
+  petSafetyNotEnforced:
+    'Esta opción se guarda para el niño, pero TODAVÍA NO se aplica. Las mascotas aún no están separadas por niño, así que hoy todas siguen las reglas clásicas.',
+
+  language: 'Idioma',
+  languageSettings: 'Ajustes de idioma',
+  languageNote: 'Tu elección se guarda en este dispositivo y se aplica de inmediato.',
+
+  parentProfile: 'Perfil del adulto',
+  editParent: 'Editar perfil',
+
+  familyModeTitle: 'Modo familiar',
+  familyModeText: 'Configura un perfil de madre / padre / tutor, añade niños y revisa sus tareas. Tus mascotas, tareas y fichas no cambian.',
+  openDashboard: 'Abrir el Panel familiar',
+  startSetup: 'Configurar el modo familiar',
+};

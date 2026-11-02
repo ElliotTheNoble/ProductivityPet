@@ -8,7 +8,7 @@ export default function RoomPage() {
   const { room: roomParam } = useLocalSearchParams<{ room: string }>();
 
   if (!isRoomSlug(roomParam)) {
-    return <ComingSoonScreen title="Room not found" />;
+    return <ComingSoonScreen title="nfRoom" />;
   }
 
   return <RoomDetailScreen room={ROOMS[roomParam]} />;

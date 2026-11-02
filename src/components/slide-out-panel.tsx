@@ -1,16 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
-import {
-  Animated,
-  Easing,
-  PanResponder,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { Animated, Easing, PanResponder, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+import { useT } from '@/i18n';
 
 import { Spacing } from '@/constants/theme';
 
@@ -71,11 +64,13 @@ export function SlideOutPanel({
   onClose,
   children,
 }: Props) {
+  const { t } = useT();
   const isLeft = side === 'left';
   // +1 when moving the panel INTO view means moving right (left panel).
   const openSign = isLeft ? 1 : -1;
   const useNative = Platform.OS !== 'web';
 
+  const [tabHover, setTabHover] = useState(false);
   const progress = useRef(new Animated.Value(open ? 1 : 0)).current;
   const progressValue = useRef(open ? 1 : 0);
   const openRef = useRef(open);
@@ -200,10 +195,11 @@ export function SlideOutPanel({
         pointerEvents={open ? 'auto' : 'none'}
         style={[styles.backdrop, { opacity: backdropOpacity }]}>
         <Pressable
+          noHover
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel={`Close ${label}`}
+          accessibilityLabel={t('panelClose', { label })}
         />
       </Animated.View>
 
@@ -238,10 +234,10 @@ export function SlideOutPanel({
             <Pressable
               onPress={onClose}
               accessibilityRole="button"
-              accessibilityLabel={`Close ${label}`}
+              accessibilityLabel={t('panelClose', { label })}
               style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
               <Ionicons name={isLeft ? 'chevron-back' : 'chevron-forward'} size={18} color="#5B3F6B" />
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={styles.closeText}>{t('closeWord')}</Text>
             </Pressable>
           </View>
           <ScrollView
@@ -257,9 +253,12 @@ export function SlideOutPanel({
         {/* The always-visible tab: icon + words + an arrow showing which way it opens. */}
         <View
           {...tabResponder.panHandlers}
+          // Mouse hover (web only; the tab is a drag handle, so it is a View with mouse events rather than a
+          // Pressable, which would fight the drag gesture). Colour/glow only, no movement.
+          {...(Platform.OS === 'web' ? ({ onMouseEnter: () => setTabHover(true), onMouseLeave: () => setTabHover(false) } as object) : null)}
           pointerEvents={tabHidden ? 'none' : 'auto'}
           accessibilityRole="button"
-          accessibilityLabel={`${open ? 'Close' : 'Open'} ${label}`}
+          accessibilityLabel={t(open ? 'panelClose' : 'panelOpen', { label })}
           style={[
             styles.tab,
             { backgroundColor: tint, top: `${tabTop * 100}%`, opacity: tabHidden ? 0 : 1 },
@@ -268,6 +267,16 @@ export function SlideOutPanel({
               : { left: 0, borderTopLeftRadius: 18, borderBottomLeftRadius: 18 },
             webNoTouchAction,
             Platform.OS === 'web' ? ({ cursor: 'pointer' } as object) : null,
+            Platform.OS === 'web' && tabHover && !tabHidden
+              ? ({
+                  filter: 'saturate(1.4) brightness(0.96)',
+                  boxShadow: '0 2px 10px rgba(242, 141, 174, 0.55)',
+                  transitionProperty: 'filter, box-shadow',
+                  transitionDuration: '140ms',
+                } as object)
+              : Platform.OS === 'web'
+                ? ({ transitionProperty: 'filter, box-shadow', transitionDuration: '140ms' } as object)
+                : null,
           ]}>
           <Ionicons
             name={open ? (isLeft ? 'chevron-back' : 'chevron-forward') : isLeft ? 'chevron-forward' : 'chevron-back'}

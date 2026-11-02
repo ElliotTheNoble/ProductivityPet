@@ -9,7 +9,7 @@ export default function StatsCategoryPage() {
   const category = slugToCategory(categoryParam);
 
   if (!category) {
-    return <ComingSoonScreen title="Category not found" />;
+    return <ComingSoonScreen title="nfCategory" />;
   }
 
   return <CategoryAccomplishmentsScreen category={category} />;

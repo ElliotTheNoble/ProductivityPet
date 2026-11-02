@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+import { useT } from '@/i18n';
 
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
 import { MemoryMatchDifficultySelect } from '@/components/mini-games/memory-match-difficulty-select';
@@ -15,6 +18,7 @@ import {
   MEMORY_MATCH_CARD_BACK,
   MEMORY_MATCH_CARD_FACES,
   MEMORY_MATCH_DIFFICULTY_INFO,
+  difficultyLabel,
   type MemoryMatchCard,
   type MemoryMatchDifficulty,
 } from '@/utils/memory-match';
@@ -83,6 +87,7 @@ type MemoryMatchGameProps = {
 };
 
 export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   const [phase, setPhase] = useState<Phase>('select');
@@ -225,7 +230,7 @@ export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
       <ScrollView style={styles.phaseScroll} contentContainerStyle={styles.phaseScrollContent}>
         {isSubmittingRound || !roundResult ? (
           <ThemedText type="small" themeColor="textSecondary">
-            Saving your round…
+            {t('mgSaving')}
           </ThemedText>
         ) : (
           <MemoryMatchResults result={roundResult} onPlayAgain={handlePlayAgain} onExit={onExit} />
@@ -265,15 +270,15 @@ export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
     <View style={styles.screen}>
       <ThemedView type="backgroundElementOverlay" style={styles.hud}>
         <BackToGamesButton onPress={onExit} />
-        <ThemedText type="smallBold">{difficulty ? MEMORY_MATCH_DIFFICULTY_INFO[difficulty].label : ''}</ThemedText>
+        <ThemedText type="smallBold">{difficulty ? difficultyLabel(difficulty) : ''}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Moves: {moves}
+          {t('mmMoves', { n: moves })}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Pairs: {matchedFaceIndices.size}/{pairsTotal}
+          {t('mmPairsHud', { a: matchedFaceIndices.size, b: pairsTotal })}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Best: {currentBest ?? '—'}
+          {t('mgBest', { n: currentBest ?? '—' })}
         </ThemedText>
       </ThemedView>
 

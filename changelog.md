@@ -2,6 +2,88 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-01] — Mailbox landscape fix
+
+### Fixed
+- The Home mailbox could rest so low in landscape (844x390) that its bubble and Open mail button were cut off (BUG-068). It now keeps them fully on screen using bounds computed from the Home area: in short areas the bubble and button sit beside the mailbox, and the mailbox is kept inside the screen after a resize or rotation. Size, artwork, hopping and the envelope and postcard flow are unchanged.
+
+### Checked
+- 360x800, 390x844, 844x390 and 1280x800 in English and Español: mailbox, bubble and button fully visible and not overlapping in 24 of 24 stops. Memory Match results checked in English and Español (round played by script). The Backgrounds tab has no purchasable items, so it has no insufficient-token message.
+
+### Not tested
+- Real phone notifications, vibration and flashlight; real finger taps on a phone; native-speaker review.
+
+## [2026-11-01] — Spanish task categories, live temporary messages, remaining tests
+
+### Fixed
+- BUG-065: tasks typed in Spanish are now categorised (Estudio, Ejercicio, Limpieza, Salud, Personal) from Spanish keywords; English keywords work exactly as before, existing saved categories and all task text are untouched.
+- Temporary messages (Pawadise notices and errors, Resurrect and adopt errors, Pet Care & Alerts messages, Parent Dashboard note, Welcome name error) now switch language immediately; their timing is unchanged.
+
+### Checked
+- Mini-Games and the Parent Dashboard in English; mailbox, envelope, postcard viewer, farewell and Resurrect dialog in landscape and desktop; English Shop insufficient-token messages; hover effects on seven screens unchanged; the type-check is clean.
+
+### Not tested
+- Memory Match results, the Backgrounds purchase message in English, real phone notifications, vibration and the flashlight, native-speaker review.
+
+## [2026-11-01] — Final bilingual audit: remaining screens translated
+
+### Translated
+- Pet Album, Pet Pawadise (resort, confirmations, errors, the pet's page), postcards, the Home mailbox and envelope, the farewell, Resurrect (button, dialog, errors, hospital truck), the Pet Care & Alerts page, Mini-Games (hub, Kitty Catch, Memory Match, results and reward lines) and the "not found" pages.
+- Phone notifications and reminders (pet sick/critical, test message, task/appointment/birthday) and Android channel names use the current language and are rebuilt when the language changes.
+
+### Fixed
+- The task category showed in English on the Home task card and appointment card; "tokens" / "Paw Tokens" in the adopt dialog and the Parent Dashboard now say "fichas de patita"; the date placeholder in the task edit window is translated (BUG-067).
+
+### Checked
+- English and Español at 360, 390, 844x390 and 1280 px: no overflow or clipped text on the screens listed; the language switch applies at once and is kept after a refresh; the type-check is clean.
+
+### Not done / not verified
+- Real phone notifications, vibration and the flashlight were not run (needs a phone build). No native-speaker review. Developer tools and artwork text are intentionally unchanged. Not committed.
+
+## [2026-11-01] — Translation Batches 4-6: Rooms, Shop and Stats
+
+### Translated
+- Rooms: the hub, all six rooms, task panels, care/medicine/toy/shop hints, bathing and wipe instructions and Paw Token messages.
+- Shop: tabs, items, descriptions, prices, Owned/Equipped, confirmations, errors and empty states (item ids and saved inventory unchanged).
+- Stats: overview, category and lifetime pages, Mood Journey, Year in Review (including the written recap), Paw Token history and Streak history, with Spanish dates, month and weekday names and number formatting.
+- Language changes apply immediately; English text is unchanged.
+
+### Fixed
+- The Mood Journey yearly legend showed English mood names in Spanish (BUG-066).
+
+### Still English
+- Pet Album page, Pet Care & Alerts page, Pawadise, farewell, mailbox/postcards, mini-games, notifications. The app is not fully Spanish yet.
+
+## [2026-11-01] — Translation Batches 2 and 3: Home and Tasks
+
+### Translated
+- Home: care buttons, needs, health banners and countdown, every sick/critical/memorial/resurrection speech line, all mood names and messages, completion messages, the Pet Progress and Home Features panels (tasks, appointments, mood, rooms and toys cards).
+- Tasks: the calendar (Spanish month and weekday names, Today button, legend), the add form, lists and empty states, categories, menus, the edit window, reminders, holidays and long dates.
+- Still English: Rooms, mini-games, Shop, the Pet Care & Alerts page, Stats and history, Mood Journey, Year in Review, Pet Album, Pawadise, farewell, mailbox, postcards and notifications (later batches).
+
+## [2026-11-01] — Translation Batch 1: app shell (English / Español)
+
+### Added
+- Translation system extended with parameters, plurals, a non-React helper and locale-aware dates; a Language card on the Pet Care & Alerts page. The language choice is saved and applies immediately.
+
+### Translated (Batch 1 of 8)
+- Header navigation and tagline, the pet selector and adopt dialog (pet names become "Gatito N"), shared dialog buttons and the Stats detail pages' Back button. Other screens are still English until their batches.
+
+## [2026-11-01] — Parent Dashboard hover highlighting
+
+### Changed
+- Child Settings toggles, every dashboard and welcome button, and the choice cards (language, Gentle/Classic, mode) now highlight clearly on mouse hover with a pastel tint/deeper colour, a small lift and a smooth transition; disabled buttons stay inactive and hovering never changes a setting. A keyboard focus ring was added. Visual only: pet mortality, health and lifecycle behaviour are unchanged.
+
+## [2026-11-01] — Onboarding and Parent / Guardian dashboard foundation
+
+### Added
+- First-launch welcome flow: language (English / Español), user mode (Parent / Guardian, Child, Independent 16+), and a local Parent profile. New installs go through it; existing players are never forced into it (and can start it from the Pet Care & Alerts page). Progress and language are saved, so a refresh resumes where you were.
+- Parent Dashboard: parent profile, multiple child profiles (Add, Edit, Select) with permanent ids, per-child assigned / pending approval / completed tasks, Add Task, child settings (can create tasks, completion needs approval), Pet Safety (Gentle / Classic) and language settings.
+- A small translation layer (English and Spanish) for the new screens only; the rest of the app is not translated.
+
+### Not connected yet (placeholders)
+- Child and Independent modes ("coming soon"), a child-facing screen, rewards on approval, Pet Safety enforcement, and separate pets per child. Pet, task, token, shop and Pawadise data are untouched.
+
 ## [2026-10-29] — Milestone: Pet Pawadise farewell experience
 
 Summary of the approved farewell work (details in the entries below, features.md FEATURE-080 to FEATURE-082 and bugs.md BUG-063).

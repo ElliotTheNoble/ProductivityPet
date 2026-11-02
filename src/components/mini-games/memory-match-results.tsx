@@ -1,10 +1,13 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
+
+import { useT } from '@/i18n';
 import { PawTokenCoin } from '@/components/paw-token-coin';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { MEMORY_MATCH_DIFFICULTY_INFO } from '@/utils/memory-match';
+import { difficultyLabel } from '@/utils/memory-match';
 import type { MemoryMatchRoundResult } from '@/utils/memory-match-rewards';
 
 type MemoryMatchResultsProps = {
@@ -20,15 +23,16 @@ type MemoryMatchResultsProps = {
 // layout/colors/button shape so the two mini-games read as one system,
 // while using Memory Match's own wording per its own spec.
 export function MemoryMatchResults({ result, onPlayAgain, onExit }: MemoryMatchResultsProps) {
+  const { t } = useT();
 
   const completionLimitLine =
     !result.completionReward.awarded && result.completionReward.reason === 'daily-limit-reached'
-      ? 'Daily Paw Token limit reached! 🐾\nKeep playing for fun and better scores!'
+      ? t('mmLimit')
       : null;
 
   const newBestLimitLine =
     result.newBestBonus.eligible && !result.newBestBonus.awarded && result.newBestBonus.reason === 'daily-limit-reached'
-      ? 'Daily New Best bonus limit reached! 🐾\nYour new best is still saved!'
+      ? t('mmBestLimit')
       : null;
 
   // happinessAwarded is the exact real delta applied to the stored (float,
@@ -38,30 +42,30 @@ export function MemoryMatchResults({ result, onPlayAgain, onExit }: MemoryMatchR
   // number so it never shows an ugly decimal.
   const roundedHappinessAwarded = Math.round(result.happinessAwarded);
   const happinessLine =
-    roundedHappinessAwarded > 0 ? `+${roundedHappinessAwarded} Happiness` : 'Happiness is already full 💛';
+    roundedHappinessAwarded > 0 ? t('mgHappy', { n: roundedHappinessAwarded }) : t('mgHappyFull');
 
   return (
     <View style={styles.wrapper}>
       <ThemedView type="peachOverlay" style={styles.card}>
         <ThemedText type="subtitle" style={styles.title}>
-          Memory Match Complete!
+          {t('mmComplete')}
         </ThemedText>
         {result.isNewBest ? (
           <ThemedView type="mint" style={styles.newBestBadge}>
             <ThemedText type="smallBold" style={styles.newBestBadgeText}>
-              New Best! 🎉
+              {t('mmNewBest')}
             </ThemedText>
           </ThemedView>
         ) : null}
 
         <ThemedView type="backgroundSelected" style={styles.difficultyPill}>
-          <ThemedText type="smallBold">{MEMORY_MATCH_DIFFICULTY_INFO[result.difficulty].label}</ThemedText>
+          <ThemedText type="smallBold">{difficultyLabel(result.difficulty)}</ThemedText>
         </ThemedView>
 
         <View style={styles.scoreRow}>
           <View style={styles.scoreBlock}>
             <ThemedText type="small" themeColor="textSecondary">
-              Moves
+              {t('mmMovesLabel')}
             </ThemedText>
             <ThemedText type="title" style={styles.scoreNumber}>
               {result.moves}
@@ -69,7 +73,7 @@ export function MemoryMatchResults({ result, onPlayAgain, onExit }: MemoryMatchR
           </View>
           <View style={styles.scoreBlock}>
             <ThemedText type="small" themeColor="textSecondary">
-              Best Moves
+              {t('mmBestMovesLabel')}
             </ThemedText>
             <ThemedText type="title" style={styles.scoreNumber}>
               {result.bestMoves}
@@ -82,23 +86,23 @@ export function MemoryMatchResults({ result, onPlayAgain, onExit }: MemoryMatchR
 
           <View style={styles.tokensRow}>
             <PawTokenCoin size={18} />
-            <ThemedText type="smallBold">{result.totalPawTokensAwarded} Paw Tokens earned</ThemedText>
+            <ThemedText type="smallBold">{t('mgTokens', { n: result.totalPawTokensAwarded })}</ThemedText>
           </View>
 
           {result.totalPawTokensAwarded > 0 ? (
             <>
               {result.completionReward.awarded ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Completion: +{result.completionReward.amount}
+                  {t('mmCompletion', { n: result.completionReward.amount })}
                 </ThemedText>
               ) : null}
               {result.newBestBonus.awarded ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  New Best: +{result.newBestBonus.amount}
+                  {t('mmNewBestLine', { n: result.newBestBonus.amount })}
                 </ThemedText>
               ) : null}
               <ThemedText type="small" themeColor="textSecondary">
-                Total: +{result.totalPawTokensAwarded} Paw Tokens
+                {t('mmTotal', { n: result.totalPawTokensAwarded })}
               </ThemedText>
             </>
           ) : null}
@@ -119,13 +123,13 @@ export function MemoryMatchResults({ result, onPlayAgain, onExit }: MemoryMatchR
           <Pressable onPress={onPlayAgain} style={styles.buttonPressable}>
             <ThemedView type="accent" style={styles.button}>
               <ThemedText type="smallBold" style={styles.buttonTextLight}>
-                Play Again
+                {t('mgPlayAgain')}
               </ThemedText>
             </ThemedView>
           </Pressable>
           <Pressable onPress={onExit} style={styles.buttonPressable}>
             <ThemedView type="backgroundSelected" style={styles.button}>
-              <ThemedText type="smallBold">Exit Game</ThemedText>
+              <ThemedText type="smallBold">{t('mgExit')}</ThemedText>
             </ThemedView>
           </Pressable>
         </View>

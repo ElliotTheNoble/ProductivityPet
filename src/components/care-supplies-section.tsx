@@ -6,6 +6,7 @@ import { PawTokenCoin } from '@/components/paw-token-coin';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { trName, useT } from '@/i18n';
 import { usePetFamily } from '@/hooks/use-pet-family';
 import {
   MEDICINE_NEED_BOOST,
@@ -32,7 +33,7 @@ const ITEMS: {
   name: string;
   icon: IconName;
   price: number;
-  description: string;
+  descKey: 'careWashclothDesc' | 'careMedicineDesc';
   tint: string;
   border: string;
 }[] = [
@@ -41,7 +42,7 @@ const ITEMS: {
     name: 'Gentle Washcloth',
     icon: 'water',
     price: WASHCLOTH_PRICE,
-    description: 'Used up by one completed Gentle Wipe-Down in the Bathroom: +25 Cleanliness for a Sick or Critical pet.',
+    descKey: 'careWashclothDesc',
     tint: '#D8EEF9',
     border: '#8CC8E6',
   },
@@ -50,34 +51,46 @@ const ITEMS: {
     name: 'Pet Medicine',
     icon: 'medkit',
     price: MEDICINE_PRICE,
-    description: `Gives a Sick or Critical pet +${MEDICINE_NEED_BOOST} Hunger and +${MEDICINE_NEED_BOOST} Happiness. It doesn't cure by itself — she recovers once Hunger, Cleanliness and Happiness are all 50 or more.`,
+    descKey: 'careMedicineDesc',
     tint: '#FBD9E6',
     border: '#F28DAE',
   },
 ];
 
-function messageFor(kind: CareSupplyKind, result: CareSupplyResult, action: 'buy' | 'use'): string {
+// The message is chosen as a KEY (not text) so the shown message follows the language if it changes.
+type CareMessageKey =
+  | 'careBoughtWashcloth'
+  | 'careBoughtMedicine'
+  | 'careGivenMedicine'
+  | 'careNotEnough'
+  | 'carePaused'
+  | 'careNoneLeft'
+  | 'careNotNeeded'
+  | 'careFailed';
+
+function messageFor(kind: CareSupplyKind, result: CareSupplyResult, action: 'buy' | 'use'): CareMessageKey {
   if (result.ok) {
-    if (action === 'buy') return kind === 'washcloth' ? 'Bought a Gentle Washcloth!' : 'Bought Pet Medicine!';
-    return 'Medicine given. She feels a little better.';
+    if (action === 'buy') return kind === 'washcloth' ? 'careBoughtWashcloth' : 'careBoughtMedicine';
+    return 'careGivenMedicine';
   }
   switch (result.reason) {
     case 'insufficient':
-      return 'Not enough Paw Tokens yet. Complete your tasks to earn more!';
+      return 'careNotEnough';
     case 'deceased':
-      return 'Supplies are paused while your pet is resting in memory.';
+      return 'carePaused';
     case 'none-left':
-      return 'You have none left.';
+      return 'careNoneLeft';
     case 'not-needed':
-      return 'Medicine is only for a Sick or Critical pet that has hatched.';
+      return 'careNotNeeded';
     default:
-      return 'That did not work. Please try again.';
+      return 'careFailed';
   }
 }
 
 export function CareSuppliesSection() {
+  const { t } = useT();
   const family = usePetFamily();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<CareMessageKey | null>(null);
   // Which card the mouse is over (web); touch devices get pressed feedback instead.
   const [hoveredKind, setHoveredKind] = useState<CareSupplyKind | null>(null);
   const [pressedKind, setPressedKind] = useState<CareSupplyKind | null>(null);
@@ -93,7 +106,7 @@ export function CareSuppliesSection() {
   return (
     <View style={styles.wrap}>
       <ThemedText type="smallBold" style={styles.title}>
-        Pet Care Supplies
+        {t('careTitle')}
       </ThemedText>
       <View style={styles.row}>
         {ITEMS.map((item) => {
@@ -122,12 +135,12 @@ export function CareSuppliesSection() {
               <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
                 <Ionicons name={item.icon} size={26} color="#6B4A5A" />
               </View>
-              <ThemedText type="smallBold">{item.name}</ThemedText>
+              <ThemedText type="smallBold">{trName(item.name)}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.description}>
-                {item.description}
+                {t(item.descKey, { boost: MEDICINE_NEED_BOOST })}
               </ThemedText>
-              <ThemedText type="smallBold" accessibilityLabel={`You own ${owned}`}>
-                {`You own: ${owned}`}
+              <ThemedText type="smallBold" accessibilityLabel={t('careOwnLabel', { n: owned })}>
+                {t('careOwn', { n: owned })}
               </ThemedText>
               <Pressable
                 disabled={buyDisabled}
@@ -135,20 +148,20 @@ export function CareSuppliesSection() {
                 onHoverOut={() => setHoveredButton(null)}
                 onPress={() => setMessage(messageFor(item.kind, buyCareSupply(item.kind), 'buy'))}
                 accessibilityRole="button"
-                accessibilityLabel={`Buy ${item.name} for ${item.price} Paw Tokens`}
+                accessibilityLabel={t('careBuyLabel', { name: trName(item.name), price: item.price })}
                 style={({ pressed }) => [pressed && styles.pressed, buyDisabled && styles.disabled]}>
                 <ThemedView
                   type="accent"
                   style={[styles.button, hoveredButton === `buy-${item.kind}` && !buyDisabled && styles.buttonHover]}>
                   <PawTokenCoin size={16} />
                   <ThemedText type="smallBold" style={styles.buttonText}>
-                    {`Buy ${item.price}`}
+                    {`${t('shopBuy')} ${item.price}`}
                   </ThemedText>
                 </ThemedView>
               </Pressable>
               {!canAfford && !buyDisabled ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Need {item.price - family.wallet.pawTokens} more Paw Tokens — complete your tasks to earn them!
+                  {t('careNeedMore', { n: item.price - family.wallet.pawTokens })}
                 </ThemedText>
               ) : null}
               {item.kind === 'medicine' ? (
@@ -158,12 +171,12 @@ export function CareSuppliesSection() {
                   onHoverOut={() => setHoveredButton(null)}
                   onPress={() => setMessage(messageFor('medicine', giveMedicine(pet.id), 'use'))}
                   accessibilityRole="button"
-                  accessibilityLabel="Give Pet Medicine to the selected pet"
+                  accessibilityLabel={t('careGiveLabel')}
                   style={({ pressed }) => [pressed && styles.pressed, !canUseMedicine && styles.disabled]}>
                   <ThemedView
                     type="mint"
                     style={[styles.button, hoveredButton === 'give-medicine' && canUseMedicine && styles.buttonHover]}>
-                    <ThemedText type="smallBold">Give to {pet.name ?? 'her'}</ThemedText>
+                    <ThemedText type="smallBold">{t('careGiveTo', { name: pet.name ?? t('careGiveToHer') })}</ThemedText>
                   </ThemedView>
                 </Pressable>
               ) : null}
@@ -174,13 +187,12 @@ export function CareSuppliesSection() {
       </View>
       {deceased ? (
         <ThemedText type="small" themeColor="textSecondary">
-          Supplies can't be bought or used while your pet is resting in memory. Resurrect her from the memorial card
-          on Home to care for her again.
+          {t('careResting')}
         </ThemedText>
       ) : null}
       {message ? (
         <ThemedText type="smallBold" accessibilityRole="alert">
-          {message}
+          {t(message)}
         </ThemedText>
       ) : null}
     </View>

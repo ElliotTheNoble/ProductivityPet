@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 import {
   getPetLabel,
   getPetSpecies,
@@ -91,14 +92,33 @@ export function buildAlbumEntries(family: FamilyState): PetAlbumEntry[] {
   return [...living, ...retired, ...passed];
 }
 
+// Getters, so the label is read in the language that is current when it is shown.
 export const EVENT_LABELS: Record<PetEvent['type'], string> = {
-  adopted: 'Egg arrived',
-  hatched: 'Hatched (born)',
-  sick: 'Became sick',
-  critical: 'Became critical',
-  recovered: 'Recovered',
-  died: 'Passed away',
-  resurrected: 'Came back',
-  retired: 'Retired to Pet Pawadise',
-  returned: 'Came home from Pet Pawadise',
+  get adopted() {
+    return tr('evAdopted');
+  },
+  get hatched() {
+    return tr('evHatched');
+  },
+  get sick() {
+    return tr('evSick');
+  },
+  get critical() {
+    return tr('evCritical');
+  },
+  get recovered() {
+    return tr('evRecovered');
+  },
+  get died() {
+    return tr('evDied');
+  },
+  get resurrected() {
+    return tr('evResurrected');
+  },
+  get retired() {
+    return tr('evRetired');
+  },
+  get returned() {
+    return tr('evReturned');
+  },
 };

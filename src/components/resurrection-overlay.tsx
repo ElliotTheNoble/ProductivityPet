@@ -1,6 +1,9 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useT } from '@/i18n';
+import { AccessibilityInfo, Animated, Easing, Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { PetAvatar } from '@/components/pet-avatar';
 import { ThemedText } from '@/components/themed-text';
@@ -9,7 +12,7 @@ import { usePetFamily } from '@/hooks/use-pet-family';
 import { completeRevivalAnimation } from '@/utils/pet-family';
 import { RESURRECTION_ANIMATION_MS, GROWTH_UNITS_PER_TASK } from '@/utils/pet-family-config';
 import { getRenderedStage } from '@/utils/pet-growth';
-import { RESURRECTION_HAPPY_MESSAGE } from '@/utils/pet-life-messages';
+import { getResurrectionHappyMessage } from '@/utils/pet-life-messages';
 import { HOSPITAL_TRUCK_ASPECT_RATIO, HOSPITAL_TRUCK_SOURCE } from '@/utils/resurrection-art';
 
 // The pastel hospital-truck sequence shown after a successful resurrection:
@@ -36,6 +39,7 @@ const TRUCK_SCREEN_FRACTION = 0.7;
 type Phase = 'arriving' | 'working' | 'leaving' | 'reveal';
 
 export function ResurrectionOverlay() {
+  const { t } = useT();
   const family = usePetFamily();
   const { width } = useWindowDimensions();
   const pending = family?.pets.find((pet) => pet.revival && !pet.revival.done) ?? null;
@@ -138,7 +142,7 @@ export function ResurrectionOverlay() {
               <Image
                 source={HOSPITAL_TRUCK_SOURCE}
                 contentFit="contain"
-                accessibilityLabel="Pet hospital truck"
+                accessibilityLabel={t('rezTruckAlt')}
                 style={{ width: truckWidth, height: truckHeight }}
               />
             </Animated.View>
@@ -149,7 +153,7 @@ export function ResurrectionOverlay() {
                 equippedAccessoryIds={stage === 'Egg' ? [] : [petForView.equipped.bow, petForView.equipped.hat]}
                 size={180}
               />
-              <ThemedText style={styles.revealMessage}>{RESURRECTION_HAPPY_MESSAGE}</ThemedText>
+              <ThemedText style={styles.revealMessage}>{getResurrectionHappyMessage()}</ThemedText>
               <Pressable
                 onPress={() => {
                   setSession(null);
@@ -158,7 +162,7 @@ export function ResurrectionOverlay() {
                 accessibilityRole="button">
                 <View style={[styles.button, styles.pointer]}>
                   <ThemedText type="smallBold" style={styles.buttonText}>
-                    Yay! 💗
+                    {t('rezYay')}
                   </ThemedText>
                 </View>
               </Pressable>
@@ -170,10 +174,10 @@ export function ResurrectionOverlay() {
           <View style={styles.footer}>
             <ThemedText type="smallBold" style={styles.title}>
               {phase === 'arriving'
-                ? 'The Pet Hospital truck is on its way…'
+                ? t('rezArriving')
                 : phase === 'working'
-                  ? 'Bringing your pet back…'
-                  : 'All done! Driving off…'}
+                  ? t('rezWorking')
+                  : t('rezLeaving')}
             </ThemedText>
             <View
               style={styles.track}
@@ -191,7 +195,7 @@ export function ResurrectionOverlay() {
               }}
               accessibilityRole="button">
               <View style={[styles.skip, styles.pointer]}>
-                <ThemedText type="smallBold">Skip animation</ThemedText>
+                <ThemedText type="smallBold">{t('rezSkip')}</ThemedText>
               </View>
             </Pressable>
           </View>

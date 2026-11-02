@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT, type StringKey } from '@/i18n';
 import { BATH_DRY_HOLD_MS, isShowingBathDryHold as getIsShowingBathDryHold } from '@/utils/pet-bathing';
 import { getBathingStepArt } from '@/utils/bathing-stage-art';
 import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP, DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT } from '@/utils/dev-flags';
@@ -405,9 +406,11 @@ export function getPoopArt(size: PoopSize): { source: number; aspectRatio: numbe
 
 // Simple explanation: turns 'small' into 'Small' (capital letter), used
 // in the accessibility label read out when a pile is focused/tapped.
-function capitalizePoopSize(size: PoopSize): string {
-  return size.charAt(0).toUpperCase() + size.slice(1);
-}
+const POOP_SIZE_KEYS: Record<PoopSize, StringKey> = {
+  small: 'poopSizeSmall',
+  medium: 'poopSizeMedium',
+  large: 'poopSizeLarge',
+};
 
 // The speech bubble shows plain words: the little emoji / icons that some messages end with are
 // dropped here (the message texts themselves, their randomisation and priorities are unchanged,
@@ -441,6 +444,7 @@ export function PetPlaceholder({
   lastBathCompletedAt,
   toyId,
 }: PetPlaceholderProps) {
+  const { t } = useT();
   const theme = useTheme();
 
   // Simple explanation: decides whether to show the temporary "just
@@ -1051,9 +1055,11 @@ export function PetPlaceholder({
               disabled={pressedPileIds.has(pile.id)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel={`Clean up ${capitalizePoopSize(pile.size)} poop pile${
-                pile.cleanupRemaining > 1 ? `, ${pile.cleanupRemaining} clicks needed` : ''
-              }`}
+              accessibilityLabel={
+                pile.cleanupRemaining > 1
+                  ? t('poopCleanLabelMore', { size: t(POOP_SIZE_KEYS[pile.size]), n: pile.cleanupRemaining })
+                  : t('poopCleanLabel', { size: t(POOP_SIZE_KEYS[pile.size]) })
+              }
               style={({ pressed }) => [
                 styles.poopFloorIndicator,
                 {
@@ -1077,7 +1083,7 @@ export function PetPlaceholder({
                   style={[styles.poopFlashBubble, { opacity: anims.flashOpacity }]}
                   pointerEvents="none">
                   <ThemedText type="smallBold" style={styles.poopFlashText}>
-                    {flashRemaining[pile.id]} left!
+                    {t('poopLeft', { n: flashRemaining[pile.id] })}
                   </ThemedText>
                 </Animated.View>
               ) : null}
@@ -1139,7 +1145,7 @@ export function PetPlaceholder({
           <View style={styles.needBarHorizontal}>
             <View style={styles.needLabelRow}>
               <ThemedText type="small" themeColor="textSecondary">
-                Hunger
+                {t('needHunger')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {hungerPercent}%
@@ -1160,7 +1166,7 @@ export function PetPlaceholder({
           <View style={styles.needBarHorizontal}>
             <View style={styles.needLabelRow}>
               <ThemedText type="small" themeColor="textSecondary">
-                Cleanliness
+                {t('needCleanliness')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {cleanlinessPercent}%
@@ -1181,7 +1187,7 @@ export function PetPlaceholder({
           <View style={styles.needBarHorizontal}>
             <View style={styles.needLabelRow}>
               <ThemedText type="small" themeColor="textSecondary">
-                Happiness
+                {t('needHappiness')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {happinessPercent}%
@@ -1204,7 +1210,7 @@ export function PetPlaceholder({
           <View style={styles.needBarHorizontal}>
             <View style={styles.needLabelRow}>
               <ThemedText type="small" themeColor="textSecondary">
-                Energy
+                {t('needEnergy')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {energyPercent}%
@@ -1256,7 +1262,7 @@ export function PetPlaceholder({
               style={(state) => [state.pressed && styles.pressed, isFeeding && styles.actionButtonDisabled, hoverLift(state, !isFeeding)]}>
               <ThemedView type="accent" style={styles.actionButton}>
                 <ThemedText type="smallBold" style={styles.feedButtonText}>
-                  {isFeeding ? 'Feeding…' : 'Feed'}
+                  {isFeeding ? t('careFeeding') : t('careFeed')}
                 </ThemedText>
               </ThemedView>
             </Pressable>
@@ -1267,7 +1273,7 @@ export function PetPlaceholder({
               disabled={isPlaying}
               style={(state) => [state.pressed && styles.pressed, isPlaying && styles.actionButtonDisabled, hoverLift(state, !isPlaying)]}>
               <ThemedView type="mint" style={styles.actionButton}>
-                <ThemedText type="smallBold">{isPlaying ? 'Playing…' : 'Play'}</ThemedText>
+                <ThemedText type="smallBold">{isPlaying ? t('carePlaying') : t('carePlay')}</ThemedText>
               </ThemedView>
             </Pressable>
           ) : null}
@@ -1277,7 +1283,7 @@ export function PetPlaceholder({
               disabled={isResting}
               style={(state) => [state.pressed && styles.pressed, isResting && styles.actionButtonDisabled, hoverLift(state, !isResting)]}>
               <ThemedView type="backgroundSelected" style={styles.actionButton}>
-                <ThemedText type="smallBold">{isResting ? 'Resting…' : 'Rest'}</ThemedText>
+                <ThemedText type="smallBold">{isResting ? t('careResting') : t('careRest')}</ThemedText>
               </ThemedView>
             </Pressable>
           ) : null}

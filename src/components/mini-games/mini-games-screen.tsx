@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useT, type StringKey } from '@/i18n';
 import { KittyCatchGame } from '@/components/mini-games/kitty-catch-game';
 import { MemoryMatchGame } from '@/components/mini-games/memory-match-game';
 import { ThemedText } from '@/components/themed-text';
@@ -20,37 +23,38 @@ type MiniGameStatus = 'playable' | 'coming-soon';
 
 type MiniGameDefinition = {
   id: string;
-  name: string;
+  name: StringKey;
   emoji: string;
   status: MiniGameStatus;
-  description: string;
+  description: StringKey;
 };
 
 const MINI_GAMES: MiniGameDefinition[] = [
   {
     id: 'kitty-catch',
-    name: 'Kitty Catch',
+    name: 'mgKittyCatch',
     emoji: '🧶',
     status: 'playable',
-    description: 'Catch falling toys and treats before you miss one!',
+    description: 'mgKittyCatchDesc',
   },
   {
     id: 'memory-match',
-    name: 'Kitty Memory Match',
+    name: 'mgMemory',
     emoji: '🐾',
     status: 'playable',
-    description: 'Flip cards and find every matching pair!',
+    description: 'mgMemoryDesc',
   },
   {
     id: 'game-3',
-    name: 'Coming Soon',
+    name: 'mgSoonName',
     emoji: '🎲',
     status: 'coming-soon',
-    description: 'A new mini-game is on the way.',
+    description: 'mgSoonDesc',
   },
 ];
 
 export function MiniGamesScreen() {
+  const { t } = useT();
   const theme = useTheme();
   // null = showing the hub grid; otherwise the id of the game currently
   // being played, which is also what decides which game component the
@@ -96,10 +100,10 @@ export function MiniGamesScreen() {
           <View style={styles.headingWrap}>
             <ThemedView type="backgroundElementOverlay" style={styles.headingBanner}>
               <ThemedText type="title" style={styles.heading}>
-                Mini-Games
+                {t('mgTitle')}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary" style={styles.subheading}>
-                Play with your pet to earn Happiness and Paw Tokens!
+                {t('mgSub')}
               </ThemedText>
             </ThemedView>
           </View>
@@ -116,21 +120,21 @@ export function MiniGamesScreen() {
                   style={[styles.card, { borderColor: theme.backgroundSelected }]}>
                   <ThemedText style={styles.cardEmoji}>{game.emoji}</ThemedText>
                   <ThemedText type="smallBold" style={styles.cardName}>
-                    {game.name}
+                    {t(game.name)}
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary" style={styles.cardDescription}>
-                    {game.description}
+                    {t(game.description)}
                   </ThemedText>
                   {game.status === 'coming-soon' ? (
                     <ThemedView type="backgroundSelected" style={styles.badge}>
                       <ThemedText type="small" themeColor="textSecondary">
-                        Coming soon
+                        {t('mgComingSoon')}
                       </ThemedText>
                     </ThemedView>
                   ) : (
                     <ThemedView type="accent" style={styles.badge}>
                       <ThemedText type="smallBold" style={styles.playBadgeText}>
-                        Play
+                        {t('mgPlay')}
                       </ThemedText>
                     </ThemedView>
                   )}

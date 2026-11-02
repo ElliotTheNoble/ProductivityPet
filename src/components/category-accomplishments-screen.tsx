@@ -1,3 +1,5 @@
+import { useT } from '@/i18n';
+import { categoryLabel } from '@/utils/categorize-task';
 import { useEffect, useState } from 'react';
 
 import {
@@ -34,6 +36,7 @@ export const CATEGORY_BAR_COLOR: Record<TaskCategory, string> = {
 // task list (see @/utils/category-accomplishments.ts), read through the same
 // shared in-memory task cache every other screen uses. This page never writes.
 export function CategoryAccomplishmentsScreen({ category }: { category: TaskCategory }) {
+  const { t, tn } = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
 
   // Stats-area pages remount on every visit, so a mount-time read always
@@ -60,31 +63,30 @@ export function CategoryAccomplishmentsScreen({ category }: { category: TaskCate
     <DetailPageShell>
       <DetailTitleCard
         icon={<StatsIcon crop={CATEGORY_ICON_CROP[category]} size={72} />}
-        title={`${category} Accomplishments`}
+        title={t('catPageTitle', { category: categoryLabel(category) })}
         backgroundColor={background}
       />
 
       <SummaryRow>
-        <SummaryCard value={entries.length} label="completed in total" backgroundColor={background} />
-        <SummaryCard value={weekCount} label={`this week (last ${CHART_DAYS} days)`} backgroundColor={background} />
+        <SummaryCard value={entries.length} label={t('catPageTotal')} backgroundColor={background} />
+        <SummaryCard value={weekCount} label={t('catPageWeek', { days: CHART_DAYS })} backgroundColor={background} />
       </SummaryRow>
 
-      <DetailPanel title="📊 Completed per day">
+      <DetailPanel title={t('catPageChart')}>
         <CompletedBarChart buckets={buckets} color={CATEGORY_BAR_COLOR[category]} />
         {undatedCount > 0 ? (
           <DetailNote>
-            {undatedCount} earlier {undatedCount === 1 ? 'task was' : 'tasks were'} completed before completion
-            dates were recorded, so {undatedCount === 1 ? 'it isn’t' : 'they aren’t'} shown on the chart.
+            {tn('catPageEarlier', undatedCount)}
           </DetailNote>
         ) : null}
       </DetailPanel>
 
-      <DetailPanel title="✅ Completed tasks">
+      <DetailPanel title={t('catPageList')}>
         {entries.length === 0 ? (
           <DetailEmptyState
             icon={<StatsIcon crop={CATEGORY_ICON_CROP[category]} size={64} />}
-            title="Nothing completed here yet"
-            text={`Finish a ${category.toLowerCase()} task on Home or the Tasks page and it will show up here!`}
+            title={t('catPageEmptyTitle')}
+            text={t('catPageEmptyText', { category: categoryLabel(category).toLowerCase() })}
           />
         ) : (
           entries.map((entry) => <CompletedEntryRow key={entry.key} entry={entry} />)

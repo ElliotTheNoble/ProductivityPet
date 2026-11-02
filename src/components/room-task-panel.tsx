@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+
+import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
 import { TaskIcon } from '@/components/task-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useT } from '@/i18n';
+import { roomShortName, roomTasksTitle } from '@/utils/rooms';
 import type { DisplayTask } from '@/utils/tasks';
 
 // Same breakpoint Home uses for its own two-column vs. stacked layout
@@ -17,6 +21,7 @@ const WIDE_PANEL_BREAKPOINT = 700;
 type RoomTaskPanelProps = {
   // Display name matching RoomInfo.name — 'Study Room', 'Gym', etc. — used
   // only for the "<Room> Tasks" header text.
+  // The room's slug ('study-room', 'gym', ...), not a display name: the heading is looked up per language.
   roomName: string;
   // Already filtered to just this room's own tasks and sorted
   // important-first by the caller (see getRoomTasks in
@@ -50,6 +55,7 @@ type RoomTaskPanelProps = {
 // way to collapse it again — sized and positioned to stay clear of the
 // Back to Rooms button in the bottom-left (see room-detail-screen.tsx).
 export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side = 'right' }: RoomTaskPanelProps) {
+  const { t } = useT();
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const isWide = width >= WIDE_PANEL_BREAKPOINT;
@@ -72,7 +78,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
   const panelBody = (
     <>
       <View style={styles.headerRow}>
-        <ThemedText type="smallBold">{roomName} Tasks</ThemedText>
+        <ThemedText type="smallBold">{roomTasksTitle(roomName)}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {completedCount}/{totalCount}
         </ThemedText>
@@ -86,7 +92,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
         {totalCount === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-            No tasks yet! Let&apos;s add one! 🐾
+            {t('panelEmpty')}
           </ThemedText>
         ) : (
           tasks.map((task) => (
@@ -120,14 +126,14 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
 
       {allDone ? (
         <ThemedText type="smallBold" themeColor="accent" style={styles.celebrateText}>
-          Yippee! All done! 🎉
+          {t('panelAllDone')}
         </ThemedText>
       ) : null}
 
       <TextInput
         value={draftText}
         onChangeText={setDraftText}
-        placeholder="What needs doing here?"
+        placeholder={t('panelPlaceholder')}
         placeholderTextColor={theme.textSecondary}
         style={[
           styles.input,
@@ -139,7 +145,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
       <Pressable onPress={handleAdd} style={({ pressed }) => pressed && styles.pressed}>
         <ThemedView type="accent" style={styles.addButton}>
           <ThemedText type="smallBold" style={styles.addButtonText}>
-            + Add a task to this room
+            {t('panelAdd')}
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -176,11 +182,14 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
         style={({ pressed }) => [
           styles.collapsedPillAnchor,
           isLeft ? { left: Spacing.three } : { right: Spacing.three },
+          // On a phone the Back to Rooms button sits bottom-left; a longer (Spanish) heading wraps in the space
+          // that is left instead of sliding under that button.
+          width < 700 ? { maxWidth: Math.max(120, width - 215) } : null,
           pressed && styles.pressed,
         ]}>
         <ThemedView type="backgroundElementOverlay" style={styles.collapsedPill}>
           <ThemedText type="smallBold">
-            📋 {roomName} ({completedCount}/{totalCount})
+            📋 {roomShortName(roomName)} ({completedCount}/{totalCount})
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -199,7 +208,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
         onPress={() => setIsExpanded(false)}
         style={({ pressed }) => [styles.collapseButton, pressed && styles.pressed]}>
         <ThemedText type="small" themeColor="textSecondary">
-          ▾ Collapse
+          {t('panelCollapse')}
         </ThemedText>
       </Pressable>
       {panelBody}
