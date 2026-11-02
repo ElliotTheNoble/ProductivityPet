@@ -1,0 +1,297 @@
+{
+  "@ProductivityPet:petFamily": {
+    "version": 1,
+    "selectedPetId": "pet-1700000000000",
+    "pets": [
+      {
+        "id": "pet-1700000000000",
+        "name": "Biscuit",
+        "profile": {
+          "hunger": 80,
+          "cleanliness": 70,
+          "happiness": 60,
+          "energy": 90,
+          "pawTokens": 0,
+          "adoptionDate": "2025-12-10T15:00:00.000Z",
+          "lastUpdatedAt": "2026-03-10T15:00:00.000Z",
+          "isSleeping": false,
+          "isSick": false,
+          "poopPiles": [],
+          "nextPoopEventAt": "",
+          "needsBath": false,
+          "paidStageIndex": 4,
+          "hatchedAt": "2025-12-30T15:00:00.000Z",
+          "lastBathCompletedAt": ""
+        },
+        "growthUnits": 1386000,
+        "tasksCounted": 50,
+        "lifecycle": {
+          "state": "healthy",
+          "exhausted": false,
+          "lastEvaluatedAt": "2026-03-10T15:00:00.000Z"
+        },
+        "equipped": {
+          "hat": "hat-1",
+          "bow": null
+        },
+        "events": [
+          {
+            "id": "adopted:2025-12-10T15:00:00.000Z",
+            "type": "adopted",
+            "at": "2025-12-10T15:00:00.000Z"
+          },
+          {
+            "id": "hatched:2025-12-30T15:00:00.000Z",
+            "type": "hatched",
+            "at": "2025-12-30T15:00:00.000Z"
+          }
+        ],
+        "peak": {
+          "stageIndex": 4,
+          "level": 5
+        },
+        "createdAt": "2025-12-10T15:00:00.000Z"
+      },
+      {
+        "id": "pet-1700000000001",
+        "name": "Mochi",
+        "profile": {
+          "hunger": 0,
+          "cleanliness": 60,
+          "happiness": 55,
+          "energy": 70,
+          "pawTokens": 0,
+          "adoptionDate": "2026-01-09T15:00:00.000Z",
+          "lastUpdatedAt": "2026-03-10T15:00:00.000Z",
+          "isSleeping": false,
+          "isSick": false,
+          "poopPiles": [],
+          "nextPoopEventAt": "",
+          "needsBath": false,
+          "paidStageIndex": 0,
+          "hatchedAt": "2026-02-08T15:00:00.000Z",
+          "lastBathCompletedAt": ""
+        },
+        "growthUnits": 388080,
+        "tasksCounted": 14,
+        "lifecycle": {
+          "state": "sick",
+          "exhausted": false,
+          "lastEvaluatedAt": "2026-03-10T15:00:00.000Z",
+          "sickSince": "2026-03-10T13:00:00.000Z"
+        },
+        "equipped": {
+          "hat": null,
+          "bow": null
+        },
+        "events": [
+          {
+            "id": "adopted:2026-01-29T15:00:00.000Z",
+            "type": "adopted",
+            "at": "2026-01-29T15:00:00.000Z"
+          },
+          {
+            "id": "hatched:2026-02-08T15:00:00.000Z",
+            "type": "hatched",
+            "at": "2026-02-08T15:00:00.000Z"
+          },
+          {
+            "id": "sick:2026-03-10T13:00:00.000Z",
+            "type": "sick",
+            "at": "2026-03-10T13:00:00.000Z"
+          }
+        ],
+        "peak": {
+          "stageIndex": 1,
+          "level": 2
+        },
+        "createdAt": "2026-01-29T15:00:00.000Z"
+      },
+      {
+        "id": "pet-1700000000002",
+        "name": "Luna",
+        "profile": {
+          "hunger": 0,
+          "cleanliness": 0,
+          "happiness": 20,
+          "energy": 40,
+          "pawTokens": 0,
+          "adoptionDate": "2026-01-09T15:00:00.000Z",
+          "lastUpdatedAt": "2026-03-10T15:00:00.000Z",
+          "isSleeping": false,
+          "isSick": false,
+          "poopPiles": [],
+          "nextPoopEventAt": "",
+          "needsBath": false,
+          "paidStageIndex": 0,
+          "hatchedAt": "2026-02-18T15:00:00.000Z",
+          "lastBathCompletedAt": ""
+        },
+        "growthUnits": 332640,
+        "tasksCounted": 12,
+        "lifecycle": {
+          "state": "critical",
+          "exhausted": false,
+          "lastEvaluatedAt": "2026-03-10T15:00:00.000Z",
+          "sickSince": "2026-03-09T09:00:00.000Z",
+          "criticalSince": "2026-03-10T09:00:00.000Z"
+        },
+        "equipped": {
+          "hat": null,
+          "bow": null
+        },
+        "events": [
+          {
+            "id": "adopted:2026-02-13T15:00:00.000Z",
+            "type": "adopted",
+            "at": "2026-02-13T15:00:00.000Z"
+          },
+          {
+            "id": "hatched:2026-02-18T15:00:00.000Z",
+            "type": "hatched",
+            "at": "2026-02-18T15:00:00.000Z"
+          },
+          {
+            "id": "sick:2026-03-09T09:00:00.000Z",
+            "type": "sick",
+            "at": "2026-03-09T09:00:00.000Z"
+          },
+          {
+            "id": "critical:2026-03-10T09:00:00.000Z",
+            "type": "critical",
+            "at": "2026-03-10T09:00:00.000Z"
+          }
+        ],
+        "peak": {
+          "stageIndex": 1,
+          "level": 2
+        },
+        "createdAt": "2026-02-13T15:00:00.000Z"
+      },
+      {
+        "id": "pet-1700000000003",
+        "name": "Shadow",
+        "profile": {
+          "hunger": 0,
+          "cleanliness": 0,
+          "happiness": 0,
+          "energy": 10,
+          "pawTokens": 0,
+          "adoptionDate": "2026-01-09T15:00:00.000Z",
+          "lastUpdatedAt": "2026-03-10T15:00:00.000Z",
+          "isSleeping": false,
+          "isSick": false,
+          "poopPiles": [],
+          "nextPoopEventAt": "",
+          "needsBath": false,
+          "paidStageIndex": 3,
+          "hatchedAt": "2025-11-30T15:00:00.000Z",
+          "lastBathCompletedAt": ""
+        },
+        "growthUnits": 1164240,
+        "tasksCounted": 42,
+        "lifecycle": {
+          "state": "deceased",
+          "exhausted": false,
+          "lastEvaluatedAt": "2026-03-10T15:00:00.000Z",
+          "sickSince": "2026-02-24T15:00:00.000Z",
+          "criticalSince": "2026-02-25T15:00:00.000Z",
+          "diedAt": "2026-02-28T15:00:00.000Z"
+        },
+        "equipped": {
+          "hat": null,
+          "bow": "bow-1"
+        },
+        "events": [
+          {
+            "id": "adopted:2025-11-20T15:00:00.000Z",
+            "type": "adopted",
+            "at": "2025-11-20T15:00:00.000Z"
+          },
+          {
+            "id": "hatched:2025-11-30T15:00:00.000Z",
+            "type": "hatched",
+            "at": "2025-11-30T15:00:00.000Z"
+          },
+          {
+            "id": "died:2026-02-28T15:00:00.000Z",
+            "type": "died",
+            "at": "2026-02-28T15:00:00.000Z"
+          }
+        ],
+        "peak": {
+          "stageIndex": 3,
+          "level": 4
+        },
+        "createdAt": "2025-11-20T15:00:00.000Z"
+      },
+      {
+        "id": "pet-1700000000004",
+        "name": "Sunny",
+        "profile": {
+          "hunger": 55,
+          "cleanliness": 45,
+          "happiness": 65,
+          "energy": 50,
+          "pawTokens": 0,
+          "adoptionDate": "2026-01-09T15:00:00.000Z",
+          "lastUpdatedAt": "2026-03-10T15:00:00.000Z",
+          "isSleeping": false,
+          "isSick": false,
+          "poopPiles": [],
+          "nextPoopEventAt": "",
+          "needsBath": false,
+          "paidStageIndex": 0,
+          "hatchedAt": "2026-01-19T15:00:00.000Z",
+          "lastBathCompletedAt": ""
+        },
+        "growthUnits": 609840,
+        "tasksCounted": 22,
+        "lifecycle": {
+          "state": "healthy",
+          "exhausted": false,
+          "lastEvaluatedAt": "2026-03-10T15:00:00.000Z"
+        },
+        "equipped": {
+          "hat": null,
+          "bow": null
+        },
+        "retired": {
+          "since": "2026-03-05T15:00:00.000Z"
+        },
+        "events": [
+          {
+            "id": "adopted:2026-01-09T15:00:00.000Z",
+            "type": "adopted",
+            "at": "2026-01-09T15:00:00.000Z"
+          },
+          {
+            "id": "hatched:2026-01-19T15:00:00.000Z",
+            "type": "hatched",
+            "at": "2026-01-19T15:00:00.000Z"
+          },
+          {
+            "id": "retired:2026-03-05T15:00:00.000Z",
+            "type": "retired",
+            "at": "2026-03-05T15:00:00.000Z"
+          }
+        ],
+        "peak": {
+          "stageIndex": 2,
+          "level": 3
+        },
+        "createdAt": "2026-01-09T15:00:00.000Z"
+      }
+    ],
+    "wallet": {
+      "pawTokens": 640
+    },
+    "supplies": {
+      "washcloth": 2,
+      "medicine": 1
+    },
+    "toys": {
+      "yarn-ball": 1
+    }
+  }
+}

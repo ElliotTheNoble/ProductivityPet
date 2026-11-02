@@ -22,6 +22,8 @@ import type { Task } from '@/utils/tasks';
 // unchecked, stopped, excluded, or deleted — only ever added to.
 
 const AWARDED_TASK_TOKENS_STORAGE_KEY = '@ProductivityPet:awardedTaskTokens';
+// token-history.ts owns this key; only read here to tell a returning player from a new one.
+const TOKEN_HISTORY_KEY = '@ProductivityPet:tokenEarnings';
 
 // The app's actual reward amounts. Birthdays are excluded entirely (same
 // as everywhere else that counts completions, e.g. countCompletedOccurrences
@@ -56,6 +58,74 @@ function getCompletedOccurrences(
     }
   }
   return occurrences;
+}
+
+// ---- reward-history health ----
+// What the last load of the paid-occurrences record found. 'ok' = a valid record; 'new-player' = no record and
+// nothing earned yet; 'recovered-missing' = no record but the player has earned before (rebuilt, see below);
+// 'recovered-corrupt' = the record was unreadable: the original is kept under `backupKey` and the record was
+// rebuilt without paying anything again; 'unreadable' = storage could not be read or the original could not be
+// preserved, so nothing was paid or changed and the next call tries again.
+export type RewardHistoryStatus =
+  | { state: 'ok' | 'new-player' | 'recovered-missing' | 'unreadable' }
+  | { state: 'recovered-corrupt'; backupKey: string };
+
+let rewardHistoryStatus: RewardHistoryStatus | null = null;
+const statusListeners = new Set<(status: RewardHistoryStatus) => void>();
+
+export function getRewardHistoryStatus(): RewardHistoryStatus | null {
+  return rewardHistoryStatus;
+}
+
+export function subscribeToRewardHistoryStatus(listener: (status: RewardHistoryStatus) => void): () => void {
+  statusListeners.add(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+function setRewardHistoryStatus(status: RewardHistoryStatus): void {
+  rewardHistoryStatus = status;
+  if (status.state === 'recovered-corrupt' || status.state === 'unreadable') {
+    console.warn(`[Paw Tokens] reward history: ${status.state}`);
+  }
+  statusListeners.forEach((listener) => listener(status));
+}
+
+// The saved keys, or null when the record is not a readable list of keys.
+function parseAwardedKeys(stored: string): Set<string> | null {
+  try {
+    const parsed = JSON.parse(stored) as unknown;
+    return Array.isArray(parsed) ? new Set(parsed.filter((key): key is string => typeof key === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Whole quoted strings that can still be read from a damaged record (for example a list cut off in the
+// middle). Extra keys only ever prevent a payment, so over-collecting is harmless.
+function salvageAwardedKeys(stored: string): string[] {
+  return Array.from(stored.matchAll(/"((?:[^"\\]|\\.)*)"/g), (match) => match[1]).filter((key) => key.length > 0);
+}
+
+async function writeAwardedKeys(keys: Set<string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(AWARDED_TASK_TOKENS_STORAGE_KEY, JSON.stringify(Array.from(keys)));
+  } catch {
+    // Non-fatal — still usable for this session via the in-memory
+    // cache; the next successful write retries persisting it.
+  }
+}
+
+// True when the earnings history (a separate record, see token-history.ts) already holds a task/appointment
+// payout, i.e. this is not a brand-new player.
+async function hasEarnedBefore(): Promise<boolean> {
+  try {
+    const stored = await AsyncStorage.getItem(TOKEN_HISTORY_KEY);
+    return typeof stored === 'string' && stored.includes('"id":"earn:');
+  } catch {
+    return false;
+  }
 }
 
 // In-memory cache of the awarded-keys record, loaded at most once per
@@ -94,29 +164,46 @@ async function runReconcile(tasks: Task[]): Promise<void> {
     try {
       stored = await AsyncStorage.getItem(AWARDED_TASK_TOKENS_STORAGE_KEY);
     } catch {
-      stored = null;
-    }
-
-    if (stored === null) {
-      cachedAwardedKeys = new Set(completedOccurrences.map((occurrence) => occurrence.key));
-      try {
-        await AsyncStorage.setItem(
-          AWARDED_TASK_TOKENS_STORAGE_KEY,
-          JSON.stringify(Array.from(cachedAwardedKeys))
-        );
-      } catch {
-        // Non-fatal — still usable for this session via the in-memory
-        // cache; the next successful write retries persisting it.
-      }
+      // The record could not even be READ, so nothing is known about what was paid. Pay nothing, write
+      // nothing (the real record may be fine) and try again on the next call.
+      setRewardHistoryStatus({ state: 'unreadable' });
       return;
     }
 
-    try {
-      const parsed = JSON.parse(stored) as unknown;
-      cachedAwardedKeys = new Set(Array.isArray(parsed) ? parsed.filter((key) => typeof key === 'string') : []);
-    } catch {
-      cachedAwardedKeys = new Set();
+    if (stored === null) {
+      // No record at all. A new player has nothing completed (or never earned anything); a player who has
+      // earned before and lost the record is told apart by their earnings history. Either way the
+      // currently-completed occurrences are recorded as already paid and nothing is paid for them.
+      const existingPlayer = completedOccurrences.length > 0 || (await hasEarnedBefore());
+      cachedAwardedKeys = new Set(completedOccurrences.map((occurrence) => occurrence.key));
+      await writeAwardedKeys(cachedAwardedKeys);
+      setRewardHistoryStatus({ state: existingPlayer ? 'recovered-missing' : 'new-player' });
+      return;
     }
+
+    const keys = parseAwardedKeys(stored);
+    if (keys === null) {
+      // The record exists but is unreadable. It is NEVER treated as "nothing was paid" (that would pay every
+      // completed task again). First keep the original text; only if that copy is safely stored, rebuild:
+      // every key that can still be read from it, plus everything currently completed counts as already
+      // paid. This can only skip a reward, never repeat one. Nothing is paid on this call.
+      const backupKey = `${AWARDED_TASK_TOKENS_STORAGE_KEY}.corrupt-${Date.now()}`;
+      try {
+        await AsyncStorage.setItem(backupKey, stored);
+      } catch {
+        // Could not preserve the original, so leave it exactly as it is and try again next time.
+        setRewardHistoryStatus({ state: 'unreadable' });
+        return;
+      }
+      const rebuilt = new Set(salvageAwardedKeys(stored));
+      for (const occurrence of completedOccurrences) rebuilt.add(occurrence.key);
+      cachedAwardedKeys = rebuilt;
+      await writeAwardedKeys(rebuilt);
+      setRewardHistoryStatus({ state: 'recovered-corrupt', backupKey });
+      return;
+    }
+    cachedAwardedKeys = keys;
+    setRewardHistoryStatus({ state: 'ok' });
   }
 
   const newlyCompleted = completedOccurrences.filter((occurrence) => !cachedAwardedKeys!.has(occurrence.key));

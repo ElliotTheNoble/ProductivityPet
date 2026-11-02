@@ -1,0 +1,183 @@
+{
+  "@ProductivityPet:petProfile": {
+    "hunger": 0,
+    "cleanliness": 35,
+    "happiness": 40,
+    "energy": 20,
+    "pawTokens": 275,
+    "adoptionDate": "2026-01-05T12:00:00.000Z",
+    "lastUpdatedAt": "2026-03-10T03:00:00.000Z",
+    "isSleeping": false,
+    "isSick": false,
+    "poopPiles": [],
+    "nextPoopEventAt": "",
+    "needsBath": false,
+    "paidStageIndex": 0,
+    "hatchedAt": "2026-01-20T12:00:00.000Z",
+    "lastBathCompletedAt": ""
+  },
+  "@ProductivityPet:tasks": [
+    {
+      "id": "t0",
+      "text": "t0",
+      "category": "Home",
+      "important": true,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t1",
+      "text": "t1",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t2",
+      "text": "t2",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t3",
+      "text": "t3",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t4",
+      "text": "t4",
+      "category": "Home",
+      "important": true,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t5",
+      "text": "t5",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t6",
+      "text": "t6",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t7",
+      "text": "t7",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t8",
+      "text": "t8",
+      "category": "Home",
+      "important": true,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t9",
+      "text": "t9",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t10",
+      "text": "t10",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "t11",
+      "text": "t11",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "daily",
+      "text": "daily",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": false,
+      "repeat": {
+        "kind": "daily"
+      },
+      "completedDates": [
+        "2026-03-01",
+        "2026-03-02",
+        "2026-03-03"
+      ]
+    },
+    {
+      "id": "appt",
+      "text": "appt",
+      "category": "Home",
+      "important": false,
+      "kind": "event",
+      "date": "2026-03-01",
+      "completed": true
+    },
+    {
+      "id": "open",
+      "text": "open",
+      "category": "Home",
+      "important": false,
+      "kind": "task",
+      "date": "2026-03-01",
+      "completed": false
+    }
+  ],
+  "@ProductivityPet:equippedPetHatId": "hat-1",
+  "@ProductivityPet:awardedTaskTokens": [
+    "t0",
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+    "t7",
+    "t8",
+    "t9",
+    "t10",
+    "t11",
+    "appt"
+  ],
+  "@ProductivityPet:ownedShopItems": [
+    "hat-1"
+  ]
+}

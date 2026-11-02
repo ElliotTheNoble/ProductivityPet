@@ -2,6 +2,41 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-02] — M1 hardening: reward-history safety (BUG-069) and npm audit review
+
+### Fixed
+- BUG-069: if the record of already-paid tasks is missing, unreadable or damaged, completed tasks are no longer paid again. A damaged original is copied aside first (`awardedTaskTokens.corrupt-<time>`), the record is rebuilt without paying anything, and if storage cannot be read or the copy cannot be written nothing is paid or overwritten and it retries. A new player is told apart from a returning player whose record vanished. Valid records, reward amounts and the wallet are unchanged. `paw-tokens.ts` also exposes `getRewardHistoryStatus()` / `subscribeToRewardHistoryStatus()`; no on-screen message was added.
+
+### Tests
+- 12 new regression tests (corrupt in five shapes, partial salvage, restart, backup failure, read failure, valid, empty list, missing for new and returning players, wallet untouched). 105 of 105 pass; the 12 new ones fail against the old code.
+
+### npm audit (reviewed, nothing changed)
+- 47 warnings: 1 critical, 9 high, 32 moderate, 5 low. Before Jest was added the same project had 25 (1 critical, 9 high, 13 moderate, 2 low), so Jest added 22 (19 moderate, 3 low) and no critical or high ones. Almost all are build or dev-server tooling. Full details are in BUG-070; no `npm audit fix` of any kind was run and no dependency was upgraded (the lockfile only gained the 249 test-tool packages; no existing version changed). Compatible security updates are a separate future milestone.
+
+### Checked
+- `npm test`: 105 of 105 pass. `npx tsc --noEmit`: 0 errors. It had briefly failed only on `.expo/types/router.d.ts`, a generated, git-ignored file the running dev server left half-written (BUG-071); the server rewrote it itself and nothing in the project was excluded or changed. A fresh generation in a scratch copy contained no `tests/` routes.
+
+### Not tested
+- A real device with damaged storage. The reward-history status is not shown on screen (a bilingual recovery notice is a future improvement). During a recovery from a damaged record, a task that was completed but not yet paid may not be rewarded (BUG-069).
+
+## [2026-11-02] — Testing foundation (Family Cloud milestone M1)
+
+### Added
+- Automated tests: Jest 29 with the jest-expo preset (`npm test`), 93 tests in four suites covering pet needs, bedtime and closed-app catch-up, sickness / Critical / death timing, free recovery, resurrection, growth sharing, Paw Token rewards and duplicate-reward prevention, clock edge cases, deterministic event ids, and loading hand-built saved-data fixtures (a five-pet family and the original single-pet save). Tests use an in-memory AsyncStorage and a fixed time zone and never touch real saves.
+- Dev dependencies: jest, jest-expo, @types/jest. `package.json` gets a "test" script and Jest settings; `tests/` holds the tests, helpers and fixtures.
+
+### Unchanged
+- No file under `src/` was changed. Pet mortality, rewards, saved data, artwork, animations, mini-games, layouts, translations and hover effects are exactly as before. No cloud, account, Supabase or profile-storage work was started (that is M2 and later).
+
+### Checked
+- `npx tsc --noEmit` is clean and all 93 tests pass (two consecutive runs). Temporarily breaking four rules made the matching tests fail, then the changes were reverted.
+
+### Found
+- BUG-069 (open): an unreadable "already paid" record would re-pay completed tasks. Not fixed.
+
+### Not tested
+- Screens and hooks, notification scheduling, shop purchases, mini-game reward caps, Pawadise timers, household/onboarding stores, and real devices.
+
 ## [2026-11-01] — Mailbox landscape fix
 
 ### Fixed
