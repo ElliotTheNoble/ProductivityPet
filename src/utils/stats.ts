@@ -1,4 +1,4 @@
-import type { TaskCategory } from '@/utils/categorize-task';
+import { displayCategory, type TaskCategory } from '@/utils/categorize-task';
 import { countCompletedOccurrences, type Task } from '@/utils/tasks';
 
 // The 5 categories categorizeTask() can ever assign — listed here only for
@@ -15,7 +15,7 @@ export const ALL_CATEGORIES: TaskCategory[] = ['Study', 'Exercise', 'Clean', 'He
 export function getCategoryCompletionCounts(tasks: Task[]): Record<TaskCategory, number> {
   const counts: Record<TaskCategory, number> = { Study: 0, Exercise: 0, Clean: 0, Health: 0, Personal: 0 };
   for (const task of tasks) {
-    counts[task.category] += countCompletedOccurrences(task);
+    counts[displayCategory(task.category)] += countCompletedOccurrences(task); // an unknown saved category counts as Personal
   }
   return counts;
 }

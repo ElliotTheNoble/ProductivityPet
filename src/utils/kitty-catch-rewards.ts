@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+
 import { KITTY_CATCH_MIN_SCORE_FOR_BONUS } from '@/utils/kitty-catch';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
@@ -15,8 +17,8 @@ import { recordTokenEarning } from '@/utils/token-history';
 // component itself just calls completeKittyCatchRound(score) once per
 // finished round and renders whatever comes back.
 
-const HIGH_SCORE_STORAGE_KEY = '@ProductivityPet:kittyCatchHighScore';
-const DAILY_REWARDS_STORAGE_KEY = '@ProductivityPet:kittyCatchDailyRewards';
+const HIGH_SCORE_KEY_NAME = 'kittyCatchHighScore'; // belongs to the active profile (see @/utils/profiles.ts)
+const DAILY_KEY_NAME = 'kittyCatchDailyRewards';
 
 // The app's actual reward amounts/limits for this game.
 export const KITTY_CATCH_HAPPINESS_REWARD = 10;
@@ -42,10 +44,16 @@ function createDefaultDailyRecord(date: string): DailyRewardRecord {
 let cachedHighScore: number | undefined = undefined;
 let cachedDailyRecord: DailyRewardRecord | undefined = undefined;
 
-async function loadHighScore(): Promise<number> {
+function loadHighScore(): Promise<number> {
+  if (cachedHighScore !== undefined) return Promise.resolve(cachedHighScore);
+  return trackOperation(doLoadHighScore());
+}
+
+async function doLoadHighScore(): Promise<number> {
   if (cachedHighScore !== undefined) return cachedHighScore;
   try {
-    const stored = await AsyncStorage.getItem(HIGH_SCORE_STORAGE_KEY);
+    await ensureProfilesReady();
+    const stored = await AsyncStorage.getItem(scopedKey(HIGH_SCORE_KEY_NAME));
     const parsed = stored !== null ? Number(stored) : 0;
     cachedHighScore = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
   } catch {
@@ -56,7 +64,7 @@ async function loadHighScore(): Promise<number> {
 
 function saveHighScore(score: number): void {
   cachedHighScore = score;
-  AsyncStorage.setItem(HIGH_SCORE_STORAGE_KEY, String(score)).catch(() => {});
+  void writeScoped(scopedKey(HIGH_SCORE_KEY_NAME), String(score));
 }
 
 // Read-only: lets the hub/game screen show "Best: N" before a round even
@@ -65,14 +73,19 @@ export async function getKittyCatchHighScore(): Promise<number> {
   return loadHighScore();
 }
 
-async function loadDailyRecord(): Promise<DailyRewardRecord> {
+function loadDailyRecord(): Promise<DailyRewardRecord> {
+  return trackOperation(doLoadDailyRecord());
+}
+
+async function doLoadDailyRecord(): Promise<DailyRewardRecord> {
   const today = todayISO();
   if (cachedDailyRecord !== undefined && cachedDailyRecord.date === today) {
     return cachedDailyRecord;
   }
 
   try {
-    const stored = await AsyncStorage.getItem(DAILY_REWARDS_STORAGE_KEY);
+    await ensureProfilesReady();
+    const stored = await AsyncStorage.getItem(scopedKey(DAILY_KEY_NAME));
     if (stored) {
       const parsed = JSON.parse(stored) as unknown;
       if (
@@ -100,7 +113,7 @@ async function loadDailyRecord(): Promise<DailyRewardRecord> {
 
 function saveDailyRecord(record: DailyRewardRecord): void {
   cachedDailyRecord = record;
-  AsyncStorage.setItem(DAILY_REWARDS_STORAGE_KEY, JSON.stringify(record)).catch(() => {});
+  void writeScoped(scopedKey(DAILY_KEY_NAME), JSON.stringify(record));
 }
 
 export type KittyCatchRewardOutcome = {
@@ -221,3 +234,13 @@ async function runCompleteRound(score: number): Promise<KittyCatchRoundResult> {
     profile: updatedProfile,
   };
 }
+
+// Profile switching: wait for a round in progress, then forget this profile's high score and daily limits.
+registerProfileStore({
+  name: 'kitty-catch',
+  settle: () => (pendingRound ?? Promise.resolve()).catch(() => undefined),
+  reset: () => {
+    cachedHighScore = undefined;
+    cachedDailyRecord = undefined;
+  },
+});

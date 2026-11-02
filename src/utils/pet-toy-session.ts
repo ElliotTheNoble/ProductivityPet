@@ -40,6 +40,16 @@ export function startToySession(petId: string, toyId: string, durationMs = TOY_S
   return true;
 }
 
+// Ends every session and cancels every timer (used when the active profile changes: sessions belong to pets).
+export function resetToySessions(): void {
+  timers.forEach((t) => clearTimeout(t));
+  timers.clear();
+  if (sessions.size > 0) {
+    sessions.clear();
+    emit();
+  }
+}
+
 export function endToySession(petId: string): void {
   const t = timers.get(petId);
   if (t) clearTimeout(t);

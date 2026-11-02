@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -33,8 +35,8 @@ import { describeNeededCare } from '@/utils/pet-life-messages';
 // Local notifications need a development or production build on Android;
 // Expo Go can't schedule them, and every native call here fails safe.
 
-const SETTINGS_KEY = '@ProductivityPet:petAlertSettings';
-const SCHEDULE_KEY = '@ProductivityPet:petAlertSchedule';
+const SETTINGS_KEY_NAME = 'petAlertSettings'; // belongs to the active profile (see @/utils/profiles.ts)
+const SCHEDULE_KEY_NAME = 'petAlertSchedule';
 const HEALTH_CHANNEL = 'pet-health';
 const EMERGENCY_CHANNEL = 'pet-emergency';
 const EMERGENCY_QUIET_CHANNEL = 'pet-emergency-no-vibration';
@@ -55,10 +57,16 @@ let settings: PetAlertSettings | null = null;
 const settingsListeners = new Set<(s: PetAlertSettings) => void>();
 const criticalListeners = new Set<(petId: string) => void>();
 
-export async function getAlertSettings(): Promise<PetAlertSettings> {
+export function getAlertSettings(): Promise<PetAlertSettings> {
+  if (settings) return Promise.resolve(settings);
+  return trackOperation(doGetAlertSettings());
+}
+
+async function doGetAlertSettings(): Promise<PetAlertSettings> {
   if (settings) return settings;
   try {
-    const stored = await AsyncStorage.getItem(SETTINGS_KEY);
+    await ensureProfilesReady();
+    const stored = await AsyncStorage.getItem(scopedKey(SETTINGS_KEY_NAME));
     const parsed = stored ? (JSON.parse(stored) as Partial<PetAlertSettings>) : {};
     settings = {
       notifications: parsed.notifications === true,
@@ -71,10 +79,14 @@ export async function getAlertSettings(): Promise<PetAlertSettings> {
   return settings;
 }
 
-export async function saveAlertSettings(patch: Partial<PetAlertSettings>): Promise<PetAlertSettings> {
+export function saveAlertSettings(patch: Partial<PetAlertSettings>): Promise<PetAlertSettings> {
+  return trackOperation(doSaveAlertSettings(patch));
+}
+
+async function doSaveAlertSettings(patch: Partial<PetAlertSettings>): Promise<PetAlertSettings> {
   const next = { ...(await getAlertSettings()), ...patch };
   settings = next;
-  AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next)).catch(() => {});
+  void writeScoped(scopedKey(SETTINGS_KEY_NAME), JSON.stringify(next));
   settingsListeners.forEach((listener) => listener(next));
   void syncPetAlerts();
   return next;
@@ -163,9 +175,9 @@ function channelFor(kind: AlertKind, useVibration: boolean): string {
   return useVibration ? EMERGENCY_CHANNEL : EMERGENCY_QUIET_CHANNEL;
 }
 
-async function readSchedule(): Promise<string[]> {
+async function readSchedule(key: string): Promise<string[]> {
   try {
-    const stored = await AsyncStorage.getItem(SCHEDULE_KEY);
+    const stored = await AsyncStorage.getItem(key);
     const parsed = stored ? (JSON.parse(stored) as unknown) : [];
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
   } catch {
@@ -178,7 +190,11 @@ let syncAgain = false;
 
 // Cancels every previously scheduled pet alert and schedules the ones that
 // are still wanted, from the pets' saved clocks. Safe to call any time.
-export async function syncPetAlerts(): Promise<void> {
+export function syncPetAlerts(): Promise<void> {
+  return trackOperation(doSyncPetAlerts());
+}
+
+async function doSyncPetAlerts(): Promise<void> {
   if (syncing) {
     syncAgain = true;
     return;
@@ -187,8 +203,9 @@ export async function syncPetAlerts(): Promise<void> {
   try {
     const current = await getAlertSettings();
     const family = peekFamily() ?? (await ensureFamilyLoaded());
+    const scheduleKey = scopedKey(SCHEDULE_KEY_NAME); // fixed for this whole run
 
-    for (const id of await readSchedule()) {
+    for (const id of await readSchedule(scheduleKey)) {
       try {
         await Notifications.cancelScheduledNotificationAsync(id);
       } catch {
@@ -225,7 +242,7 @@ export async function syncPetAlerts(): Promise<void> {
         }
       }
     }
-    AsyncStorage.setItem(SCHEDULE_KEY, JSON.stringify(scheduled)).catch(() => {});
+    void writeScoped(scheduleKey, JSON.stringify(scheduled));
   } finally {
     syncing = false;
     if (syncAgain) {
@@ -371,3 +388,18 @@ export const ALERT_HOURS = { sickToCritical: SICK_TO_CRITICAL_HOURS, criticalToD
 export function triggerTestCriticalAlert(): void {
   criticalListeners.forEach((listener) => listener('test'));
 }
+
+// Profile switching: forget this profile's alert settings and, once the switch has really happened, empty its record
+// of scheduled alerts (the phone notifications themselves are cancelled and cleared by the profile layer, see the
+// 'notifications' clean-up in @/utils/profiles.ts). Interim rule for M2: the pets of the profile being left keep aging
+// and can still become sick or die without a reminder on this device until that profile is opened again.
+registerProfileStore({
+  name: 'pet-alerts',
+  reset: () => {
+    const leavingKey = scopedKey(SCHEDULE_KEY_NAME); // the id has not changed yet
+    settings = null;
+    return async () => {
+      await writeScoped(leavingKey, '[]');
+    };
+  },
+});

@@ -11,6 +11,7 @@ import { PetFamilyBar } from '@/components/pet-family-bar';
 import { ResurrectionOverlay } from '@/components/resurrection-overlay';
 import { ROOMS as ROOM_PREVIEWS } from '@/components/rooms-card';
 import { useBirthdayMode } from '@/hooks/use-birthday-mode';
+import { useActiveProfileId } from '@/hooks/use-active-profile';
 import { useSelectedPetId } from '@/hooks/use-pet-family';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { getTokenHistory } from '@/utils/token-history';
@@ -19,6 +20,7 @@ import { getRenderedStage } from '@/utils/pet-growth';
 import { startPetAlerts } from '@/utils/pet-alerts';
 import { startPawadiseMail } from '@/utils/pawadise-mail';
 import { ensureOnboardingLoaded, useOnboarding } from '@/utils/onboarding';
+import { ensureProfilesReady } from '@/utils/profiles';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import { ROOMS, isRoomSlug } from '@/utils/rooms';
@@ -67,7 +69,18 @@ function ImagePrefetchLayer() {
   );
 }
 
+// The whole app shell is keyed by the active profile: when the profile changes (Stage 2 will add the picker), every
+// screen and hook remounts, so nothing from the previous profile can stay on screen. With only the main profile
+// the key never changes and nothing remounts.
 export default function RootLayout() {
+  const profileId = useActiveProfileId();
+  useEffect(() => {
+    void ensureProfilesReady();
+  }, []);
+  return <AppShell key={profileId} />;
+}
+
+function AppShell() {
   const colorScheme = useColorScheme();
   const pathname = usePathname();
   const router = useRouter();

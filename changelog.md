@@ -2,6 +2,43 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-02] — M2 Stage 1 safety hardening (switch order, unknown task category, full storage, notification privacy)
+
+### Fixed
+- **Profile switch rollback (BUG-072 related):** the new active profile is now saved in the registry BEFORE anything changes in memory, then pending work is settled again, and only then are the profiles swapped in one step. A failed switch (registry cannot be saved, a save fails during the switch, a store cannot reset, a timeout) leaves the current profile fully active: nothing reset, no cache or timer touched, no notification cancelled, pending writes still saved, the registry back on the old id.
+- **BUG-073:** Home no longer crashes on a saved task with an unknown or outdated category. It is shown as Personal (icon, label, Stats counts, Personal page) in English and Spanish; the saved task and its category are never rewritten; rewards and completion behavior are unchanged.
+- **Notification privacy:** after a real switch every scheduled notification is cancelled and every shown one is cleared (it can carry a pet's name or a task title). This now lives in the profile layer, uses "cancel all" so it also covers reminders from earlier sessions, and never runs for a failed switch.
+
+### Added
+- **Backup limits:** after three unverifiable backup copies no more are attempted (nothing is ever deleted or overwritten) and the app stays in safe mode, Main only. Full-disk behavior is tested.
+- Tests: 25 new (switch failures and interruption, notification privacy, full storage and backup failures, unknown category), 171 in total, all passing. Breaking the new safeguards on purpose (no second settle, no notification clean-up, the old swap-first order, no category fallback) made the matching tests fail.
+
+### Checked
+- `npx tsc --noEmit` clean; 171 of 171 tests pass. Web run, 390x844: Home, Tasks, Stats, a Stats category page and Rooms render in English and Español with a saved category "Home", no errors, no overflow, saved categories unchanged.
+
+### Not tested / outstanding
+- Notification cancel and clear on a real Android and iPhone development build (see FEATURE-086 for the steps). Full-device behavior (only simulated). Remaining risks are listed in BUG-074.
+- Still Stage 1: no profile picker, no child creation UI, no cloud.
+
+## [2026-11-02] — M2 Stage 1: profile-scoped local storage foundation (no visible change)
+
+### Added
+- A profile layer (`src/utils/profiles.ts`): every store's personal data is now stored per profile. The existing player is the **Main profile** and keeps the original storage keys untouched; child profiles (tests only for now) use `@ProductivityPet:p:<id>:<name>`, start with one new egg and nothing else, and can never read Main's data. The three-living-pet limit, wallet, tasks, rewards record, shop, mood, journal, mini-game limits, Pawadise mail and postcards, memorial state and alert settings are all per profile.
+- A complete, read-back-verified pre-M2 backup of every existing key is written once before the registry is created; interrupted, repeated or failed starts are safe (failure = safe mode: Main only, exactly as before). The backup and the original keys are never changed or deleted by the app.
+- Safe profile switching (no UI yet): waits for in-flight operations and writes, retries failed writes, refuses to switch (nothing changes) if something cannot be saved, swaps in one synchronous step, resets every store's caches and timers, and is undone if the registry cannot be saved. The app shell is keyed by the active profile so a later switch remounts every screen.
+- Tests: 41 new profile tests (146 total, all passing); the 105 earlier tests pass unchanged. Breaking four safeguards on purpose made the matching tests fail.
+
+### Changed
+- Every store that read or wrote a fixed key now builds its key per profile and tracks its writes (pet family, tasks, Paw Token paid-record and history, shop, mood, journal, mini-game rewards, Pawadise mail and postcards, pet alerts, plus the Home mood and memorial toast). Reward amounts, pet rules, mortality, translations, artwork, animations, layouts and hover effects are unchanged.
+- Test fixture: the hand-built old-save fixture now uses a real task category (BUG-073).
+
+### Checked
+- `npx tsc --noEmit` clean; 146 of 146 tests pass. Web run (Main profile, 390x844 and 844x390) with an old-style save: Home identical, registry and backup created once, original keys untouched, refresh keeps the same backup, no console errors.
+
+### Known limitations (see features.md FEATURE-086, BUG-072, BUG-073)
+- No profile picker, child creation, PIN or "move my data to a child" yet (Stage 2); nothing claims these exist. Household children are not yet linked to profiles; Parent Dashboard task records are untouched.
+- Inactive profiles' pets still age and may get sick or die without reminders (phone alerts are for the active profile only). Not tested on a real device; switching inside the running app has not been exercised in a browser.
+
 ## [2026-11-02] — M1 hardening: reward-history safety (BUG-069) and npm audit review
 
 ### Fixed

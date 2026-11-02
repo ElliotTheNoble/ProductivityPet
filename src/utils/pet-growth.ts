@@ -1,6 +1,7 @@
 import { DEV_BYPASS_GROWTH_TASK_REQUIREMENT } from '@/utils/dev-flags';
 import { refreshPeak } from '@/utils/pet-family';
 import { getPetProfile, savePetProfile, type PetProfile } from '@/utils/pet-profile';
+import { registerProfileStore } from '@/utils/profiles';
 import { PET_STAGES, TASKS_PER_STAGE, getPetStageIndex, type PetStage, type StageProgress } from '@/utils/pet-stage';
 
 // Paid pet growth — Young and Adult are no longer automatic. Deliberately
@@ -108,6 +109,8 @@ export type GrowResult =
 // and double-spend/double-advance — same technique as purchaseShopItem in
 // shop-inventory.ts and equipAccessory in pet-equipment.ts.
 let pendingGrowth: Promise<GrowResult> = Promise.resolve({ success: false, reason: 'not-eligible' });
+// A queued growth upgrade must finish before the active profile can change.
+registerProfileStore({ name: 'pet-growth', settle: () => pendingGrowth.catch(() => undefined), reset: () => {} });
 
 export function growPet(completedTaskCount: number): Promise<GrowResult> {
   const next = pendingGrowth.then(() => runGrowPet(completedTaskCount));

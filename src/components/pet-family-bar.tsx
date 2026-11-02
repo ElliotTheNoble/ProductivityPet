@@ -33,6 +33,7 @@ import {
 } from '@/utils/pet-family-config';
 import { getRenderedStage } from '@/utils/pet-growth';
 import { getMemorialMessage } from '@/utils/pet-life-messages';
+import { ensureProfilesReady, scopedKey, writeScoped } from '@/utils/profiles';
 
 // The pet family bar: a slim, pastel strip under the header on the pet pages
 // (Home, Rooms, Shop, Stats) where the player switches between pets, adopts a
@@ -63,7 +64,8 @@ function formatRemaining(ms: number): string {
   return tr('timerMinutes', { m: minutes });
 }
 
-const MEMORIAL_SEEN_KEY = '@ProductivityPet:memorialSeen';
+// Which memorial toasts were shown belongs to the active profile (see @/utils/profiles.ts).
+const MEMORIAL_SEEN_KEY_NAME = 'memorialSeen';
 const MEMORIAL_TOAST_MS = 5000;
 // Words for a pet's health state (used in the chip's spoken label).
 const STATE_KEYS = {
@@ -102,14 +104,19 @@ export function PetFamilyBar() {
     }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    AsyncStorage.getItem(MEMORIAL_SEEN_KEY)
+    const seenKey = { current: '' };
+    ensureProfilesReady()
+      .then(() => {
+        seenKey.current = scopedKey(MEMORIAL_SEEN_KEY_NAME);
+        return AsyncStorage.getItem(seenKey.current);
+      })
       .then((raw) => {
         let seen: string[] = [];
         try {
           seen = raw ? (JSON.parse(raw) as string[]) : [];
         } catch {}
         if (cancelled || seen.includes(memorialKey)) return;
-        AsyncStorage.setItem(MEMORIAL_SEEN_KEY, JSON.stringify([...seen, memorialKey].slice(-50))).catch(() => {});
+        void writeScoped(seenKey.current, JSON.stringify([...seen, memorialKey].slice(-50)));
         setMemorialToast(memorialKey);
         timer = setTimeout(() => setMemorialToast((cur) => (cur === memorialKey ? null : cur)), MEMORIAL_TOAST_MS);
       })

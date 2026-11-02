@@ -1,7 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { tr } from '@/i18n';
-import { endToySession, getToySession, startToySession } from '@/utils/pet-toy-session';
+import { endToySession, getToySession, resetToySessions, startToySession } from '@/utils/pet-toy-session';
+import {
+  ensureProfilesReady,
+  isActiveProfileLegacy,
+  registerProfileStore,
+  scopedKey,
+  trackOperation,
+  writeScoped,
+} from '@/utils/profiles';
 import { getToy } from '@/utils/toys/toy-catalog';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import {
@@ -52,7 +60,9 @@ import { getCompletedTaskCount, normalizeTask, todayISO } from '@/utils/tasks';
 export { MAX_LIVING_PETS };
 export type { LifeState, PetEvent, PetEventType, PetLifecycle, PetRecord };
 
-const FAMILY_STORAGE_KEY = '@ProductivityPet:petFamily';
+// The family record belongs to the active profile (see @/utils/profiles.ts). The LEGACY_* keys below are the
+// pre-profile saves; only the main profile (which keeps the original keys) may ever import them.
+const FAMILY_KEY_NAME = 'petFamily';
 const LEGACY_TASKS_KEY = '@ProductivityPet:tasks';
 const LEGACY_ALBUM_KEY = '@ProductivityPet:petAlbum';
 const LEGACY_HAT_KEY = '@ProductivityPet:equippedPetHatId';
@@ -190,15 +200,12 @@ function stripExtras(profile: PetProfile): PetProfile {
 let writeChain: Promise<boolean> = Promise.resolve(true);
 
 // Writes the CURRENT state. Writes are queued in order; resolves true only
-// if the value really reached storage.
+// if the value really reached storage. The key is fixed now, so a write queued for one
+// profile can never land in another profile's record.
 function persistNow(): Promise<boolean> {
   const snapshot = JSON.stringify(state);
-  writeChain = writeChain.then(() =>
-    AsyncStorage.setItem(FAMILY_STORAGE_KEY, snapshot).then(
-      () => true,
-      () => false
-    )
-  );
+  const key = scopedKey(FAMILY_KEY_NAME);
+  writeChain = writeChain.then(() => writeScoped(key, snapshot));
   return writeChain;
 }
 
@@ -404,11 +411,34 @@ async function buildFirstPetFromLegacy(): Promise<{ pet: PetRecord; tokens: numb
 
 // ----- loading -----
 
+// The first pet of a profile that has no pet family yet and no old save to bring over (every child profile):
+// one brand-new egg, no tokens, nothing inherited.
+function buildFreshFirstPet(): { pet: PetRecord; tokens: number } {
+  const now = nowIso();
+  const profile = createDefaultPetProfile();
+  const pet: PetRecord = {
+    id: newPetId(),
+    name: null,
+    profile: { ...profile, pawTokens: 0, adoptionDate: now, lastUpdatedAt: now },
+    growthUnits: 0,
+    tasksCounted: 0,
+    lifecycle: { state: 'healthy', exhausted: false, lastEvaluatedAt: now },
+    equipped: { hat: null, bow: null },
+    events: [makeEvent('adopted', now)],
+    peak: { stageIndex: 0, level: 1 },
+    createdAt: now,
+  };
+  return { pet, tokens: 0 };
+}
+
 async function loadFamily(): Promise<FamilyState> {
+  await ensureProfilesReady();
+  const familyKey = scopedKey(FAMILY_KEY_NAME);
+  const legacyProfile = isActiveProfileLegacy();
   let stored: string | null = null;
   let readFailed = false;
   try {
-    stored = await AsyncStorage.getItem(FAMILY_STORAGE_KEY);
+    stored = await AsyncStorage.getItem(familyKey);
   } catch {
     readFailed = true;
   }
@@ -422,14 +452,14 @@ async function loadFamily(): Promise<FamilyState> {
     }
     if (!loaded) {
       // Unreadable family record: keep a copy before anything is rewritten.
-      AsyncStorage.setItem(`${FAMILY_STORAGE_KEY}.corrupt-${Date.now()}`, stored).catch(() => {});
+      AsyncStorage.setItem(`${familyKey}.corrupt-${Date.now()}`, stored).catch(() => {});
     }
   }
 
   const now = new Date();
   let migrated = false;
   if (!loaded) {
-    const { pet, tokens } = await buildFirstPetFromLegacy();
+    const { pet, tokens } = legacyProfile ? await buildFirstPetFromLegacy() : buildFreshFirstPet();
     loaded = { version: 1, selectedPetId: pet.id, pets: [pet], wallet: { pawTokens: tokens } };
     migrated = true;
   }
@@ -451,7 +481,7 @@ async function loadFamily(): Promise<FamilyState> {
 export function ensureFamilyLoaded(): Promise<FamilyState> {
   if (state) return Promise.resolve(state);
   if (!loadPromise) {
-    loadPromise = loadFamily().finally(() => {
+    loadPromise = trackOperation(loadFamily()).finally(() => {
       loadPromise = null;
     });
   }
@@ -582,7 +612,11 @@ export function getEquippedForPet(s: FamilyState, petId: string): { hat: string 
   return s.pets.find((p) => p.id === petId)?.equipped ?? { hat: null, bow: null };
 }
 
-export async function setSelectedPetEquipped(slot: 'hat' | 'bow', id: string | null): Promise<void> {
+export function setSelectedPetEquipped(slot: 'hat' | 'bow', id: string | null): Promise<void> {
+  return trackOperation(doSetSelectedPetEquipped(slot, id));
+}
+
+async function doSetSelectedPetEquipped(slot: 'hat' | 'bow', id: string | null): Promise<void> {
   const s = await ensureFamilyLoaded();
   const current = state ?? s;
   const selected = getSelectedPet(current);
@@ -678,7 +712,11 @@ let adopting = false;
 // Adds a new Egg to the family and selects it. Existing pets, tasks, tokens
 // and history are untouched. Safe against repeated taps; if the save fails the
 // new pet is removed again.
-export async function adoptNewEgg(): Promise<AdoptResult> {
+export function adoptNewEgg(): Promise<AdoptResult> {
+  return trackOperation(doAdoptNewEgg());
+}
+
+async function doAdoptNewEgg(): Promise<AdoptResult> {
   if (adopting) return { ok: false, reason: 'busy' };
   adopting = true;
   try {
@@ -732,7 +770,11 @@ const resurrecting = new Set<string>();
 // history; needs are restored to 75; the sickness clocks are cleared; no
 // growth is granted for the time it was gone. The truck animation that
 // follows is purely visual (see `revival`) and can never affect the payment.
-export async function resurrectPet(petId: string): Promise<ResurrectResult> {
+export function resurrectPet(petId: string): Promise<ResurrectResult> {
+  return trackOperation(doResurrectPet(petId));
+}
+
+async function doResurrectPet(petId: string): Promise<ResurrectResult> {
   if (resurrecting.has(petId)) return { ok: false, reason: 'busy' };
   resurrecting.add(petId);
   try {
@@ -815,7 +857,11 @@ const pawadiseBusy = new Set<string>();
 // nothing can be duplicated or lost, and everything is ONE atomic save (rolled back if storage fails).
 // While retired the pet is frozen (see PetRecord.retired) and its active slot is freed. The player must
 // keep at least one other active pet at home so Home always has a pet to show.
-export async function retirePet(petId: string): Promise<PawadiseResult> {
+export function retirePet(petId: string): Promise<PawadiseResult> {
+  return trackOperation(doRetirePet(petId));
+}
+
+async function doRetirePet(petId: string): Promise<PawadiseResult> {
   if (pawadiseBusy.has(petId)) return { ok: false, reason: 'busy' };
   pawadiseBusy.add(petId);
   try {
@@ -859,7 +905,11 @@ export async function retirePet(petId: string): Promise<PawadiseResult> {
 // Brings a retired pet home for free when an active slot is free. Timers resume from the preserved
 // state: the time spent in Pawadise is never counted (needs and health clocks restart at this moment,
 // and the poop schedule is re-rolled), and the pet is selected so the player sees it.
-export async function returnPetHome(petId: string): Promise<PawadiseResult> {
+export function returnPetHome(petId: string): Promise<PawadiseResult> {
+  return trackOperation(doReturnPetHome(petId));
+}
+
+async function doReturnPetHome(petId: string): Promise<PawadiseResult> {
   if (pawadiseBusy.has(petId)) return { ok: false, reason: 'busy' };
   pawadiseBusy.add(petId);
   try {
@@ -1242,3 +1292,15 @@ export function devSetSelectedPetActualStage(stageIndex: number): void {
   };
   setState({ ...state, pets: state.pets.map((p) => (p.id === selected.id ? next : p)) });
 }
+
+// Profile switching (see @/utils/profiles.ts): wait for the family's queued saves, then drop everything held in
+// memory so the next profile loads its own record. Toy sessions are per pet id, so they are cleared too.
+registerProfileStore({
+  name: 'pet-family',
+  settle: () => writeChain,
+  reset: () => {
+    state = null;
+    loadPromise = null;
+    resetToySessions();
+  },
+});

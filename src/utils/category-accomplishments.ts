@@ -1,5 +1,5 @@
 import { getLocale } from '@/i18n';
-import type { TaskCategory } from '@/utils/categorize-task';
+import { displayCategory, type TaskCategory } from '@/utils/categorize-task';
 import { ALL_CATEGORIES } from '@/utils/stats';
 import { addDaysISO, dateToISO, todayISO, type Task } from '@/utils/tasks';
 
@@ -46,7 +46,7 @@ function dateFromTimestamp(timestamp: string | undefined): string | null {
 // overview. Un-checking a task removes its entry because completion state
 // is read straight from the task, never remembered separately.
 export function getCompletedEntries(tasks: Task[], category: TaskCategory): CompletedEntry[] {
-  return collectCompletedEntries(tasks, (task) => task.category === category);
+  return collectCompletedEntries(tasks, (task) => displayCategory(task.category) === category);
 }
 
 // Every completed occurrence across ALL categories (the Lifetime Stats
@@ -68,7 +68,7 @@ function collectCompletedEntries(tasks: Task[], include: (task: Task) => boolean
           key: `${task.id}:${date}`,
           text: task.text,
           important: task.important,
-          category: task.category,
+          category: displayCategory(task.category),
           dateISO: date,
         });
       }
@@ -77,7 +77,7 @@ function collectCompletedEntries(tasks: Task[], include: (task: Task) => boolean
         key: task.id,
         text: task.text,
         important: task.important,
-        category: task.category,
+        category: displayCategory(task.category),
         dateISO: dateFromTimestamp(task.completedAt),
       });
     }

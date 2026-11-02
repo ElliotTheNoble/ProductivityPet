@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
-import type { TaskCategory } from '@/utils/categorize-task';
+import { displayCategory, type TaskCategory } from '@/utils/categorize-task';
 
 type TaskIconProps = {
   category: TaskCategory;
@@ -26,11 +26,18 @@ const GRID_POSITION: Record<SpriteCategory, { col: 0 | 1; row: 0 | 1 }> = {
   Personal: { col: 1, row: 1 },
 };
 
+// Which picture a saved category uses. An unknown or outdated category uses the Personal icon (display only).
+export function getTaskIconCell(category: string): 'health' | { col: 0 | 1; row: 0 | 1 } {
+  const shown = displayCategory(category);
+  return shown === 'Health' ? 'health' : GRID_POSITION[shown];
+}
+
 export function TaskIcon({ category, size = 28 }: TaskIconProps) {
   const width = size;
   const height = size / ICON_ASPECT_RATIO;
+  const cell = getTaskIconCell(category);
 
-  if (category === 'Health') {
+  if (cell === 'health') {
     return (
       <Image
         source={require('@/assets/images/task_icons/health_icon.png')}
@@ -40,7 +47,7 @@ export function TaskIcon({ category, size = 28 }: TaskIconProps) {
     );
   }
 
-  const { col, row } = GRID_POSITION[category];
+  const { col, row } = cell;
 
   return (
     <View style={[styles.frame, { width, height }]}>

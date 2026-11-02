@@ -1,6 +1,7 @@
 import { DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP } from '@/utils/dev-flags';
 import { PET_ACCESSORY_ART } from '@/utils/pet-accessories';
 import { getEquippedForSelectedPet, setSelectedPetEquipped } from '@/utils/pet-family';
+import { registerProfileStore } from '@/utils/profiles';
 import { getOwnedShopItemIds } from '@/utils/shop-inventory';
 
 // Equip/unequip for Pet Accessories. Ownership (what the PLAYER has bought)
@@ -39,6 +40,8 @@ export type EquipResult =
 // Serializes equip/unequip calls so two triggered close together can't
 // race — same technique as purchaseShopItem in shop-inventory.ts.
 let pendingAction: Promise<void> = Promise.resolve();
+// A queued equip/unequip must finish before the active profile can change.
+registerProfileStore({ name: 'pet-equipment', settle: () => pendingAction, reset: () => {} });
 
 function chain<T>(run: () => Promise<T>): Promise<T> {
   const result = pendingAction.then(run);

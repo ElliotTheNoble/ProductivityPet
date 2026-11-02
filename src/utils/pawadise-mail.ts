@@ -11,6 +11,7 @@ import {
 } from '@/utils/pet-family';
 import { POSTCARD_DESIGNS_BY_SPECIES, type PostcardDesign } from '@/utils/pawadise-art';
 import { addPostcard, ensurePostcardsLoaded } from '@/utils/pawadise-postcards';
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 
 // Surprise postcards from Pet Pawadise: delivery scheduling and the mail that has arrived but is still
 // unopened. Only pets CURRENTLY retired in Pawadise send postcards.
@@ -25,7 +26,7 @@ import { addPostcard, ensurePostcardsLoaded } from '@/utils/pawadise-postcards';
 // (pawadise-postcards.ts) when the player opens it (openPendingMail), so unopened mail is never lost and
 // can't be double-counted: the postcard id is created once at delivery and addPostcard ignores repeats.
 
-const MAIL_KEY = '@ProductivityPet:pawadiseMail';
+const MAIL_KEY_NAME = 'pawadiseMail'; // belongs to the active profile (see @/utils/profiles.ts)
 
 // ---- tunable numbers ----
 export const PAWADISE_MIN_DELIVERY_DAYS = 2;
@@ -97,7 +98,8 @@ function normalize(raw: unknown): MailState {
 export function ensureMailLoaded(): Promise<MailState> {
   if (mail) return Promise.resolve(mail);
   if (!loadPromise) {
-    loadPromise = AsyncStorage.getItem(MAIL_KEY)
+    loadPromise = trackOperation(ensureProfilesReady()
+      .then(() => AsyncStorage.getItem(scopedKey(MAIL_KEY_NAME)))
       .then((stored) => {
         let parsed: unknown = null;
         try {
@@ -111,7 +113,7 @@ export function ensureMailLoaded(): Promise<MailState> {
       .catch(() => {
         mail = mail ?? emptyState();
         return mail;
-      })
+      }))
       .finally(() => {
         loadPromise = null;
       });
@@ -121,12 +123,8 @@ export function ensureMailLoaded(): Promise<MailState> {
 
 function persist(): Promise<boolean> {
   const snapshot = JSON.stringify(mail ?? emptyState());
-  writeChain = writeChain.then(() =>
-    AsyncStorage.setItem(MAIL_KEY, snapshot).then(
-      () => true,
-      () => false
-    )
-  );
+  const key = scopedKey(MAIL_KEY_NAME); // fixed now: a queued write never lands in another profile's mailbox
+  writeChain = writeChain.then(() => writeScoped(key, snapshot));
   return writeChain;
 }
 
@@ -181,11 +179,15 @@ let running = false;
 
 // Brings the saved schedule up to date and delivers whatever is due. Returns how many postcards arrived.
 // Safe to call as often as you like (it never runs twice at once and saves only when something changed).
-export async function runPawadiseDeliveries(
+export function runPawadiseDeliveries(
   now: Date = new Date(),
   rng: () => number = Math.random,
   options: { force?: boolean } = {}
 ): Promise<number> {
+  return trackOperation(doRunPawadiseDeliveries(now, rng, options));
+}
+
+async function doRunPawadiseDeliveries(now: Date, rng: () => number, options: { force?: boolean }): Promise<number> {
   if (running) return 0;
   running = true;
   try {
@@ -259,7 +261,11 @@ const opening = new Set<string>();
 // Opens one pending postcard: it is saved to the sending pet's permanent scrapbook FIRST, then removed
 // from the pending list, so a crash in between can only repeat the (ignored) duplicate add. Returns the
 // saved postcard, or null if it could not be saved (the mail then stays pending).
-export async function openPendingMail(id: string) {
+export function openPendingMail(id: string) {
+  return trackOperation(doOpenPendingMail(id));
+}
+
+async function doOpenPendingMail(id: string) {
   if (opening.has(id)) return null;
   opening.add(id);
   try {
@@ -323,3 +329,12 @@ export async function devDeliverPawadiseMailNow(): Promise<string> {
   return n > 0 ? `${n} postcard${n === 1 ? '' : 's'} arrived. Check Home.` : 'Nothing delivered (mail already waiting, or the limit is reached).';
 }
 
+// Profile switching: wait for queued saves, then forget this profile's mailbox.
+registerProfileStore({
+  name: 'pawadise-mail',
+  settle: () => writeChain,
+  reset: () => {
+    mail = null;
+    loadPromise = null;
+  },
+});

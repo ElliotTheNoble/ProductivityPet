@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 import { normalizeTask, todayISO, type Task } from '@/utils/tasks';
 
 // Single source of truth for the storage key — Home, Tasks, birthday
 // detection, and the Rooms hub's task-count badges all read the same data.
-export const TASKS_STORAGE_KEY = '@ProductivityPet:tasks';
+// The list belongs to the active profile (see @/utils/profiles.ts).
+const TASKS_KEY_NAME = 'tasks';
 
 // In-memory cache of the parsed/normalized task list, shared by every screen
 // and hook that reads this key. Without this, navigating between Home,
@@ -26,9 +28,10 @@ export async function getCachedTasks(): Promise<Task[]> {
   if (cachedTasks !== null) return cachedTasks;
   if (inFlightRead) return inFlightRead;
 
-  inFlightRead = (async () => {
+  inFlightRead = trackOperation((async () => {
     try {
-      const stored = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
+      await ensureProfilesReady();
+      const stored = await AsyncStorage.getItem(scopedKey(TASKS_KEY_NAME));
       if (!stored) {
         cachedTasks = [];
         return cachedTasks;
@@ -43,7 +46,7 @@ export async function getCachedTasks(): Promise<Task[]> {
     } finally {
       inFlightRead = null;
     }
-  })();
+  })());
 
   return inFlightRead;
 }
@@ -58,6 +61,16 @@ export async function getCachedTasks(): Promise<Task[]> {
 // what gets written here or what callers receive back.
 export function persistCachedTasks(tasks: Task[]): void {
   cachedTasks = tasks;
-  AsyncStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks)).catch(() => {});
+  void writeScoped(scopedKey(TASKS_KEY_NAME), JSON.stringify(tasks));
   reconcilePawTokenEarnings(tasks).catch(() => {});
 }
+
+// Profile switching: forget this profile's list. Its phone reminders are cancelled by the pet-alerts store, which
+// cancels everything scheduled (see @/utils/pet-alerts.ts); the next profile schedules its own when its tasks load.
+registerProfileStore({
+  name: 'tasks',
+  reset: () => {
+    cachedTasks = null;
+    inFlightRead = null;
+  },
+});

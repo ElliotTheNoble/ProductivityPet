@@ -1,3 +1,4 @@
+import { displayCategory } from '@/utils/categorize-task';
 import type { TaskRoom } from '@/utils/rooms';
 import type { Task } from '@/utils/tasks';
 
@@ -29,12 +30,13 @@ function mentionsWord(text: string, word: string): boolean {
 // needs exactly one deterministic answer for which room it effectively
 // occupies until a user gives it an explicit one.
 function inferLegacyTaskRoom(task: Task): TaskRoom | null {
-  if (task.category === 'Study') return 'study-room';
-  if (task.category === 'Exercise') return 'gym';
+  const category = displayCategory(task.category); // an unknown saved category is treated as Personal
+  if (category === 'Study') return 'study-room';
+  if (category === 'Exercise') return 'gym';
   if (mentionsWord(task.text, 'kitchen')) return 'kitchen';
   if (mentionsWord(task.text, 'bathroom')) return 'bathroom';
   if (mentionsWord(task.text, 'bedroom')) return 'bedroom';
-  if (task.category === 'Personal') return 'living-room';
+  if (category === 'Personal') return 'living-room';
   return null;
 }
 

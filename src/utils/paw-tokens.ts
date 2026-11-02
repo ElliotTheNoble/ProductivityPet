@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { addToWallet, awardGrowthForTasks, ensureFamilyLoaded, getLivingPetCount } from '@/utils/pet-family';
 import { getTaskTokenReward } from '@/utils/pet-family-config';
+import { ensureProfilesReady, registerProfileStore, scopedKey, writeScoped } from '@/utils/profiles';
 import { recordTokenEarning, type TokenSource } from '@/utils/token-history';
 import type { Task } from '@/utils/tasks';
 
@@ -21,9 +22,9 @@ import type { Task } from '@/utils/tasks';
 // that has EVER been paid out, which is never pruned even when a task is
 // unchecked, stopped, excluded, or deleted — only ever added to.
 
-const AWARDED_TASK_TOKENS_STORAGE_KEY = '@ProductivityPet:awardedTaskTokens';
+const AWARDED_KEY_NAME = 'awardedTaskTokens';
 // token-history.ts owns this key; only read here to tell a returning player from a new one.
-const TOKEN_HISTORY_KEY = '@ProductivityPet:tokenEarnings';
+const TOKEN_HISTORY_KEY_NAME = 'tokenEarnings';
 
 // The app's actual reward amounts. Birthdays are excluded entirely (same
 // as everywhere else that counts completions, e.g. countCompletedOccurrences
@@ -108,20 +109,17 @@ function salvageAwardedKeys(stored: string): string[] {
   return Array.from(stored.matchAll(/"((?:[^"\\]|\\.)*)"/g), (match) => match[1]).filter((key) => key.length > 0);
 }
 
-async function writeAwardedKeys(keys: Set<string>): Promise<void> {
-  try {
-    await AsyncStorage.setItem(AWARDED_TASK_TOKENS_STORAGE_KEY, JSON.stringify(Array.from(keys)));
-  } catch {
-    // Non-fatal — still usable for this session via the in-memory
-    // cache; the next successful write retries persisting it.
-  }
+async function writeAwardedKeys(key: string, keys: Set<string>): Promise<void> {
+  // Non-fatal if it fails — still usable for this session via the in-memory cache; the write is remembered and
+  // retried (a profile switch will not drop it silently).
+  await writeScoped(key, JSON.stringify(Array.from(keys)));
 }
 
 // True when the earnings history (a separate record, see token-history.ts) already holds a task/appointment
 // payout, i.e. this is not a brand-new player.
-async function hasEarnedBefore(): Promise<boolean> {
+async function hasEarnedBefore(historyKey: string): Promise<boolean> {
   try {
-    const stored = await AsyncStorage.getItem(TOKEN_HISTORY_KEY);
+    const stored = await AsyncStorage.getItem(historyKey);
     return typeof stored === 'string' && stored.includes('"id":"earn:');
   } catch {
     return false;
@@ -157,12 +155,16 @@ export function reconcilePawTokenEarnings(tasks: Task[]): Promise<void> {
 }
 
 async function runReconcile(tasks: Task[]): Promise<void> {
+  await ensureProfilesReady();
+  // Both records belong to the profile that is active NOW; the keys are fixed for this whole run.
+  const awardedKey = scopedKey(AWARDED_KEY_NAME);
+  const historyKey = scopedKey(TOKEN_HISTORY_KEY_NAME);
   const completedOccurrences = getCompletedOccurrences(tasks);
 
   if (cachedAwardedKeys === null) {
     let stored: string | null;
     try {
-      stored = await AsyncStorage.getItem(AWARDED_TASK_TOKENS_STORAGE_KEY);
+      stored = await AsyncStorage.getItem(awardedKey);
     } catch {
       // The record could not even be READ, so nothing is known about what was paid. Pay nothing, write
       // nothing (the real record may be fine) and try again on the next call.
@@ -174,9 +176,9 @@ async function runReconcile(tasks: Task[]): Promise<void> {
       // No record at all. A new player has nothing completed (or never earned anything); a player who has
       // earned before and lost the record is told apart by their earnings history. Either way the
       // currently-completed occurrences are recorded as already paid and nothing is paid for them.
-      const existingPlayer = completedOccurrences.length > 0 || (await hasEarnedBefore());
+      const existingPlayer = completedOccurrences.length > 0 || (await hasEarnedBefore(historyKey));
       cachedAwardedKeys = new Set(completedOccurrences.map((occurrence) => occurrence.key));
-      await writeAwardedKeys(cachedAwardedKeys);
+      await writeAwardedKeys(awardedKey, cachedAwardedKeys);
       setRewardHistoryStatus({ state: existingPlayer ? 'recovered-missing' : 'new-player' });
       return;
     }
@@ -187,7 +189,7 @@ async function runReconcile(tasks: Task[]): Promise<void> {
       // completed task again). First keep the original text; only if that copy is safely stored, rebuild:
       // every key that can still be read from it, plus everything currently completed counts as already
       // paid. This can only skip a reward, never repeat one. Nothing is paid on this call.
-      const backupKey = `${AWARDED_TASK_TOKENS_STORAGE_KEY}.corrupt-${Date.now()}`;
+      const backupKey = `${awardedKey}.corrupt-${Date.now()}`;
       try {
         await AsyncStorage.setItem(backupKey, stored);
       } catch {
@@ -198,7 +200,7 @@ async function runReconcile(tasks: Task[]): Promise<void> {
       const rebuilt = new Set(salvageAwardedKeys(stored));
       for (const occurrence of completedOccurrences) rebuilt.add(occurrence.key);
       cachedAwardedKeys = rebuilt;
-      await writeAwardedKeys(rebuilt);
+      await writeAwardedKeys(awardedKey, rebuilt);
       setRewardHistoryStatus({ state: 'recovered-corrupt', backupKey });
       return;
     }
@@ -212,13 +214,10 @@ async function runReconcile(tasks: Task[]): Promise<void> {
   for (const occurrence of newlyCompleted) {
     cachedAwardedKeys.add(occurrence.key);
   }
-  try {
-    await AsyncStorage.setItem(AWARDED_TASK_TOKENS_STORAGE_KEY, JSON.stringify(Array.from(cachedAwardedKeys)));
-  } catch {
-    // Non-fatal — the in-memory cache already reflects these as awarded
-    // for the rest of this session, so they won't be double-paid even if
-    // this particular write failed; the next successful write catches up.
-  }
+  // Non-fatal if it fails — the in-memory cache already reflects these as awarded for the rest of this
+  // session, so they won't be double-paid even if this particular write failed; the next successful write
+  // catches up.
+  await writeAwardedKeys(awardedKey, cachedAwardedKeys);
 
   // Rewards for these NEW occurrences only (history is never re-priced).
   // Paw Tokens belong to the player: one combined reward per completed task,
@@ -251,3 +250,13 @@ async function runReconcile(tasks: Task[]): Promise<void> {
     }).catch(() => {});
   }
 }
+
+// Profile switching: wait for queued reconciles, then forget this profile's paid-occurrence record.
+registerProfileStore({
+  name: 'paw-tokens',
+  settle: () => pendingReconcile.catch(() => undefined),
+  reset: () => {
+    cachedAwardedKeys = null;
+    rewardHistoryStatus = null;
+  },
+});

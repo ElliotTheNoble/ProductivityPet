@@ -67,6 +67,38 @@ export async function loadApp(seed?: Record<string, unknown>, keepStorage?: Map<
     tokens: require('@/utils/paw-tokens') as typeof import('@/utils/paw-tokens'),
     history: require('@/utils/token-history') as typeof import('@/utils/token-history'),
     tasks: require('@/utils/tasks') as typeof import('@/utils/tasks'),
+    profiles: require('@/utils/profiles') as typeof import('@/utils/profiles'),
+    // Loaded only when a test asks for them (they pull in notifications and the Pawadise art).
+    get taskStorage() {
+      return require('@/utils/task-storage') as typeof import('@/utils/task-storage');
+    },
+    get shop() {
+      return require('@/utils/shop-inventory') as typeof import('@/utils/shop-inventory');
+    },
+    get moodLog() {
+      return require('@/utils/mood-log') as typeof import('@/utils/mood-log');
+    },
+    get journal() {
+      return require('@/utils/journal') as typeof import('@/utils/journal');
+    },
+    get postcards() {
+      return require('@/utils/pawadise-postcards') as typeof import('@/utils/pawadise-postcards');
+    },
+    get mail() {
+      return require('@/utils/pawadise-mail') as typeof import('@/utils/pawadise-mail');
+    },
+    get kitty() {
+      return require('@/utils/kitty-catch-rewards') as typeof import('@/utils/kitty-catch-rewards');
+    },
+    get memory() {
+      return require('@/utils/memory-match-rewards') as typeof import('@/utils/memory-match-rewards');
+    },
+    get alerts() {
+      return require('@/utils/pet-alerts') as typeof import('@/utils/pet-alerts');
+    },
+    get toySession() {
+      return require('@/utils/pet-toy-session') as typeof import('@/utils/pet-toy-session');
+    },
     async dump(): Promise<Map<string, string>> {
       const keys: string[] = await AsyncStorage.getAllKeys();
       const out = new Map<string, string>();

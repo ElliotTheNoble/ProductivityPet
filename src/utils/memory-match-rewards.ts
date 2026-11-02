@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
 import { todayISO } from '@/utils/tasks';
@@ -18,8 +20,8 @@ import { MEMORY_MATCH_DIFFICULTIES, type MemoryMatchDifficulty } from '@/utils/m
 // Kitty Catch's, so neither game's counters can interfere with the
 // other's.
 
-const BEST_MOVES_STORAGE_KEY = '@ProductivityPet:memoryMatchBestMoves';
-const DAILY_REWARDS_STORAGE_KEY = '@ProductivityPet:memoryMatchDailyRewards';
+const BEST_MOVES_KEY_NAME = 'memoryMatchBestMoves'; // belongs to the active profile (see @/utils/profiles.ts)
+const DAILY_KEY_NAME = 'memoryMatchDailyRewards';
 
 // The app's actual reward amounts/limits for this game.
 export const MEMORY_MATCH_HAPPINESS_REWARD = 10;
@@ -55,10 +57,16 @@ function createDefaultDailyRecord(date: string): DailyRewardRecord {
 let cachedBestMoves: BestMovesRecord | undefined = undefined;
 let cachedDailyRecord: DailyRewardRecord | undefined = undefined;
 
-async function loadBestMoves(): Promise<BestMovesRecord> {
+function loadBestMoves(): Promise<BestMovesRecord> {
+  if (cachedBestMoves !== undefined) return Promise.resolve(cachedBestMoves);
+  return trackOperation(doLoadBestMoves());
+}
+
+async function doLoadBestMoves(): Promise<BestMovesRecord> {
   if (cachedBestMoves !== undefined) return cachedBestMoves;
   try {
-    const stored = await AsyncStorage.getItem(BEST_MOVES_STORAGE_KEY);
+    await ensureProfilesReady();
+    const stored = await AsyncStorage.getItem(scopedKey(BEST_MOVES_KEY_NAME));
     if (stored) {
       const parsed = JSON.parse(stored) as unknown;
       if (parsed && typeof parsed === 'object') {
@@ -80,7 +88,7 @@ async function loadBestMoves(): Promise<BestMovesRecord> {
 
 function saveBestMoves(record: BestMovesRecord): void {
   cachedBestMoves = record;
-  AsyncStorage.setItem(BEST_MOVES_STORAGE_KEY, JSON.stringify(record)).catch(() => {});
+  void writeScoped(scopedKey(BEST_MOVES_KEY_NAME), JSON.stringify(record));
 }
 
 // Read-only: lets the difficulty-select screen show "Best: N moves" for
@@ -89,14 +97,19 @@ export async function getMemoryMatchBestMoves(): Promise<BestMovesRecord> {
   return loadBestMoves();
 }
 
-async function loadDailyRecord(): Promise<DailyRewardRecord> {
+function loadDailyRecord(): Promise<DailyRewardRecord> {
+  return trackOperation(doLoadDailyRecord());
+}
+
+async function doLoadDailyRecord(): Promise<DailyRewardRecord> {
   const today = todayISO();
   if (cachedDailyRecord !== undefined && cachedDailyRecord.date === today) {
     return cachedDailyRecord;
   }
 
   try {
-    const stored = await AsyncStorage.getItem(DAILY_REWARDS_STORAGE_KEY);
+    await ensureProfilesReady();
+    const stored = await AsyncStorage.getItem(scopedKey(DAILY_KEY_NAME));
     if (stored) {
       const parsed = JSON.parse(stored) as unknown;
       if (
@@ -124,7 +137,7 @@ async function loadDailyRecord(): Promise<DailyRewardRecord> {
 
 function saveDailyRecord(record: DailyRewardRecord): void {
   cachedDailyRecord = record;
-  AsyncStorage.setItem(DAILY_REWARDS_STORAGE_KEY, JSON.stringify(record)).catch(() => {});
+  void writeScoped(scopedKey(DAILY_KEY_NAME), JSON.stringify(record));
 }
 
 export type MemoryMatchRewardOutcome = {
@@ -254,3 +267,13 @@ async function runCompleteRound(
     profile: updatedProfile,
   };
 }
+
+// Profile switching: wait for a round in progress, then forget this profile's best moves and daily limits.
+registerProfileStore({
+  name: 'memory-match',
+  settle: () => (pendingRound ?? Promise.resolve()).catch(() => undefined),
+  reset: () => {
+    cachedBestMoves = undefined;
+    cachedDailyRecord = undefined;
+  },
+});

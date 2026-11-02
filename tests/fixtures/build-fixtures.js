@@ -31,7 +31,7 @@ const family = { version: 1, selectedPetId: 'pet-1700000000000', pets, wallet: {
 fs.writeFileSync('tests/fixtures/family-v1-mixed.json', JSON.stringify({ '@ProductivityPet:petFamily': family }, null, 2) + '\n');
 
 // Legacy single-pet save (before the pet family existed): the family record is absent.
-const task = (id, o) => ({ id, text: id, category: 'Home', important: false, kind: 'task', date: '2026-03-01', completed: false, ...o });
+const task = (id, o) => ({ id, text: id, category: 'Personal', important: false, kind: 'task', date: '2026-03-01', completed: false, ...o });
 const tasks = [];
 for (let i = 0; i < 12; i++) tasks.push(task(`t${i}`, { completed: true, important: i % 4 === 0 }));
 tasks.push(task('daily', { repeat: { kind: 'daily' }, completedDates: ['2026-03-01', '2026-03-02', '2026-03-03'] }));

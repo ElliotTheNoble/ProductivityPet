@@ -1,9 +1,22 @@
 import { tr } from '@/i18n';
 export type TaskCategory = 'Study' | 'Exercise' | 'Clean' | 'Health' | 'Personal';
 
+const KNOWN_CATEGORIES: readonly string[] = ['Study', 'Exercise', 'Clean', 'Health', 'Personal'];
+
+export function isTaskCategory(value: unknown): value is TaskCategory {
+  return typeof value === 'string' && KNOWN_CATEGORIES.includes(value);
+}
+
+// The category to SHOW (icon, label, stats) for a saved value. A saved task can carry a category this version does
+// not know (an older or damaged save): it is displayed as "Personal", the app's own fallback. This is display only
+// - the task itself, including its saved category, is never changed.
+export function displayCategory(value: unknown): TaskCategory {
+  return isTaskCategory(value) ? value : 'Personal';
+}
+
 // The category's name in the current language (the stored value is always the English key).
-export function categoryLabel(category: TaskCategory): string {
-  return tr(`cat${category}` as 'catStudy' | 'catExercise' | 'catClean' | 'catHealth' | 'catPersonal');
+export function categoryLabel(category: string): string {
+  return tr(`cat${displayCategory(category)}` as 'catStudy' | 'catExercise' | 'catClean' | 'catHealth' | 'catPersonal');
 }
 
 // Keyword lists are checked in this order (Study, then Exercise, then Clean,

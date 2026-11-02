@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getPetProfile, savePetProfile } from '@/utils/pet-profile';
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 
 // Persistent Shop purchase/ownership — the smallest safe piece of what
 // will eventually be the full purchasing system for every Shop item.
@@ -10,7 +11,7 @@ import { getPetProfile, savePetProfile } from '@/utils/pet-profile';
 // same getPetProfile/savePetProfile every other Pet Care action already
 // uses, and owns a new, separate "what has been bought" record.
 
-const OWNED_SHOP_ITEMS_STORAGE_KEY = '@ProductivityPet:ownedShopItems';
+const OWNED_KEY_NAME = 'ownedShopItems'; // belongs to the active profile (see @/utils/profiles.ts)
 
 // In-memory cache of owned item ids, loaded at most once per session —
 // same pattern as cachedProfile/cachedTasks/cachedAwardedKeys elsewhere.
@@ -22,9 +23,10 @@ async function loadOwnedIds(): Promise<Set<string>> {
   if (cachedOwnedIds !== null) return cachedOwnedIds;
   if (inFlightLoad) return inFlightLoad;
 
-  inFlightLoad = (async () => {
+  inFlightLoad = trackOperation((async () => {
     try {
-      const stored = await AsyncStorage.getItem(OWNED_SHOP_ITEMS_STORAGE_KEY);
+      await ensureProfilesReady();
+      const stored = await AsyncStorage.getItem(scopedKey(OWNED_KEY_NAME));
       if (!stored) {
         cachedOwnedIds = new Set();
         return cachedOwnedIds;
@@ -38,7 +40,7 @@ async function loadOwnedIds(): Promise<Set<string>> {
     } finally {
       inFlightLoad = null;
     }
-  })();
+  })());
 
   return inFlightLoad;
 }
@@ -51,7 +53,7 @@ export async function getOwnedShopItemIds(): Promise<Set<string>> {
 
 function saveOwnedIds(ids: Set<string>): void {
   cachedOwnedIds = ids;
-  AsyncStorage.setItem(OWNED_SHOP_ITEMS_STORAGE_KEY, JSON.stringify(Array.from(ids))).catch(() => {});
+  void writeScoped(scopedKey(OWNED_KEY_NAME), JSON.stringify(Array.from(ids)));
 }
 
 export type PurchaseResult =
@@ -96,3 +98,13 @@ async function runPurchase(itemId: string, price: number): Promise<PurchaseResul
 
   return { success: true };
 }
+
+// Profile switching: wait for a queued purchase, then forget this profile's owned items.
+registerProfileStore({
+  name: 'shop-inventory',
+  settle: () => pendingPurchase.catch(() => undefined),
+  reset: () => {
+    cachedOwnedIds = null;
+    inFlightLoad = null;
+  },
+});

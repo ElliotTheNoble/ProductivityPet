@@ -30,6 +30,7 @@ import { recordMoodEntry } from '@/utils/mood-log';
 import { getPetLifeMessage } from '@/utils/pet-life-messages';
 import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
+import { ensureProfilesReady, scopedKey, writeScoped } from '@/utils/profiles';
 import { isPoopPaused, applyCleanUpPile } from '@/utils/pet-poop';
 import { useSelectedPetId } from '@/hooks/use-pet-family';
 import { getEquippedAccessories, type EquippedAccessories } from '@/utils/pet-equipment';
@@ -76,7 +77,8 @@ const DEFAULT_MOOD: Mood = 'Happy';
 // the parsed list in memory so Home, Tasks, birthday detection, and the
 // Rooms hub don't each do their own independent AsyncStorage read on every
 // navigation — see that file for details.
-const MOOD_STORAGE_KEY = '@ProductivityPet:mood';
+// The saved mood belongs to the active profile (see @/utils/profiles.ts).
+const MOOD_KEY_NAME = 'mood';
 
 // How long the "Dev: Replay Hatching Animation" button's simulated Egg
 // artwork briefly shows before the simulated hatch itself begins — purely
@@ -188,10 +190,16 @@ export default function HomeScreen() {
   // change, but only the latter should trigger a save + notification sync.
   const skipNextSyncRef = useRef(false);
 
-  // Load any previously saved mood once on mount.
+  // Load any previously saved mood once on mount. The key is fixed once the profile registry is ready, so the
+  // mood is always saved back to the profile it was loaded from.
+  const moodKeyRef = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(MOOD_STORAGE_KEY)
+    ensureProfilesReady()
+      .then(() => {
+        moodKeyRef.current = scopedKey(MOOD_KEY_NAME);
+        return AsyncStorage.getItem(moodKeyRef.current);
+      })
       .then((stored) => {
         if (cancelled || !stored) return;
         if (MOODS.includes(stored as Mood)) setMood(stored as Mood);
@@ -206,7 +214,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!isMoodHydrated) return;
-    AsyncStorage.setItem(MOOD_STORAGE_KEY, mood).catch(() => {});
+    if (moodKeyRef.current) void writeScoped(moodKeyRef.current, mood);
   }, [mood, isMoodHydrated]);
 
   // Seed the local Pet Profile state once on mount (see the petProfile

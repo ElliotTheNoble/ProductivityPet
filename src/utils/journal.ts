@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+
 // Short personal daily reflections ("What's something you'd like to remember
 // about today?"). Stored ONLY on this device, in the same local AsyncStorage
 // the rest of the app uses — never sent to any server or AI service.
@@ -8,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // keeps edit/delete simple. Linked to mood check-ins purely by date
 // (see @/utils/mood-log.ts) — neither requires the other.
 
-const JOURNAL_STORAGE_KEY = '@ProductivityPet:journal';
+const JOURNAL_KEY_NAME = 'journal'; // belongs to the active profile (see @/utils/profiles.ts)
 
 // Keep reflections "short" — plenty for a few sentences.
 export const MAX_REFLECTION_LENGTH = 500;
@@ -40,9 +42,10 @@ function isReflection(value: unknown): value is Reflection {
 export async function getReflections(): Promise<Reflection[]> {
   if (cachedJournal) return cachedJournal;
   if (inFlightLoad) return inFlightLoad;
-  inFlightLoad = (async () => {
+  inFlightLoad = trackOperation((async () => {
     try {
-      const stored = await AsyncStorage.getItem(JOURNAL_STORAGE_KEY);
+      await ensureProfilesReady();
+      const stored = await AsyncStorage.getItem(scopedKey(JOURNAL_KEY_NAME));
       const parsed = stored ? (JSON.parse(stored) as unknown) : [];
       cachedJournal = Array.isArray(parsed) ? parsed.filter(isReflection) : [];
     } catch {
@@ -51,7 +54,7 @@ export async function getReflections(): Promise<Reflection[]> {
       inFlightLoad = null;
     }
     return cachedJournal ?? [];
-  })();
+  })());
   return inFlightLoad;
 }
 
@@ -60,18 +63,17 @@ export async function getReflections(): Promise<Reflection[]> {
 async function commit(next: Reflection[]): Promise<boolean> {
   cachedJournal = next;
   listeners.forEach((listener) => listener(next));
-  try {
-    await AsyncStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(next));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeScoped(scopedKey(JOURNAL_KEY_NAME), JSON.stringify(next));
 }
 
 // Creates or edits the reflection for `dateISO`. Saving empty text simply
 // removes that day's reflection (so nothing is ever required). Resolves true
 // when the change was stored, false if the device storage write failed.
-export async function saveReflection(dateISO: string, rawText: string): Promise<boolean> {
+export function saveReflection(dateISO: string, rawText: string): Promise<boolean> {
+  return trackOperation(doSaveReflection(dateISO, rawText));
+}
+
+async function doSaveReflection(dateISO: string, rawText: string): Promise<boolean> {
   const text = rawText.trim().slice(0, MAX_REFLECTION_LENGTH);
   const all = await getReflections();
   const existing = all.find((r) => r.dateISO === dateISO);
@@ -89,7 +91,11 @@ export async function saveReflection(dateISO: string, rawText: string): Promise<
   }
 }
 
-export async function deleteReflection(dateISO: string): Promise<boolean> {
+export function deleteReflection(dateISO: string): Promise<boolean> {
+  return trackOperation(doDeleteReflection(dateISO));
+}
+
+async function doDeleteReflection(dateISO: string): Promise<boolean> {
   const all = await getReflections();
   if (!all.some((r) => r.dateISO === dateISO)) return true;
   return commit(all.filter((r) => r.dateISO !== dateISO));
@@ -101,3 +107,12 @@ export function subscribeToJournal(listener: (entries: Reflection[]) => void): (
     listeners.delete(listener);
   };
 }
+
+// Profile switching: forget this profile's journal.
+registerProfileStore({
+  name: 'journal',
+  reset: () => {
+    cachedJournal = null;
+    inFlightLoad = null;
+  },
+});

@@ -20,7 +20,7 @@
     {
       "id": "t0",
       "text": "t0",
-      "category": "Home",
+      "category": "Personal",
       "important": true,
       "kind": "task",
       "date": "2026-03-01",
@@ -29,7 +29,7 @@
     {
       "id": "t1",
       "text": "t1",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -38,7 +38,7 @@
     {
       "id": "t2",
       "text": "t2",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -47,7 +47,7 @@
     {
       "id": "t3",
       "text": "t3",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -56,7 +56,7 @@
     {
       "id": "t4",
       "text": "t4",
-      "category": "Home",
+      "category": "Personal",
       "important": true,
       "kind": "task",
       "date": "2026-03-01",
@@ -65,7 +65,7 @@
     {
       "id": "t5",
       "text": "t5",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -74,7 +74,7 @@
     {
       "id": "t6",
       "text": "t6",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -83,7 +83,7 @@
     {
       "id": "t7",
       "text": "t7",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -92,7 +92,7 @@
     {
       "id": "t8",
       "text": "t8",
-      "category": "Home",
+      "category": "Personal",
       "important": true,
       "kind": "task",
       "date": "2026-03-01",
@@ -101,7 +101,7 @@
     {
       "id": "t9",
       "text": "t9",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -110,7 +110,7 @@
     {
       "id": "t10",
       "text": "t10",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -119,7 +119,7 @@
     {
       "id": "t11",
       "text": "t11",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -128,7 +128,7 @@
     {
       "id": "daily",
       "text": "daily",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",
@@ -145,7 +145,7 @@
     {
       "id": "appt",
       "text": "appt",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "event",
       "date": "2026-03-01",
@@ -154,7 +154,7 @@
     {
       "id": "open",
       "text": "open",
-      "category": "Home",
+      "category": "Personal",
       "important": false,
       "kind": "task",
       "date": "2026-03-01",

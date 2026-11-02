@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+
 // Postcards from Pet Pawadise: small keepsakes a retired pet can send home. This file is only the
 // permanent COLLECTION (data structure + storage). Nothing here schedules postcards, and no postcard
 // artwork exists yet, so the collection is empty for now.
@@ -16,7 +18,7 @@ import { useEffect, useState } from 'react';
 // `${petId}:${postcardKey}`), a title and message, an image key from pawadise-postcard-art.ts (or null)
 // and the date it was received.
 
-const POSTCARDS_KEY = '@ProductivityPet:pawadisePostcards';
+const POSTCARDS_KEY_NAME = 'pawadisePostcards'; // belongs to the active profile (see @/utils/profiles.ts)
 
 export type PawadisePostcard = {
   id: string;
@@ -65,7 +67,8 @@ function normalize(raw: unknown): PawadisePostcard[] {
 export function ensurePostcardsLoaded(): Promise<PawadisePostcard[]> {
   if (postcards) return Promise.resolve(postcards);
   if (!loadPromise) {
-    loadPromise = AsyncStorage.getItem(POSTCARDS_KEY)
+    loadPromise = trackOperation(ensureProfilesReady()
+      .then(() => AsyncStorage.getItem(scopedKey(POSTCARDS_KEY_NAME)))
       .then((stored) => {
         let parsed: unknown = null;
         try {
@@ -82,7 +85,7 @@ export function ensurePostcardsLoaded(): Promise<PawadisePostcard[]> {
       .catch(() => {
         postcards = postcards ?? [];
         return postcards;
-      })
+      }))
       .finally(() => {
         loadPromise = null;
       });
@@ -101,16 +104,16 @@ export function sortPostcards(list: PawadisePostcard[]): PawadisePostcard[] {
 
 function persist(): Promise<boolean> {
   const snapshot = JSON.stringify(postcards ?? []);
-  writeChain = writeChain.then(() =>
-    AsyncStorage.setItem(POSTCARDS_KEY, snapshot).then(
-      () => true,
-      () => false
-    )
-  );
+  const key = scopedKey(POSTCARDS_KEY_NAME); // fixed now: a queued write never lands in another profile's collection
+  writeChain = writeChain.then(() => writeScoped(key, snapshot));
   return writeChain;
 }
 
-export async function addPostcard(input: PawadisePostcard): Promise<AddPostcardResult> {
+export function addPostcard(input: PawadisePostcard): Promise<AddPostcardResult> {
+  return trackOperation(doAddPostcard(input));
+}
+
+async function doAddPostcard(input: PawadisePostcard): Promise<AddPostcardResult> {
   const valid = normalize([input]);
   if (valid.length === 0) return { ok: false, reason: 'invalid' };
   const current = await ensurePostcardsLoaded();
@@ -153,3 +156,13 @@ export function usePawadisePostcards(): PawadisePostcard[] | null {
   }, []);
   return list;
 }
+
+// Profile switching: wait for queued saves, then forget this profile's postcards.
+registerProfileStore({
+  name: 'pawadise-postcards',
+  settle: () => writeChain,
+  reset: () => {
+    postcards = null;
+    loadPromise = null;
+  },
+});

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { MOODS, type Mood } from '@/utils/mood';
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 import { dateToISO } from '@/utils/tasks';
 
 // The player's own mood check-ins, with real timestamps — the history behind
@@ -16,7 +17,7 @@ import { dateToISO } from '@/utils/tasks';
 // are NOT back-filled — history starts from the first check-in made after
 // this shipped.
 
-const MOOD_LOG_STORAGE_KEY = '@ProductivityPet:moodLog';
+const MOOD_LOG_KEY_NAME = 'moodLog'; // belongs to the active profile (see @/utils/profiles.ts)
 
 export type MoodEntry = {
   id: string;
@@ -47,9 +48,10 @@ function isMoodEntry(value: unknown): value is MoodEntry {
 export async function getMoodLog(): Promise<MoodEntry[]> {
   if (cachedLog) return cachedLog;
   if (inFlightLoad) return inFlightLoad;
-  inFlightLoad = (async () => {
+  inFlightLoad = trackOperation((async () => {
     try {
-      const stored = await AsyncStorage.getItem(MOOD_LOG_STORAGE_KEY);
+      await ensureProfilesReady();
+      const stored = await AsyncStorage.getItem(scopedKey(MOOD_LOG_KEY_NAME));
       const parsed = stored ? (JSON.parse(stored) as unknown) : [];
       cachedLog = Array.isArray(parsed) ? parsed.filter(isMoodEntry) : [];
     } catch {
@@ -58,12 +60,16 @@ export async function getMoodLog(): Promise<MoodEntry[]> {
       inFlightLoad = null;
     }
     return cachedLog ?? [];
-  })();
+  })());
   return inFlightLoad;
 }
 
 // Records one check-in "now". Called when the player picks a mood on Home.
-export async function recordMoodEntry(mood: Mood, now: Date = new Date()): Promise<void> {
+export function recordMoodEntry(mood: Mood, now: Date = new Date()): Promise<void> {
+  return trackOperation(doRecordMoodEntry(mood, now));
+}
+
+async function doRecordMoodEntry(mood: Mood, now: Date): Promise<void> {
   const log = await getMoodLog();
   const entry: MoodEntry = {
     id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -72,7 +78,7 @@ export async function recordMoodEntry(mood: Mood, now: Date = new Date()): Promi
     dateISO: dateToISO(now),
   };
   cachedLog = [...log, entry];
-  AsyncStorage.setItem(MOOD_LOG_STORAGE_KEY, JSON.stringify(cachedLog)).catch(() => {});
+  void writeScoped(scopedKey(MOOD_LOG_KEY_NAME), JSON.stringify(cachedLog));
   listeners.forEach((listener) => listener(cachedLog ?? []));
 }
 
@@ -84,3 +90,12 @@ export function subscribeToMoodLog(listener: (entries: MoodEntry[]) => void): ()
     listeners.delete(listener);
   };
 }
+
+// Profile switching: forget this profile's mood history.
+registerProfileStore({
+  name: 'mood-log',
+  reset: () => {
+    cachedLog = null;
+    inFlightLoad = null;
+  },
+});

@@ -1,6 +1,7 @@
 import { getLocale, tr } from '@/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 import { addDaysISO, dateToISO, todayISO } from '@/utils/tasks';
 
 // Token EARNINGS history — an append-only record of every Paw Token earning
@@ -21,7 +22,7 @@ import { addDaysISO, dateToISO, todayISO } from '@/utils/tasks';
 // a stable id, and recording the same id twice is a no-op, so a rerender or
 // restart can't create duplicates.
 
-const TOKEN_HISTORY_STORAGE_KEY = '@ProductivityPet:tokenEarnings';
+const TOKEN_HISTORY_KEY_NAME = 'tokenEarnings'; // belongs to the active profile (see @/utils/profiles.ts)
 
 export type TokenSource = 'task' | 'appointment' | 'kitty-catch' | 'memory-match';
 
@@ -72,7 +73,7 @@ function isEvent(value: unknown): value is TokenEvent {
 
 function persist(history: StoredTokenHistory): void {
   cached = history;
-  AsyncStorage.setItem(TOKEN_HISTORY_STORAGE_KEY, JSON.stringify(history)).catch(() => {});
+  void writeScoped(scopedKey(TOKEN_HISTORY_KEY_NAME), JSON.stringify(history));
   listeners.forEach((listener) => listener(history));
 }
 
@@ -81,9 +82,11 @@ function persist(history: StoredTokenHistory): void {
 export async function getTokenHistory(): Promise<StoredTokenHistory> {
   if (cached) return cached;
   if (inFlight) return inFlight;
-  inFlight = (async () => {
+  inFlight = trackOperation((async () => {
     try {
-      const stored = await AsyncStorage.getItem(TOKEN_HISTORY_STORAGE_KEY);
+      await ensureProfilesReady();
+      const key = scopedKey(TOKEN_HISTORY_KEY_NAME);
+      const stored = await AsyncStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored) as Partial<StoredTokenHistory>;
         cached = {
@@ -92,7 +95,7 @@ export async function getTokenHistory(): Promise<StoredTokenHistory> {
         };
       } else {
         cached = { startedAt: new Date().toISOString(), events: [] };
-        AsyncStorage.setItem(TOKEN_HISTORY_STORAGE_KEY, JSON.stringify(cached)).catch(() => {});
+        void writeScoped(key, JSON.stringify(cached));
       }
     } catch {
       cached = { startedAt: new Date().toISOString(), events: [] };
@@ -100,7 +103,7 @@ export async function getTokenHistory(): Promise<StoredTokenHistory> {
       inFlight = null;
     }
     return cached ?? { startedAt: new Date().toISOString(), events: [] };
-  })();
+  })());
   return inFlight;
 }
 
@@ -180,3 +183,13 @@ export function getTokenMonthBuckets(events: TokenEvent[], year: number, monthLa
     count: sumTokens(events.filter((e) => e.dateISO.startsWith(`${year}-${String(i + 1).padStart(2, '0')}-`))),
   }));
 }
+
+// Profile switching: wait for queued earnings, then forget this profile's history.
+registerProfileStore({
+  name: 'token-history',
+  settle: () => pending.catch(() => undefined),
+  reset: () => {
+    cached = null;
+    inFlight = null;
+  },
+});
