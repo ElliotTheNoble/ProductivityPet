@@ -96,6 +96,18 @@ export async function loadApp(seed?: Record<string, unknown>, keepStorage?: Map<
     get alerts() {
       return require('@/utils/pet-alerts') as typeof import('@/utils/pet-alerts');
     },
+    get pin() {
+      return require('@/utils/parent-pin') as typeof import('@/utils/parent-pin');
+    },
+    get gate() {
+      return require('@/utils/parent-gate') as typeof import('@/utils/parent-gate');
+    },
+    get onboarding() {
+      return require('@/utils/onboarding') as typeof import('@/utils/onboarding');
+    },
+    get reactNative() {
+      return require('react-native') as typeof import('react-native');
+    },
     get toySession() {
       return require('@/utils/pet-toy-session') as typeof import('@/utils/pet-toy-session');
     },
@@ -114,5 +126,34 @@ export async function loadApp(seed?: Record<string, unknown>, keepStorage?: Map<
 export type App = Awaited<ReturnType<typeof loadApp>>;
 
 // Deep copy of a saved-data fixture, so a test can never alter the file's data.
+// The in-memory stand-in for native secure storage (see tests/setup.ts). It survives jest.resetModules() like real
+// secure storage survives an app restart; call resetSecure() to simulate a device that never had a PIN.
+export type SecureTestState = {
+  map: Map<string, string>;
+  available: boolean;
+  failGet: boolean;
+  failSet: boolean;
+  failKeys: Set<string>;
+  loaded: number;
+  sets: { key: string; options: unknown }[];
+  deletes: number;
+};
+export const secureTest = (): SecureTestState => {
+  const g = globalThis as unknown as { __secure?: SecureTestState };
+  g.__secure ??= { map: new Map(), available: true, failGet: false, failSet: false, failKeys: new Set(), loaded: 0, sets: [], deletes: 0 };
+  return g.__secure;
+};
+export function resetSecure() {
+  const s = secureTest();
+  s.map.clear();
+  s.available = true;
+  s.failGet = false;
+  s.failSet = false;
+  s.failKeys = new Set();
+  s.loaded = 0;
+  s.sets = [];
+  s.deletes = 0;
+}
+
 export const fixture = (name: string): Record<string, unknown> =>
   JSON.parse(JSON.stringify(require(`./fixtures/${name}.json`)));

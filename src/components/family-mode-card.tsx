@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Card } from '@/components/family-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useParentAccess } from '@/hooks/use-parent-access';
 import { useT } from '@/i18n';
 import { useHousehold } from '@/utils/household';
 import { restartOnboarding, useOnboarding } from '@/utils/onboarding';
@@ -15,8 +16,23 @@ export function FamilyModeCard() {
   const { t } = useT();
   const onboarding = useOnboarding();
   const household = useHousehold();
-  if (!onboarding) return null;
+  const access = useParentAccess();
+  if (!onboarding || access.state === 'checking') return null;
   const hasParent = !!household?.parent;
+  // With a parent PIN set and the parent area locked, this card (which anyone can reach from Pet Care) only offers to
+  // unlock it; Start setup and the dashboard shortcut stay out of reach.
+  if (access.state === 'locked' || access.state === 'cooldown') {
+    return (
+      <Card title={t('familyModeTitle')}>
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('pgCardLocked')}
+        </ThemedText>
+        <View style={styles.row}>
+          <Button label={t('pgUnlockButton')} tone="mint" onPress={() => router.push('/parent')} />
+        </View>
+      </Card>
+    );
+  }
   return (
     <Card title={t('familyModeTitle')}>
       <ThemedText type="small" themeColor="textSecondary">

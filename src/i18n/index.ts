@@ -13,6 +13,8 @@ import { listsEs } from './lists.es';
 import { roomsEn } from './rooms.en';
 import { roomsEs } from './rooms.es';
 import { namesEs } from './names.es';
+import { parentGateEn } from './parent-gate.en';
+import { parentGateEs } from './parent-gate.es';
 import { pawadiseEn } from './pawadise.en';
 import { pawadiseEs } from './pawadise.es';
 import { shellEn } from './shell.en';
@@ -32,11 +34,11 @@ import { tasksEs } from './tasks.es';
 // To add a language: create its tables (same keys), add them to TABLES, and add one line to LANGUAGES (its name
 // in ITS OWN language). It then appears in every language picker.
 
-export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn };
+export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn };
 export type Strings = typeof en;
 export type StringKey = keyof Strings;
 
-export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs };
+export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs };
 
 // Lists (message pools, month and weekday names). English is the fallback here too.
 export type ListKey = keyof typeof listsEn;

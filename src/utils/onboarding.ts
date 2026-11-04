@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 
 import { DEFAULT_LANGUAGE, isLanguageCode, setCurrentLanguage, type LanguageCode } from '@/i18n';
+import { isParentAccessAllowed } from '@/utils/parent-gate';
 
 // First-launch onboarding state. It lives in ITS OWN storage key and never reads from or writes to any pet,
 // task, token, shop or Pawadise data, so it can't reset or migrate anything.
@@ -173,6 +174,8 @@ export async function chooseMode(mode: UserMode): Promise<void> {
 
 // Used by a player who already had data (or chose to skip) to run the welcome flow again.
 export async function restartOnboarding(): Promise<void> {
+  // Restarting the family set-up is parent-only: with a parent PIN set it does nothing unless the parent area is open.
+  if (!(await isParentAccessAllowed())) return;
   const s = await ensureOnboardingLoaded();
   set({ ...s, status: 'pending', mode: null, step: 'language' });
 }

@@ -2,6 +2,55 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-04] — Authentication foundation: final verification pass (transactional setup and recovery)
+
+### Changed
+- **PIN setup is now two steps.** `beginPinSetup` writes only a pending record (nothing is protected, nobody is locked out); `confirmPinSetup` switches protection on only after the parent types back both the PIN and the recovery code (secure record first, marker second). The single-step `setupPin` was removed. Any interruption before the end leaves "no PIN"; a parent who lost the code simply starts again.
+- **A new recovery code must be acknowledged.** Codes made by a recovery or by "new code" are "unconfirmed" until `confirmRecoveryCode`; `getRecoveryStatus()` exposes it (including after the app closed before the parent saw the code) so the future UI can force a new code. The UI contract is documented in `src/utils/parent-pin.ts` and features.md (FEATURE-088).
+
+### Verified
+- Interrupted setup and recovery scenarios (closed before confirming, while generating, between the two writes, after a recovery but before the new code is acknowledged, two recoveries at once, unavailable or failing storage) never enable an incomplete PIN, never unlock an existing family, never delete or change family data, and keep a recovery path.
+- Independent salts and domains for the PIN and recovery verifiers, one shared persistent lockout counter in secure storage, and no logging or ordinary-storage copy of any PIN, code, hash or salt (tests spy on every console method). The scrypt settings are unchanged.
+- 318 of 318 tests pass (102 for the authentication foundation); plain `npx tsc --noEmit` passes with no exclusions (BUG-076: the generated route-types file is rewritten by the running dev server whenever files are added; restart steps are in bugs.md). Dependencies unchanged since the authentication install: 4 packages added (expo-secure-store ~57.0.4, expo-crypto ~57.0.4, expo-local-authentication ~57.0.3, @noble/hashes 1.8.0), nothing changed or upgraded. Family mode is still off and the app behaves exactly as before for existing users (web run: Home, /parent, /welcome, Pet Care, registry and backup unchanged).
+
+### Still required before authentication can be enabled
+- Real Android and iPhone performance testing of scrypt (time and memory under Hermes), secure-storage persistence and backup exclusion, a real restore, a development build, and an app version bump before release (FEATURE-088, BUG-075). No setup screens, device-authentication adapter or family picker exist yet.
+
+## [2026-11-03] — M2 Phase 2A-0b: Parent PIN and recovery-code authentication foundation (disabled)
+
+### Added
+- **PIN verification:** scrypt (`@noble/hashes` 1.8.0, N = 2^15, r = 8, p = 1) with a random per-record salt from the operating system (`expo-crypto`); the PIN and the recovery code are never stored; a PIN is 6-8 digits and not trivially guessable. Records live in native secure storage (`expo-secure-store`, "when unlocked, this device only"), together with the shared wrong-guess counter; ordinary storage holds only a small marker.
+- **One-time recovery code** (120 random bits + check character): stored only as its own verifier, independent of the PIN, a correct code sets a new PIN and invalidates the old code (a new one is issued), a failed save changes nothing, and it never touches family data.
+- **Restored or damaged data is never reset:** family data whose PIN record is missing (restore, new device, damage) keeps parent access LOCKED with a clear explanation; no new PIN can be created, and neither a recovery code nor the device passcode is a way in. Nothing is ever deleted; if the PIN and the code are both lost, parent access stays locked until guardian accounts exist.
+- **Everything is behind `FAMILY_MODE_ENABLED` (false for all users):** with it off, no PIN checker is registered, the PIN module and native modules are not loaded, and the parent area is open from the very first frame exactly as before (the short blank first frame of `/parent` and `/welcome` from the previous phase is gone). Not supported on the web.
+- 83 new tests (299 total, all passing). Breaking seven protections on purpose made the matching tests fail.
+- **Dependencies (exact):** expo-secure-store ~57.0.4, expo-crypto ~57.0.4, expo-local-authentication ~57.0.3 (installed, not used yet), @noble/hashes 1.8.0. 4 packages added, none changed; `npm audit` still 48, none in the new packages. The `expo-secure-store` config plugin was added to `app.json` (Android backup exclusion rules, default Face ID string; needs a new native build).
+
+### Changed
+- A PIN must now be 6-8 digits (the gate, its screen text and its tests were 4-8). Guess counting moved into one shared limiter that can keep its counter in secure storage.
+
+### Checked
+- 299 of 299 tests pass; project code type-checks with 0 errors (plain `npx tsc --noEmit` currently stops inside the generated `.expo/types/router.d.ts` that the running dev server left half-written: BUG-076; restart the dev server to fix it). Web run (390x844 and 844x390) with the flag off: Home, `/parent`, `/welcome`, Pet Care and the profile registry and backup behave exactly as before, no errors.
+
+### Not verified / outstanding
+- No screen to create or change a PIN, no device-authentication adapter (next phase, not started). Real-device checks required before any use: scrypt timing and memory on low-end phones, secure-store persistence and backup exclusion, a real restore, secure random bytes, a development build with the new native modules, and an app version bump before release so no OTA update reaches builds without the native modules (FEATURE-088, BUG-075).
+
+## [2026-11-03] — M2 Phase 2A-0: Parent Gate (access protection; no PIN yet)
+
+### Added
+- **Parent Gate:** the parent-only screens (`/parent`, `/welcome`) now render their content only when the parent area is open; otherwise a PIN screen (English and Spanish) is shown instead, so opening them by address cannot bypass it. Restarting the family set-up and the Family card's shortcuts are locked too. Guess limits (3 tries, then pauses of 30 s, 5 min, 15 min, 1 h) are saved BEFORE each check, so they survive restarts and mid-check kills, and fail closed. The open session locks on background/inactive, on a profile change, after 5 minutes unused, after 30 minutes in total and on a backwards clock.
+- **No PIN exists yet:** checking a PIN goes through a small `PinVerifier` interface that nothing implements, so for every user the parent area stays open exactly as before. The PIN is NOT verified parental identity and NOT full security, and the screens say so. PIN storage and recovery are held back for a security decision (BUG-075); the family picker stays disabled and family mode stays unavailable to real users (BUG-072).
+- 45 new tests (216 total, all passing), including screen tests with `@testing-library/react-native` (approved dev dependency: 19 packages added, none changed; `npm audit` 47 -> 48, one more low in test tooling). Breaking six protections on purpose made the matching tests fail.
+
+### Changed
+- `restartOnboarding()` does nothing while a PIN exists and the parent area is locked; the Family card shows only "Unlock parent area" in that state. Jest also runs `*.test.tsx` files and ignores `.css` imports.
+
+### Checked
+- `npx tsc --noEmit` clean; 216 of 216 tests pass. Web run with no PIN (390x844): Home, `/parent`, `/welcome` and Pet Care behave exactly as before, no errors.
+
+### Not verified / outstanding
+- The PIN screen on real phones, tablets and browsers; backgrounding behavior on iOS and Android; screen readers; browser password-manager prompts. PIN storage, PIN setup and recovery are not implemented (BUG-075).
+
 ## [2026-11-02] — M2 Stage 1 safety hardening (switch order, unknown task category, full storage, notification privacy)
 
 ### Fixed

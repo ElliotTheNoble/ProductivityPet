@@ -42,7 +42,8 @@
           "cameraPermission": "ProductivityPet uses the camera only to turn the flashlight on and off for the optional pet emergency flash alert. It never takes photos or video.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

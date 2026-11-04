@@ -20,6 +20,8 @@ import { getRenderedStage } from '@/utils/pet-growth';
 import { startPetAlerts } from '@/utils/pet-alerts';
 import { startPawadiseMail } from '@/utils/pawadise-mail';
 import { ensureOnboardingLoaded, useOnboarding } from '@/utils/onboarding';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { startParentGateAutoLock } from '@/utils/parent-gate';
 import { ensureProfilesReady } from '@/utils/profiles';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
@@ -77,6 +79,13 @@ export default function RootLayout() {
   useEffect(() => {
     void ensureProfilesReady();
   }, []);
+  // Family mode is OFF for everyone: then nothing below is even loaded and the parent area stays open exactly as before.
+  // When it is on (never for real users yet) the parent PIN checker is registered with the Parent Gate.
+  useEffect(() => {
+    if (FAMILY_MODE_ENABLED) (require('@/utils/parent-pin') as typeof import('@/utils/parent-pin')).startParentAuth();
+  }, []);
+  // The parent area locks itself when the app leaves the foreground or the profile changes (see @/utils/parent-gate.ts).
+  useEffect(() => startParentGateAutoLock(), []);
   return <AppShell key={profileId} />;
 }
 
