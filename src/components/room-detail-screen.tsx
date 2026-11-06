@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { BATHING_STEP_COUNTS, type BathingStep } from '@/utils/bathing-stage-art';
 import { getActiveSoapItem } from '@/utils/bathing-soap';
 import { getDevPreviewStageIndex, subscribeToDevPreviewStageIndex } from '@/utils/dev-stage-preview';
@@ -177,6 +178,11 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   const isSoapDone = soapCompletedCount >= TOTAL_BATHING_TARGETS;
   const isRinseDone = rinseCompletedCount >= TOTAL_BATHING_TARGETS;
   const isBlowDryDone = blowDryCompletedCount >= TOTAL_BATHING_TARGETS;
+  // A bath that has been started but not finished is unfinished (its progress is kept only on this screen).
+  useUnfinishedWork(
+    'bathing',
+    (soapCompletedCount > 0 || rinseCompletedCount > 0 || blowDryCompletedCount > 0) && !(isSoapDone && isRinseDone && isBlowDryDone)
+  );
 
   // The moment whichever tool is currently active finishes ITS OWN phase
   // (not necessarily all three — see the separate completion effect

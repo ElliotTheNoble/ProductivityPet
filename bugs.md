@@ -720,6 +720,16 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-084] Profile switching chip, Stage 4.2: known limits (documented, OPEN, 2026-11-06)
+
+- **Unfinished-work tracking is by screen, not by magic:** only the screens listed in FEATURE-095 report it. A new screen with a text field or a game has to use `useUnfinishedWork` or it is silently unprotected (the chip then switches without asking). A static test lists the current screens; nothing checks future ones.
+- **Task editor: fixed (2026-11-06):** every field (text, date, time, kind, repeat, weekly days, reminder, room) is tracked against its opening value; opening it, or putting everything back, is not unfinished work.
+- **Home panel handles and hidden panels:** the closed Pet Progress and Home Features panels are slid off-screen, not removed, so their Close buttons still exist off to the side (the preview reports them as beyond the screen edge); keyboard focus can reach them. Not changed in this pass.
+- **A game round counts as unfinished from its first moment** (nothing is saved until it ends), so the question appears even right after a round starts.
+- **Nothing connects the idle timer yet** (Stage 4.3): the failed-switch dialog here offers Keep playing, which only closes it; resetting an inactivity timer comes with 4.3.
+- **The chip is hidden for a household with no child record** and for a profile that is not in the family list; if the family list cannot be read the chip is simply absent (the picker's own error handling still applies on the next start).
+- **Not verified on a real device:** screen-reader reading order of the chip and its dialogs, and touch behavior on phones and tablets (only the browser preview and automated tests).
+
 ### [BUG-083] Profile switching and session management, Stages 4.0 and 4.1: known limits (documented, OPEN, 2026-11-06)
 
 - **Pet-care alerts stop after a return to the picker (BUG-072, must be resolved before public release):** every release cancels ALL scheduled phone notifications (the interim privacy rule). Once the live idle rule exists, a child who is returned to the picker stops getting pet-care alerts until someone is chosen again. A per-profile (or family-wide) alert design is needed first.

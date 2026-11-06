@@ -8,6 +8,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCurrentLanguage, tr, useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
+import { taskEditChanged } from '@/utils/task-edit-changes';
 import { ensureNotificationPermission } from '@/utils/notifications';
 import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
 import { reminderOffsetLabel, type ReminderOffsetMinutes, type RepeatRule, type TaskKind } from '@/utils/tasks';
@@ -170,6 +172,33 @@ export function TaskEditModal({
   // inferred value, which is wrong.
   const [room, setRoom] = useState<TaskRoom | null | undefined>(initialRoom);
   const displayedRoom = room !== undefined ? room : inferredRoom;
+  // An edit with changes that were not saved is unfinished: every field is compared with what it was when the editor opened (so
+  // opening it is not a change, and putting everything back clears it).
+  useUnfinishedWork(
+    'task-edit',
+    taskEditChanged(
+      {
+        kind,
+        text: initialText,
+        date: initialDate,
+        time: initialTime ?? '',
+        repeat: repeatToOption(initialRepeat),
+        weeklyDays: initialRepeat?.kind === 'weekly' ? initialRepeat.days : [],
+        reminder: reminderMinutesToOption(initialReminderMinutes),
+        room: initialRoom !== undefined ? initialRoom : inferredRoom,
+      },
+      {
+        kind: selectedKind,
+        text,
+        date,
+        time,
+        repeat: repeatOption,
+        weeklyDays: [...weeklyDays],
+        reminder: reminderOption,
+        room: displayedRoom,
+      }
+    )
+  );
 
   function toggleWeeklyDay(day: number) {
     setWeeklyDays((prev) => {
@@ -493,7 +522,9 @@ const styles = StyleSheet.create({
   fieldGroup: {
     gap: Spacing.one,
   },
+  // At least 44px tall (a comfortable touch target).
   input: {
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,

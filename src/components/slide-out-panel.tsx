@@ -23,7 +23,8 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
 // While a panel is open the dimmed backdrop covers the room, so nothing behind it
 // can be scrolled or tapped; the panel's own ScrollView scrolls independently.
 
-const TAB_WIDTH = 36;
+// 44px wide: the handle is a touch target (it was 36px).
+const TAB_WIDTH = 44;
 const TAB_HEIGHT = 150;
 const EDGE_SWIPE_WIDTH = 14;
 const SWIPE_CLAIM_PX = 10;
@@ -343,7 +344,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: Spacing.two + 2,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.7)',

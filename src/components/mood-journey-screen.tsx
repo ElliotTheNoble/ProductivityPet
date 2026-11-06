@@ -1,4 +1,5 @@
 import { getLocale, useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
@@ -106,6 +107,8 @@ export function MoodJourneyScreen() {
   const reflectionForDay = reflections.find((r) => r.dateISO === selectedDate) ?? null;
 
   selectedDateRef.current = selectedDate;
+  // A reflection with changes that were not saved is unfinished.
+  useUnfinishedWork('journal', draft.trim() !== (reflectionForDay?.text ?? '').trim());
 
   // Showing a different day clears any old status message. (This used to be
   // one effect that ALSO depended on the saved text, so saving — which changes

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { captureProfileOwner } from '@/utils/profiles';
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
 import { KittyCatchResults } from '@/components/mini-games/kitty-catch-results';
@@ -100,6 +101,8 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
   const [fallingObject, setFallingObject] = useState<FallingObject | null>(null);
   const [score, setScore] = useState(0);
   const [phase, setPhase] = useState<'playing' | 'ended'>('playing');
+  // A round in play is unfinished (nothing is saved until it ends): leaving now has to say so first.
+  useUnfinishedWork('kitty-catch', phase === 'playing');
   const [bestScoreBeforeRound, setBestScoreBeforeRound] = useState<number | null>(null);
   const [roundResult, setRoundResult] = useState<KittyCatchRoundResult | null>(null);
   const [isSubmittingRound, setIsSubmittingRound] = useState(false);

@@ -327,7 +327,8 @@ const styles = StyleSheet.create({
   chipLabel: { fontSize: 13, lineHeight: 18 },
   rainbow: { fontSize: 14 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
-  adoptChip: { paddingVertical: Spacing.one, paddingHorizontal: Spacing.three, borderRadius: Spacing.five },
+  // At least 44px tall (a comfortable touch target); the look is unchanged.
+  adoptChip: { minHeight: 44, justifyContent: 'center', paddingVertical: Spacing.one, paddingHorizontal: Spacing.three, borderRadius: Spacing.five },
   healthPanel: {
     flexDirection: 'row',
     alignItems: 'center',

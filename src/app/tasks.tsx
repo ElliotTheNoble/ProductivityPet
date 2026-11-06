@@ -13,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { tr, useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { categoryLabel } from '@/utils/categorize-task';
 import { getHolidayForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, reminderResyncNeeded, syncTaskNotifications } from '@/utils/notifications';
@@ -117,6 +118,8 @@ export default function TasksScreen() {
 
   const [isAdding, setIsAdding] = useState(false);
   const [draftText, setDraftText] = useState('');
+  // A task being written (text typed, not yet added) is unfinished.
+  useUnfinishedWork('task-draft', isAdding && draftText.trim().length > 0);
   const [draftKind, setDraftKind] = useState<TaskKind>('task');
   const [draftTime, setDraftTime] = useState('');
   const [draftRepeat, setDraftRepeat] = useState<RepeatOption>('none');
@@ -918,7 +921,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // At least 44px tall (a comfortable touch target).
   input: {
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,

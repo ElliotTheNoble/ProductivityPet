@@ -10,8 +10,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useT, type StringKey } from '@/i18n';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { getPetProfile, subscribeToPetProfile } from '@/utils/pet-profile';
 import { isRoomSlug } from '@/utils/rooms';
+
+// Family mode only (development, never in a release build): the chip that goes back to the player picker. With the flag off
+// nothing of it is even loaded.
+const ProfileChip = FAMILY_MODE_ENABLED ? (require('@/components/profile-chip') as typeof import('@/components/profile-chip')).ProfileChip : null;
 
 type NavItem = {
   href: Href;
@@ -115,6 +120,7 @@ export function AppHeader() {
         </View>
 
         <View style={styles.nav}>
+          {ProfileChip ? <ProfileChip /> : null}
           {pawTokens !== null ? (
             <View style={[styles.pawTokenPill, { backgroundColor: theme.apricot }]}>
               <View style={styles.pawTokenCoinFrame}>

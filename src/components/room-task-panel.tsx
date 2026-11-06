@@ -1,4 +1,6 @@
 import { useState } from 'react';
+
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
@@ -61,6 +63,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
   const isWide = width >= WIDE_PANEL_BREAKPOINT;
   const [isExpanded, setIsExpanded] = useState(false);
   const [draftText, setDraftText] = useState('');
+  useUnfinishedWork('task-draft', draftText.trim().length > 0);
   const isLeft = side === 'left';
 
   const completedCount = tasks.filter((task) => task.completed).length;
@@ -341,7 +344,9 @@ const styles = StyleSheet.create({
   celebrateText: {
     textAlign: 'center',
   },
+  // At least 44px tall (a comfortable touch target).
   input: {
+    minHeight: 44,
     borderWidth: 1,
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,

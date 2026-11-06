@@ -2,6 +2,22 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-06] — Profile switching, Stage 4.2: the header chip and unfinished-work tracking, disabled for users
+
+### Added
+- A small pastel chip in the app header (family mode only) showing who is playing (avatar and nickname, or Main) that goes back to "Who's playing today?" through the safe leave: the parent area locks first, pending saves finish, a neutral cover shows, and the picker takes over. At least 44px tall; long nicknames are cut with an ellipsis; English and Spanish.
+- A question before switching only when something unfinished and unsaved would be lost, naming exactly what (a Kitty Catch or Memory Match round, a bath in progress, a task being written or edited, a reflection being written), with Cancel and Switch player. Nothing unfinished: no question.
+- A friendly "Couldn't switch players" dialog with Try again and Keep playing when leaving fails; the profile stays open and nothing is lost or reported as done.
+- A tiny in-memory unfinished-work registry (never saved, emptied on every profile change) used by those screens.
+
+### Changed
+- The shared confirmation dialog can show a custom label on its second button.
+- The Adopt an egg button, the Pet Progress and Home Features panel handles (and their Close buttons) and the task text fields are now at least 44px, with the same look and behavior otherwise.
+- The task editor now counts a changed kind, repeat, reminder or room as unfinished work too (compared with the values it opened with; reverting clears it).
+
+### Verified
+- 853 of 853 tests pass (51 new), plain `npx tsc --noEmit` clean. Isolated browser preview with synthetic data (see the review sheet). Not done: the live idle timer, the web-tab lock and the final preview (Stages 4.3 to 4.5); real-device checks (see FEATURE-095, BUG-084).
+
 ## [2026-11-06] — Profile switching, Stages 4.0 and 4.1: the inactivity clock and leaving a profile (not connected to the app yet), disabled for users
 
 ### Added

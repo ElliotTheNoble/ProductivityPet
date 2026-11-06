@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-nati
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { useT } from '@/i18n';
+import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { captureProfileOwner } from '@/utils/profiles';
 
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
@@ -92,6 +93,8 @@ export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
   const theme = useTheme();
 
   const [phase, setPhase] = useState<Phase>('select');
+  // A round in play is unfinished (nothing is saved until it ends): leaving now has to say so first.
+  useUnfinishedWork('memory-match', phase === 'playing');
   const [difficulty, setDifficulty] = useState<MemoryMatchDifficulty | null>(null);
   const [bestMovesByDifficulty, setBestMovesByDifficulty] = useState<
     Partial<Record<MemoryMatchDifficulty, number>>
