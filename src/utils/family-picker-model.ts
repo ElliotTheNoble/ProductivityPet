@@ -1,7 +1,7 @@
 import type { StringKey } from '@/i18n';
 import type { ParentAuthStatus } from '@/hooks/use-parent-auth-status';
 import { getParentAccess, type ParentAccess } from '@/utils/parent-gate';
-import { getHouseholdIntegrity, ensureHouseholdLoaded, listActiveChildren, reloadHousehold, type ChildProfile } from '@/utils/household';
+import { getHouseholdIntegrity, ensureHouseholdLoaded, hasAnyChildRecord, listActiveChildren, reloadHousehold, type ChildProfile } from '@/utils/household';
 import { getSelectableChildren, reconcileFamilyProfiles, type CareSummary } from '@/utils/family-profiles';
 import { ensureProfilesReady, getProfilesStatus, type SwitchResult } from '@/utils/profiles';
 
@@ -14,7 +14,7 @@ import { ensureProfilesReady, getProfilesStatus, type SwitchResult } from '@/uti
 export type PickerProblem = 'safe-mode' | 'household-unreadable' | 'children-not-ready' | null;
 
 export type PickerDecision =
-  // Nobody to choose between (the household has NO active child): the app opens exactly as it always has.
+  // Nobody to choose between (the household has NO child record at all): the app opens exactly as it always has.
   | { kind: 'skip' }
   // The picker is shown. `children` is empty when `problem` says the players cannot be offered right now.
   | { kind: 'picker'; children: ChildProfile[]; problem: PickerProblem };
@@ -30,14 +30,17 @@ export async function decidePicker(): Promise<PickerDecision> {
     if (getHouseholdIntegrity().loadFailed && (await reloadHousehold())) household = await ensureHouseholdLoaded(); // a retry after a failed read
     if (getHouseholdIntegrity().loadFailed) return { kind: 'picker', children: [], problem: 'household-unreadable' };
     const active = listActiveChildren(household);
-    // The picker (and with it the Parent PIN for Main) is skipped ONLY when the household has no active child at all. A household
-    // that has children but cannot offer them right now (storage in safe mode, a profile that could not be linked yet) still
-    // shows the picker with the reason: it must never fall through to opening Main without the PIN.
+    // The picker (and with it the Parent PIN for Main) is skipped ONLY when the household has no child record at all. Archiving every
+    // child must never take away the protection of Main (Stage 4 decision), so a household whose children are all archived (or
+    // whose records cannot be offered, for example duplicate ids) still shows the picker, with Main behind the PIN and nobody else
+    // on offer. A household that has children but cannot offer them right now (storage in safe mode, a profile that could not be
+    // linked yet) shows the picker with the reason: it must never fall through to opening Main without the PIN.
+    const anyChild = hasAnyChildRecord(household, getHouseholdIntegrity());
     if (getProfilesStatus().state !== 'ready') {
-      return active.length > 0 ? { kind: 'picker', children: [], problem: 'safe-mode' } : { kind: 'skip' };
+      return anyChild ? { kind: 'picker', children: [], problem: 'safe-mode' } : { kind: 'skip' };
     }
-    if (active.length === 0) return { kind: 'skip' };
-    const children = await getSelectableChildren();
+    if (!anyChild) return { kind: 'skip' };
+    const children = active.length > 0 ? await getSelectableChildren() : [];
     return { kind: 'picker', children, problem: children.length < active.length ? 'children-not-ready' : null };
   } catch {
     return { kind: 'picker', children: [], problem: 'household-unreadable' };

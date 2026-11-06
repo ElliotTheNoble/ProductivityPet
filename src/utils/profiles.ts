@@ -114,6 +114,45 @@ export function getProfileGeneration(): number {
   return generation;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// ownership of delayed work (Stage 4 hardening)
+//
+// Every store works on whichever profile is open when it runs. So a callback that was started under profile A, and fires after A was
+// left (a reward that was on its way, a reminder sync, a timer), would apply itself to B if B has loaded by then. An "owner" is a
+// receipt for the profile session (the generation) in which the work was started. Work that mutates profile data after an `await`
+// (or that a caller may hold on to) takes the owner when it STARTS and checks it again before every change; a callback whose
+// owner is no longer the open profile session does nothing. Leaving and re-entering the SAME profile is a new session too, so a
+// callback from before the leave is stale after it. (Key-level protection is separate and unchanged: an operation still builds
+// its storage keys at its start, and the profile switch still waits for tracked writes and operations.)
+export type ProfileOwner = { readonly generation: number };
+
+export class StaleProfileError extends Error {
+  constructor() {
+    super('stale-profile');
+    this.name = 'StaleProfileError';
+  }
+}
+
+// The profile session open right now. While no profile is open (the picker is showing) the owner is already stale.
+export function captureProfileOwner(): ProfileOwner {
+  return { generation: released ? -1 : generation };
+}
+
+// True only while the same profile session that issued `owner` is still the open one.
+export function isProfileOwner(owner: ProfileOwner): boolean {
+  return !released && owner.generation === generation;
+}
+
+export function assertProfileOwner(owner: ProfileOwner): void {
+  if (!isProfileOwner(owner)) throw new StaleProfileError();
+}
+
+// Wraps a callback so that it runs only while the profile session that created it is still the open one (otherwise it returns
+// undefined and does nothing). Use it for callbacks that outlive the screen that made them.
+export function ownedCallback<A extends unknown[], R>(fn: (...args: A) => R, owner: ProfileOwner = captureProfileOwner()): (...args: A) => R | undefined {
+  return (...args: A) => (isProfileOwner(owner) ? fn(...args) : undefined);
+}
+
 export function getProfilesStatus(): ProfilesStatus {
   return { state, activeProfileId: registry.activeProfileId, profiles: registry.profiles, backup: registry.backup, issue, released };
 }
@@ -578,11 +617,12 @@ function resetStores(): { cleanups: (() => Promise<void>)[]; clean: boolean } {
 // Synchronously makes `profileId` active: every store drops what it holds, then the id changes. Returns the
 // clean-up functions the stores asked for, and whether every reset worked. After a release the stores are already empty
 // (and asking them to reset would need a profile key), so that one step is skipped.
-function commitActive(profileId: string, options: { alreadyReset?: boolean } = {}): { cleanups: (() => Promise<void>)[]; clean: boolean } {
+function commitActive(profileId: string, options: { alreadyReset?: boolean; keepSession?: boolean } = {}): { cleanups: (() => Promise<void>)[]; clean: boolean } {
   const swapped = options.alreadyReset ? { cleanups: [], clean: true } : resetStores();
   registry = { ...registry, activeProfileId: profileId };
   released = false;
-  generation += 1;
+  // Going BACK to the profile that was open after a failed swap is not a new session: work that belongs to it stays valid.
+  if (!options.keepSession) generation += 1;
   activeListeners.forEach((listener) => listener(profileId));
   return swapped;
 }
@@ -629,11 +669,13 @@ export function switchProfile(profileId: string, options: { timeoutMs?: number }
     }
 
     // No await from here to the end of the swap.
+    const sessionBefore = generation;
     const swapped = commitActive(profileId, { alreadyReset: wasReleased });
     if (!swapped.clean) {
       // A store failed to reset. Everything was saved before the swap, so going back only means the stores reload
-      // from storage; no clean-up has run.
-      commitActive(previous);
+      // from storage; no clean-up has run. The profile session that was open stays the same one (work that belongs to it stays valid).
+      commitActive(previous, { keepSession: true });
+      generation = sessionBefore;
       const back = await writeRegistry(registry);
       if (back.status === 'ok') registry = back.registry;
       return { ok: false, reason: 'storage' };
@@ -671,7 +713,7 @@ export function releaseActiveProfile(options: { timeoutMs?: number } = {}): Prom
     const swapped = resetStores();
     if (!swapped.clean) {
       // A store failed to reset: stay in the profile (everything was saved), and make the screens reload what is saved.
-      commitActive(previous);
+      commitActive(previous, { keepSession: true });
       return { ok: false, reason: 'storage' };
     }
     released = true;

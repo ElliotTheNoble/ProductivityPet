@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 
 import { getCurrentLanguage, tr, type LanguageCode } from '@/i18n';
-import { getNotificationEpoch, whenProfileCleanupDone } from '@/utils/profiles';
+import { captureProfileOwner, getNotificationEpoch, isProfileOwner, whenProfileCleanupDone } from '@/utils/profiles';
 import { addDaysISO, isOccurrenceCompleted, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
 const CHANNEL_ID = 'task-reminders';
@@ -164,8 +164,13 @@ export function reminderResyncNeeded(): boolean {
 }
 
 export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
+  // These tasks belong to the profile session that is open NOW. If that session is over (the person left, or someone else came)
+  // by the time this gets to schedule anything, nothing is scheduled: a reminder carries the task's text, and it must never appear
+  // for a profile that is no longer open. The tasks come back unchanged.
+  const owner = captureProfileOwner();
   // The phone-side clean-up of the profile that was just left must be finished first, or it could cancel what is scheduled now.
   await whenProfileCleanupDone();
+  if (!isProfileOwner(owner)) return tasks;
   const now = new Date();
   let changed = false;
   const language = getCurrentLanguage();
@@ -202,6 +207,7 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
       }
 
       await cancelIfScheduled(task);
+      if (!isProfileOwner(owner)) return task;
       try {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
@@ -218,6 +224,11 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
             date: next.triggerDate,
           },
         });
+        if (!isProfileOwner(owner)) {
+          // The session ended while the phone was scheduling it: take it back at once.
+          await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+          return task;
+        }
         changed = true;
         return { ...task, scheduledNotificationId: id, scheduledNotificationFor: next.dateISO };
       } catch {
@@ -228,5 +239,5 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
     })
   );
 
-  return changed ? updated : tasks;
+  return changed && isProfileOwner(owner) ? updated : tasks;
 }

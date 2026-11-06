@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ensureProfilesReady, isProfileReleased, registerProfileStore, scopedKey, trackOperation, whenProfileCleanupDone, writeScoped } from '@/utils/profiles';
+import { captureProfileOwner, ensureProfilesReady, isProfileOwner, isProfileReleased, registerProfileStore, scopedKey, trackOperation, whenProfileCleanupDone, writeScoped } from '@/utils/profiles';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -111,10 +111,13 @@ export function subscribeToCriticalAlert(listener: (petId: string) => void): () 
 // Turning notifications ON asks the OS for permission first; if it is
 // refused the setting stays off and false is returned.
 export async function setNotificationsEnabled(enabled: boolean): Promise<boolean> {
+  // The permission prompt can stay open for a long time; if the profile session that asked is over by then, nothing is saved.
+  const owner = captureProfileOwner();
   if (enabled) {
     const granted = await ensureNotificationPermission();
     if (!granted) return false;
   }
+  if (!isProfileOwner(owner)) return false;
   await saveAlertSettings({ notifications: enabled });
   return true;
 }
@@ -284,6 +287,9 @@ async function sendNow(kind: AlertKind, pet: PetRecord, family: FamilyState, use
 // A pet's health changed (see subscribeToLifecycle). Announces a new episode
 // once, and cleans up alerts that no longer apply.
 async function handleLifecycleNotice(notice: { petId: string; type: string; at: string; live: boolean }): Promise<void> {
+  // The pet belongs to the profile session open when the notice arrived; once that session is over nothing about it is announced
+  // (an alert carries the pet's name, and must never appear for a profile that is no longer open).
+  const owner = captureProfileOwner();
   const family = peekFamily();
   const pet = family?.pets.find((p) => p.id === notice.petId);
   if (!family || !pet) return;
@@ -306,8 +312,9 @@ async function handleLifecycleNotice(notice: { petId: string; type: string; at: 
   if (!notice.live) return;
 
   const current = await getAlertSettings();
+  if (!isProfileOwner(owner)) return;
   if (current.notifications) await sendNow(kind, pet, family, current.vibration);
-  if (kind === 'critical') criticalListeners.forEach((listener) => listener(pet.id));
+  if (kind === 'critical' && isProfileOwner(owner)) criticalListeners.forEach((listener) => listener(pet.id));
 }
 
 // Signature of everything the schedule depends on, so the notifications are
@@ -334,26 +341,34 @@ export function startPetAlerts(): () => void {
   started = true;
   let lastSignature = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Everything this registration does belongs to the profile session it was started in (see ProfileOwner in @/utils/profiles.ts).
+  const owner = captureProfileOwner();
+  const syncIfCurrent = () => {
+    if (isProfileOwner(owner)) void syncPetAlerts();
+  };
 
   const offLifecycle = subscribeToLifecycle((notice) => {
-    void handleLifecycleNotice(notice);
+    if (isProfileOwner(owner)) void handleLifecycleNotice(notice);
   });
   // Scheduled notifications hold their text, so they are rebuilt when the language changes.
   const offLanguage = subscribeToLanguage(() => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void syncPetAlerts(), 500);
+    timer = setTimeout(syncIfCurrent, 500);
   });
   const offFamily = subscribeToFamily((family) => {
     const signature = scheduleSignature(family);
     if (signature === lastSignature) return;
     lastSignature = signature;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void syncPetAlerts(), 1500);
+    timer = setTimeout(syncIfCurrent, 1500);
   });
-  void ensureFamilyLoaded().then((family) => {
-    lastSignature = scheduleSignature(family);
-    void syncPetAlerts();
-  });
+  void ensureFamilyLoaded()
+    .then((family) => {
+      if (!isProfileOwner(owner)) return;
+      lastSignature = scheduleSignature(family);
+      void syncPetAlerts();
+    })
+    .catch(() => {});
 
   return () => {
     started = false;

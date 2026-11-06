@@ -43,6 +43,7 @@ import {
   triggerTestCriticalAlert,
   type PetAlertSettings,
 } from '@/utils/pet-alerts';
+import { captureProfileOwner, isProfileOwner } from '@/utils/profiles';
 import { devAddGrowthToSelectedPet, devSetSelectedHealthState, devSetSelectedNeed, devSetSelectedPetActualStage, devShiftSicknessBack, getSelectedPet } from '@/utils/pet-family';
 import { RECOVERY_NEED_THRESHOLD } from '@/utils/pet-family-config';
 
@@ -538,6 +539,9 @@ export function PetAlertsScreen() {
   }
 
   async function handleFlash(next: boolean) {
+    // The camera permission prompt can stay open for a long time: if the profile session that opened this screen is over by then,
+    // the setting is not saved into whichever profile is open now.
+    const owner = captureProfileOwner();
     if (!next) {
       await saveAlertSettings({ flash: false });
       setMessage(null);
@@ -554,6 +558,7 @@ export function PetAlertsScreen() {
         setMessage('alMsgFlashPermission');
         return;
       }
+      if (!isProfileOwner(owner)) return;
       await saveAlertSettings({ flash: true });
       setMessage(null);
     } catch {

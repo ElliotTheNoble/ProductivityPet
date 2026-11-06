@@ -23,7 +23,7 @@ import { ensureOnboardingLoaded, useOnboarding } from '@/utils/onboarding';
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { consumePendingRoute } from '@/utils/family-session';
 import { startParentGateAutoLock } from '@/utils/parent-gate';
-import { ensureProfilesReady } from '@/utils/profiles';
+import { captureProfileOwner, ensureProfilesReady, isProfileOwner } from '@/utils/profiles';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
 import { BIRTHDAY_BACKGROUNDS, resolveRoomBackground, type SpecialEvent } from '@/utils/room-backgrounds';
 import { ROOMS, isRoomSlug } from '@/utils/rooms';
@@ -177,10 +177,14 @@ function AppShell() {
   // of this depends on Home being open.
   const selectedPetId = useSelectedPetId();
   useEffect(() => {
+    // The stage worked out below belongs to the profile session this effect started in; if that session is over before the
+    // poop check runs, the check is skipped (it would otherwise apply one profile's stage to another profile's pet).
+    const owner = captureProfileOwner();
     loadPetProfileWithNeedsUpdate()
       .then(async (profile) => {
         if (profile.lifeState === 'deceased') return;
         const tasks = await getCachedTasks();
+        if (!isProfileOwner(owner)) return;
         const growthCount =
           profile.growthCredit !== undefined ? Math.floor(profile.growthCredit) : getCompletedTaskCount(tasks);
         return checkForPoopAccumulation(getRenderedStage(growthCount, profile.paidStageIndex));
@@ -192,7 +196,18 @@ function AppShell() {
   // once a minute while the app is open, and again whenever it comes back to
   // the foreground.
   useEffect(() => {
-    const tick = () => advanceAllPets(new Date(), true);
+    // These timers belong to the profile session they were started in. Once it is over (the person left; the picker is coming up
+    // or showing; someone else is in) they do nothing: a timer that fires in the moment between the release and the screens
+    // unmounting, or one that somehow outlives its screen, must not touch another profile's pets.
+    const owner = captureProfileOwner();
+    const tick = () => {
+      if (!isProfileOwner(owner)) return;
+      try {
+        advanceAllPets(new Date(), true);
+      } catch {
+        // a tick that cannot run is simply skipped; the next one catches up
+      }
+    };
     const interval = setInterval(tick, 60000);
     const subscription = AppState.addEventListener('change', (next) => {
       if (next === 'active') tick();

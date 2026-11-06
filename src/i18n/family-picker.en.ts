@@ -5,6 +5,8 @@ export const familyPickerEn = {
   fpTitle: "Who's playing today?",
   fpSubtitle: 'Tap your name to play with your pets.',
   fpLoading: 'Getting things ready…',
+  fpLeaving: 'Saving everything…',
+  fpLeavingHint: 'Your pets and progress are being kept safe. Please wait a moment.',
 
   // Main / parent
   fpMain: 'Main',

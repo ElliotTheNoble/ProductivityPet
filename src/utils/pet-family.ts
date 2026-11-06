@@ -4,8 +4,10 @@ import { tr } from '@/i18n';
 import { GAMEPLAY_CHEATS_ALLOWED } from '@/utils/dev-flags';
 import { endToySession, getToySession, resetToySessions, startToySession } from '@/utils/pet-toy-session';
 import {
+  captureProfileOwner,
   ensureProfilesReady,
   isActiveProfileLegacy,
+  isProfileOwner,
   registerProfileStore,
   scopedKey,
   trackOperation,
@@ -143,8 +145,14 @@ function newPetId(): string {
   return `pet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Every profile object handed out here carries (invisibly: a symbol key, never saved, copied by an object spread) the profile
+// session it was read in. A copy of it that a delayed callback saves later is refused when that session is over, so it can never
+// overwrite another profile's pet or wallet (see savePetProfileForSelectedPet and ProfileOwner in @/utils/profiles.ts).
+const SESSION_TAG = Symbol('profileSession');
+type SessionTagged = { [SESSION_TAG]?: number };
+
 function toProfile(pet: PetRecord, wallet: { pawTokens: number }): PetProfile {
-  return {
+  const profile: PetProfile & SessionTagged = {
     ...pet.profile,
     pawTokens: wallet.pawTokens,
     petId: pet.id,
@@ -155,6 +163,8 @@ function toProfile(pet: PetRecord, wallet: { pawTokens: number }): PetProfile {
     criticalSince: pet.lifecycle.criticalSince,
     diedAt: pet.lifecycle.diedAt,
   };
+  profile[SESSION_TAG] = captureProfileOwner().generation;
+  return profile;
 }
 
 // Same object back for the same pet + balance, so React state set from a
@@ -193,6 +203,7 @@ function stripExtras(profile: PetProfile): PetProfile {
   for (const key of ['petId', 'petName', 'growthCredit', 'lifeState', 'sickSince', 'criticalSince', 'diedAt']) {
     delete copy[key];
   }
+  delete (copy as SessionTagged)[SESSION_TAG];
   return copy as PetProfile;
 }
 
@@ -568,8 +579,16 @@ export async function getPetProfileForSelectedPet(): Promise<PetProfile> {
 }
 
 export function savePetProfileForSelectedPet(profile: PetProfile): void {
+  // A profile read in an earlier profile session (the person left and someone else came) is never saved into the one open now.
+  const readIn = (profile as SessionTagged)[SESSION_TAG];
+  if (readIn !== undefined && readIn !== captureProfileOwner().generation) return;
   if (!state) {
-    void ensureFamilyLoaded().then(() => savePetProfileForSelectedPet(profile));
+    const owner = captureProfileOwner();
+    void ensureFamilyLoaded()
+      .then(() => {
+        if (isProfileOwner(owner)) savePetProfileForSelectedPet(profile);
+      })
+      .catch(() => {});
     return;
   }
   const s = state;

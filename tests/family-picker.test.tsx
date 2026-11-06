@@ -136,6 +136,7 @@ async function boot(options: Options = {}) {
   gate.lockParentArea();
   const stop = options.autoLock === false ? () => undefined : gate.startParentGateAutoLock();
   const shellLoads: string[] = [];
+  const shellTaps: number[] = [];
   function Shell() {
     const [text, setText] = React.useState('loading shell');
     React.useEffect(() => {
@@ -144,10 +145,12 @@ async function boot(options: Options = {}) {
         setText(`SHELL ${profiles.getActiveProfileId()} wallet ${f.wallet.pawTokens}`);
       });
     }, []);
-    return React.createElement(Text, null, text);
+    // a control of the app shell: what the cover has to keep out of reach
+    const tap = React.createElement(ReactNative.Pressable, { accessibilityRole: 'button', accessibilityLabel: 'shell-tap', onPress: () => shellTaps.push(1) }, React.createElement(Text, null, 'tap'));
+    return React.createElement(React.Fragment, null, React.createElement(Text, null, text), tap);
   }
   const view = await rntl.render(React.createElement(FamilyGate, null, React.createElement(Shell)));
-  return { AsyncStorage, rntl, screen: rntl.screen, fireEvent: rntl.fireEvent, waitFor: rntl.waitFor, i18n, profiles, gate, session, familyStore, pinModule, shellLoads, view, stop, React, Text };
+  return { AsyncStorage, rntl, screen: rntl.screen, fireEvent: rntl.fireEvent, waitFor: rntl.waitFor, i18n, profiles, gate, session, familyStore, pinModule, shellLoads, shellTaps, view, stop, React, Text };
 }
 type App = Awaited<ReturnType<typeof boot>>;
 
@@ -172,10 +175,27 @@ describe('cold start', () => {
     expect(app.screen.queryByText(t(app, 'fpTitle'))).toBeNull();
   });
 
-  test('with only archived children there is no picker either, and nothing of theirs is touched', async () => {
-    const app = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) } });
-    await app.screen.findByText(/SHELL main/);
+  test('with only archived children the picker still shows (archiving can never remove the protection of Main): nobody else is offered and nothing of theirs is touched', async () => {
+    const app = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) }, pin: 'ready' });
+    await app.screen.findByText(t(app, 'fpTitle'));
     expect(app.screen.queryByText('Mia')).toBeNull();
+    expect(app.screen.queryByText(/SHELL|loading shell/)).toBeNull(); // Main is NOT open
+    expect(app.shellLoads).toEqual([]);
+    expect(mainCard(app)).toBeTruthy();
+    expect(JSON.parse((await app.AsyncStorage.getItem(HOUSEHOLD))!).children).toHaveLength(1);
+  });
+
+  test('with only archived children Main still opens only with the Parent PIN, and with no PIN yet it stays closed', async () => {
+    const withPin = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) }, pin: 'ready' });
+    await withPin.screen.findByText(t(withPin, 'fpTitle'));
+    await withPin.fireEvent.press(mainCard(withPin));
+    await typePin(withPin, PIN);
+    await withPin.fireEvent.press(withPin.screen.getByRole('button', { name: t(withPin, 'pgUnlock') }));
+    await withPin.screen.findByText(/SHELL main/);
+    withPin.stop();
+    const noPin = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) }, pin: 'none' });
+    await noPin.screen.findByText(t(noPin, 'fpTitle'));
+    expect(noPin.screen.queryByText(/SHELL|loading shell/)).toBeNull();
   });
 
   test('with one child the picker shows first, and the app shell is not even mounted', async () => {
@@ -710,15 +730,13 @@ describe('Main fails closed (security review)', () => {
     await app.screen.findByText(t(app, 'fpPinBodyMain'));
   });
 
-  test('the original single-user app: no household, or no active child, opens Main with no picker and no PIN prompt (also with a PIN set up)', async () => {
+  test('the original single-user app: no household, or no child record at all, opens Main with no picker and no PIN prompt (also with a PIN set up)', async () => {
     for (const pin of ['none', 'ready'] as Pin[]) {
       const app = await boot({ seed: {}, pin });
       await app.screen.findByText(/SHELL main/);
       expect(app.screen.queryByText(t(app, 'fpTitle'))).toBeNull();
       app.stop();
     }
-    const archived = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) }, pin: 'none' });
-    await archived.screen.findByText(/SHELL main/);
   });
 
   test('entering Main needs the PIN each time the app starts: a previous session never carries over', async () => {
@@ -798,6 +816,166 @@ describe('the parent session locks (security review)', () => {
     await app.rntl.act(async () => watch.listeners().forEach((h) => h('background')));
     expect(app.screen.getAllByText(app.i18n.tn('pinDigitsEntered', 0)).length).toBeGreaterThan(0);
     watch.spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+describe('leaving a profile covers the app instead of replacing it (Stage 4.1)', () => {
+  const kidSeed = () => ({ ...twoKids(), [scoped('kid-mia', 'petFamily')]: family([pet({ id: 'a' })]) });
+  const holdSaves = (app: App) => {
+    const original = app.AsyncStorage.setItem;
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    app.AsyncStorage.setItem = jest.fn(async (key: string, value: string) => {
+      if (key === scoped('kid-mia', 'petFamily')) await gate;
+      return original(key, value);
+    });
+    return () => {
+      open();
+      app.AsyncStorage.setItem = original;
+    };
+  };
+  const coverName = (app: App) => t(app, 'fpLeaving');
+  // The nearest element above `element` that carries the given prop (null when there is none).
+  const ancestorWith = (element: ReturnType<App['screen']['getByText']>, prop: string) => {
+    for (let node = element.parent; node; node = node.parent) if (node.props && prop in node.props && node.props[prop] !== undefined) return node;
+    return null;
+  };
+
+  test('while the pets are being saved a neutral cover is over the app, nothing else changes, and then the picker takes over', async () => {
+    const app = await boot({ seed: kidSeed(), pin: 'ready' });
+    await app.screen.findByText('Mia');
+    await app.fireEvent.press(card(app, /Mia/));
+    await app.screen.findByText(/SHELL kid-mia/);
+    expect(app.screen.queryByRole('progressbar', { name: coverName(app) })).toBeNull();
+    const release = holdSaves(app);
+    app.familyStore.addToWallet(5);
+
+    let pending: Promise<unknown> = Promise.resolve();
+    await app.rntl.act(async () => {
+      pending = app.session.leaveProfile({ timeoutMs: 5000 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(app.screen.getByRole('progressbar', { name: coverName(app) })).toBeTruthy();
+    expect(app.screen.getByText(t(app, 'fpLeavingHint'))).toBeTruthy();
+    expect(app.screen.getByText(/SHELL kid-mia/, { includeHiddenElements: true })).toBeTruthy(); // still there underneath, so a failure would leave it as it was
+    expect(app.screen.queryByText(/SHELL kid-mia/)).toBeNull(); // but hidden from screen readers while the cover is up
+    expect(app.screen.queryByText(t(app, 'fpTitle'))).toBeNull(); // the picker is not shown before the save has really finished
+
+    release();
+    await app.rntl.act(async () => {
+      await pending;
+    });
+    await app.screen.findByText(t(app, 'fpTitle'));
+    expect(app.screen.queryByRole('progressbar', { name: coverName(app) })).toBeNull();
+    expect(app.screen.queryByText(/SHELL/)).toBeNull();
+  });
+
+  test('when the save fails the cover goes away and the screen underneath is exactly as it was (no success, no picker)', async () => {
+    const app = await boot({ seed: kidSeed(), pin: 'ready' });
+    await app.screen.findByText('Mia');
+    await app.fireEvent.press(card(app, /Mia/));
+    await app.screen.findByText(/SHELL kid-mia/);
+    const original = app.AsyncStorage.setItem;
+    app.AsyncStorage.setItem = jest.fn(async (key: string, value: string) => {
+      if (key === scoped('kid-mia', 'petFamily')) throw new Error('storage failed');
+      return original(key, value);
+    });
+    app.familyStore.addToWallet(5);
+
+    let result: unknown = null;
+    await app.rntl.act(async () => {
+      result = await app.session.leaveProfile({ timeoutMs: 300 });
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'unsaved-changes' });
+    expect(app.screen.queryByRole('progressbar', { name: coverName(app) })).toBeNull();
+    expect(app.screen.getByText(/SHELL kid-mia/)).toBeTruthy();
+    expect(app.screen.queryByText(t(app, 'fpTitle'))).toBeNull();
+    expect(app.familyStore.peekFamily()?.wallet.pawTokens).toBe(5);
+    app.AsyncStorage.setItem = original;
+  });
+
+  test('while the cover is up the app underneath cannot be tapped, focused or read by a screen reader, and all of it comes back if leaving fails', async () => {
+    const app = await boot({ seed: kidSeed(), pin: 'ready' });
+    await app.screen.findByText('Mia');
+    await app.fireEvent.press(card(app, /Mia/));
+    await app.screen.findByText(/SHELL kid-mia/);
+    expect(app.screen.getByRole('button', { name: 'shell-tap' })).toBeTruthy();
+    await app.fireEvent.press(app.screen.getByRole('button', { name: 'shell-tap' }));
+    expect(app.shellTaps).toHaveLength(1); // works normally
+
+    const original = app.AsyncStorage.setItem;
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    app.AsyncStorage.setItem = jest.fn(async (key: string, value: string) => {
+      if (key === scoped('kid-mia', 'petFamily')) {
+        await gate;
+        throw new Error('storage failed');
+      }
+      return original(key, value);
+    });
+    app.familyStore.addToWallet(5);
+    let pending: Promise<unknown> = Promise.resolve();
+    await app.rntl.act(async () => {
+      pending = app.session.leaveProfile({ timeoutMs: 5000 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    // screen readers: the app is hidden on every platform, and the cover is the one modal element
+    const cover = app.screen.getByRole('progressbar', { name: coverName(app) });
+    expect(cover.props.accessibilityViewIsModal).toBe(true);
+    expect(cover.props.tabIndex).toBe(-1); // it can take the keyboard focus on the web
+    const hiddenApp = ancestorWith(app.screen.getByText('tap', { includeHiddenElements: true }), 'importantForAccessibility');
+    expect(hiddenApp).not.toBeNull();
+    if (!hiddenApp) return;
+    expect(hiddenApp.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(hiddenApp.props.accessibilityElementsHidden).toBe(true);
+    expect(hiddenApp.props['aria-hidden']).toBe(true);
+    expect(hiddenApp.props.inert).toBe(true); // keyboard focus and clicks cannot reach anything under it on the web
+    expect(app.screen.queryByRole('button', { name: 'shell-tap' })).toBeNull(); // not exposed to assistive technology
+
+    // touch and mouse: nothing underneath reacts
+    await app.fireEvent.press(app.screen.getByRole('button', { name: 'shell-tap', includeHiddenElements: true }));
+    expect(app.shellTaps).toHaveLength(1);
+
+    // the save fails: the app comes back for the SAME profile, with nothing of anyone else on it
+    open();
+    await app.rntl.act(async () => {
+      expect(await pending).toMatchObject({ ok: false, reason: 'unsaved-changes' });
+    });
+    app.AsyncStorage.setItem = original;
+    expect(app.screen.queryByRole('progressbar', { name: coverName(app) })).toBeNull();
+    expect(ancestorWith(app.screen.getByText('tap'), 'importantForAccessibility')).toBeNull();
+    await app.screen.findByText(/SHELL kid-mia/);
+    expect(app.screen.queryByText(/SHELL kid-leo|SHELL main/)).toBeNull();
+    await app.fireEvent.press(app.screen.getByRole('button', { name: 'shell-tap' }));
+    expect(app.shellTaps).toHaveLength(2); // usable again
+    expect(app.profiles.getActiveProfileId()).toBe('kid-mia');
+    expect(app.familyStore.peekFamily()?.wallet.pawTokens).toBe(5);
+  });
+
+  test('the cover speaks Spanish too', async () => {
+    const app = await boot({ seed: kidSeed(), pin: 'ready', language: 'es' });
+    await app.screen.findByText('Mia');
+    await app.fireEvent.press(card(app, /Mia/));
+    await app.screen.findByText(/SHELL kid-mia/);
+    const release = holdSaves(app);
+    app.familyStore.addToWallet(1);
+    let pending: Promise<unknown> = Promise.resolve();
+    await app.rntl.act(async () => {
+      pending = app.session.leaveProfile({ timeoutMs: 5000 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(app.screen.getByRole('progressbar', { name: 'Guardando todo…' })).toBeTruthy();
+    expect(app.screen.getByText('Tus mascotas y tu progreso se están guardando. Espera un momento.')).toBeTruthy();
+    release();
+    await app.rntl.act(async () => {
+      await pending;
+    });
   });
 });
 

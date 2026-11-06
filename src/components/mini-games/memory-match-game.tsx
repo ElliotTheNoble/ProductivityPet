@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-nati
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { useT } from '@/i18n';
+import { captureProfileOwner } from '@/utils/profiles';
 
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
 import { MemoryMatchDifficultySelect } from '@/components/mini-games/memory-match-difficulty-select';
@@ -109,6 +110,8 @@ export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
 
   const movesRef = useRef(0);
   const roundSubmittedRef = useRef(false);
+  // The profile session this game was opened in: its reward is never paid into a different profile.
+  const ownerRef = useRef(captureProfileOwner());
   const resolveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load every difficulty's saved Best Moves once, for the difficulty-
@@ -198,7 +201,7 @@ export function MemoryMatchGame({ onExit }: MemoryMatchGameProps) {
     if (phase !== 'ended' || roundSubmittedRef.current || !difficulty) return;
     roundSubmittedRef.current = true;
     setIsSubmittingRound(true);
-    completeMemoryMatchRound(difficulty, movesRef.current)
+    completeMemoryMatchRound(difficulty, movesRef.current, ownerRef.current)
       .then((result) => {
         setRoundResult(result);
         setBestMovesByDifficulty((prev) => ({ ...prev, [difficulty]: result.bestMoves }));

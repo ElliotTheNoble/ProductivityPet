@@ -2,6 +2,23 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-06] — Profile switching, Stages 4.0 and 4.1: the inactivity clock and leaving a profile (not connected to the app yet), disabled for users
+
+### Added
+- A pure inactivity clock (10-minute limit, 60-second warning window) that treats device sleep and clock changes the safe way, ignores activity in the background and after the deadline, and tells the later live timer when to look again. Nothing in the app uses it yet.
+- `leaveProfile()`: covers the app with a neutral "Saving everything..." screen, locks the parent area first, releases the profile (pending saves finish, notifications of the old profile are cleared once), and only then shows the picker, which starts the next profile on the home screen. A failed release leaves the person in their profile with nothing lost and returns a clear failure (never a success). English and Spanish.
+
+### Security
+- Delayed callbacks are bound to the profile session they were started in: a reward, reminder, alert, timer, profile save or settings change from one profile can no longer reach another profile, even after that profile has loaded (see FEATURE-094).
+- While a profile is being left, the app underneath is unreachable by touch, mouse, keyboard focus and screen readers; if leaving fails it all comes back for the same profile.
+
+### Changed
+- A household whose children are all archived now shows the picker, with Main behind the Parent PIN, instead of opening Main without a PIN.
+- The 60-second pet tick skips a profile that was let go of and can no longer throw; the Pawadise mail check does nothing while no profile is open.
+
+### Verified
+- 802 of 802 tests pass (86 new), plain `npx tsc --noEmit` clean. Not done: the header chip, the live idle timer, the web-tab lock and the visual preview (Stages 4.2 to 4.5); real-device checks (see FEATURE-094, BUG-083, BUG-072).
+
 ## [2026-11-06] — Family management in the Parent Dashboard (Stages 3.2 to 3.6), disabled for users
 
 ### Added

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useT } from '@/i18n';
+import { captureProfileOwner } from '@/utils/profiles';
 import { BackToGamesButton } from '@/components/mini-games/back-to-games-button';
 import { KittyCatchResults } from '@/components/mini-games/kitty-catch-results';
 import { SpriteCrop } from '@/components/sprite-crop';
@@ -126,6 +127,8 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
   // completeKittyCatchRound itself, but a round should only ever be
   // *reported* once from here in the first place.
   const roundSubmittedRef = useRef(false);
+  // The profile session this game was opened in: its reward is never paid into a different profile.
+  const ownerRef = useRef(captureProfileOwner());
 
   useEffect(() => {
     areaSizeRef.current = areaSize;
@@ -289,7 +292,7 @@ export function KittyCatchGame({ onExit }: KittyCatchGameProps) {
     if (phase !== 'ended' || roundSubmittedRef.current) return;
     roundSubmittedRef.current = true;
     setIsSubmittingRound(true);
-    completeKittyCatchRound(scoreRef.current)
+    completeKittyCatchRound(scoreRef.current, ownerRef.current)
       .then((result) => setRoundResult(result))
       .catch(() => setRoundResult(null))
       .finally(() => setIsSubmittingRound(false));

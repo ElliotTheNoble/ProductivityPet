@@ -8,6 +8,8 @@ export const familyPickerEs: Table = {
   fpTitle: '¿Quién juega hoy?',
   fpSubtitle: 'Toca tu nombre para jugar con tus mascotas.',
   fpLoading: 'Preparando todo…',
+  fpLeaving: 'Guardando todo…',
+  fpLeavingHint: 'Tus mascotas y tu progreso se están guardando. Espera un momento.',
 
   fpMain: 'Principal',
   fpMainSubProtected: 'Las mascotas de los padres. Pide el PIN de los padres.',

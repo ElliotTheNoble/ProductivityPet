@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+import { assertProfileOwner, captureProfileOwner, ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped, type ProfileOwner } from '@/utils/profiles';
 
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
 import { clampNeedValue, savePetProfile, type PetProfile } from '@/utils/pet-profile';
@@ -171,26 +171,33 @@ export type MemoryMatchRoundResult = {
 // completeKittyCatchRound in kitty-catch-rewards.ts.
 let pendingRound: Promise<MemoryMatchRoundResult> | null = null;
 
+//
+// `owner` is the profile session the round was played in; a round whose session is over awards nothing and changes nothing (the
+// promise rejects with StaleProfileError). See completeKittyCatchRound.
 export function completeMemoryMatchRound(
   difficulty: MemoryMatchDifficulty,
-  moves: number
+  moves: number,
+  owner: ProfileOwner = captureProfileOwner()
 ): Promise<MemoryMatchRoundResult> {
   const previous = pendingRound ?? Promise.resolve();
   const next = previous.then(
-    () => runCompleteRound(difficulty, moves),
-    () => runCompleteRound(difficulty, moves)
+    () => runCompleteRound(difficulty, moves, owner),
+    () => runCompleteRound(difficulty, moves, owner)
   );
   pendingRound = next;
-  return next;
+  return trackOperation(next);
 }
 
 async function runCompleteRound(
   difficulty: MemoryMatchDifficulty,
-  moves: number
+  moves: number,
+  owner: ProfileOwner
 ): Promise<MemoryMatchRoundResult> {
+  assertProfileOwner(owner);
   const profileBeforeReward = await loadPetProfileWithNeedsUpdate();
   const bestMovesRecord = await loadBestMoves();
   const dailyRecord = await loadDailyRecord();
+  assertProfileOwner(owner);
 
   const previousBest = bestMovesRecord[difficulty] ?? null;
   // The FIRST completion of a difficulty only ESTABLISHES its baseline —

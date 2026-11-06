@@ -11,7 +11,7 @@ import {
 } from '@/utils/pet-family';
 import { POSTCARD_DESIGNS_BY_SPECIES, type PostcardDesign } from '@/utils/pawadise-art';
 import { addPostcard, ensurePostcardsLoaded } from '@/utils/pawadise-postcards';
-import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+import { captureProfileOwner, ensureProfilesReady, isProfileOwner, isProfileReleased, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
 
 // Surprise postcards from Pet Pawadise: delivery scheduling and the mail that has arrived but is still
 // unopened. Only pets CURRENTLY retired in Pawadise send postcards.
@@ -188,6 +188,7 @@ export function runPawadiseDeliveries(
 }
 
 async function doRunPawadiseDeliveries(now: Date, rng: () => number, options: { force?: boolean }): Promise<number> {
+  if (isProfileReleased()) return 0; // the picker is showing: no profile is open, so there is nothing to deliver
   if (running) return 0;
   running = true;
   try {
@@ -301,7 +302,11 @@ async function doOpenPendingMail(id: string) {
 // Starts the checks: at launch, whenever the app comes back to the foreground, once a minute while open, and
 // right after the family changes (so a pet that just retired gets its first schedule).
 export function startPawadiseMail(): () => void {
+  // Everything this registration does belongs to the profile session it was started in: its timers and listeners do nothing once
+  // that session is over (see ProfileOwner in @/utils/profiles.ts).
+  const owner = captureProfileOwner();
   const run = () => {
+    if (!isProfileOwner(owner)) return;
     void runPawadiseDeliveries().catch(() => {});
   };
   run();

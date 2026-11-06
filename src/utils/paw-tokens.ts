@@ -2,7 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { addToWallet, awardGrowthForTasks, ensureFamilyLoaded, getLivingPetCount } from '@/utils/pet-family';
 import { getTaskTokenReward } from '@/utils/pet-family-config';
-import { ensureProfilesReady, registerProfileStore, scopedKey, writeScoped } from '@/utils/profiles';
+import {
+  StaleProfileError,
+  assertProfileOwner,
+  captureProfileOwner,
+  ensureProfilesReady,
+  registerProfileStore,
+  scopedKey,
+  trackOperation,
+  writeScoped,
+  type ProfileOwner,
+} from '@/utils/profiles';
 import { recordTokenEarning, type TokenSource } from '@/utils/token-history';
 import type { Task } from '@/utils/tasks';
 
@@ -149,13 +159,31 @@ let pendingReconcile: Promise<void> = Promise.resolve();
 // awarded, but pays out nothing. Without this, every task a user had
 // already completed before this feature shipped would suddenly earn a
 // token the first time the app loads afterward.
+//
+// The call belongs to the profile session it was made in: the whole chain is one tracked operation (leaving a profile waits for
+// it), and a call whose session is over when its turn comes, or when it is about to change anything, does nothing, so tasks of
+// one profile can never pay tokens or growth into another (see ProfileOwner in @/utils/profiles.ts).
 export function reconcilePawTokenEarnings(tasks: Task[]): Promise<void> {
-  pendingReconcile = pendingReconcile.then(() => runReconcile(tasks));
-  return pendingReconcile;
+  const owner = captureProfileOwner();
+  const turn = () => runReconcileOwned(tasks, owner);
+  const run = pendingReconcile.then(turn, turn);
+  pendingReconcile = run.then(() => undefined, () => undefined); // a failed run never blocks the ones after it
+  return trackOperation(run);
 }
 
-async function runReconcile(tasks: Task[]): Promise<void> {
+async function runReconcileOwned(tasks: Task[], owner: ProfileOwner): Promise<void> {
+  try {
+    await runReconcile(tasks, owner);
+  } catch (error) {
+    if (error instanceof StaleProfileError) return;
+    throw error;
+  }
+}
+
+async function runReconcile(tasks: Task[], owner: ProfileOwner): Promise<void> {
+  assertProfileOwner(owner);
   await ensureProfilesReady();
+  assertProfileOwner(owner);
   // Both records belong to the profile that is active NOW; the keys are fixed for this whole run.
   const awardedKey = scopedKey(AWARDED_KEY_NAME);
   const historyKey = scopedKey(TOKEN_HISTORY_KEY_NAME);
@@ -171,12 +199,14 @@ async function runReconcile(tasks: Task[]): Promise<void> {
       setRewardHistoryStatus({ state: 'unreadable' });
       return;
     }
+    assertProfileOwner(owner);
 
     if (stored === null) {
       // No record at all. A new player has nothing completed (or never earned anything); a player who has
       // earned before and lost the record is told apart by their earnings history. Either way the
       // currently-completed occurrences are recorded as already paid and nothing is paid for them.
       const existingPlayer = completedOccurrences.length > 0 || (await hasEarnedBefore(historyKey));
+      assertProfileOwner(owner);
       cachedAwardedKeys = new Set(completedOccurrences.map((occurrence) => occurrence.key));
       await writeAwardedKeys(awardedKey, cachedAwardedKeys);
       setRewardHistoryStatus({ state: existingPlayer ? 'recovered-missing' : 'new-player' });
@@ -197,6 +227,7 @@ async function runReconcile(tasks: Task[]): Promise<void> {
         setRewardHistoryStatus({ state: 'unreadable' });
         return;
       }
+      assertProfileOwner(owner);
       const rebuilt = new Set(salvageAwardedKeys(stored));
       for (const occurrence of completedOccurrences) rebuilt.add(occurrence.key);
       cachedAwardedKeys = rebuilt;
@@ -226,6 +257,7 @@ async function runReconcile(tasks: Task[]): Promise<void> {
   // Growth is separate: each completed TASK is shared between the living
   // pets (@/utils/pet-family.ts awardGrowthForTasks).
   await ensureFamilyLoaded();
+  assertProfileOwner(owner); // the session may have ended while the pets were loading: nothing is paid into another profile
   const livingPets = getLivingPetCount();
   const payouts = newlyCompleted.map((occurrence) => ({
     ...occurrence,

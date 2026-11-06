@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+import { assertProfileOwner, captureProfileOwner, ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped, type ProfileOwner } from '@/utils/profiles';
 
 import { KITTY_CATCH_MIN_SCORE_FOR_BONUS } from '@/utils/kitty-catch';
 import { loadPetProfileWithNeedsUpdate } from '@/utils/pet-needs';
@@ -151,14 +151,19 @@ export type KittyCatchRoundResult = {
 // data-integrity backstop.
 let pendingRound: Promise<KittyCatchRoundResult> | null = null;
 
-export function completeKittyCatchRound(score: number): Promise<KittyCatchRoundResult> {
+//
+// `owner` is the profile session the round was played in (the game screen takes it when it opens). A round whose session is over
+// when it is reported, or by the time it is about to award anything, awards nothing and changes nothing (the promise rejects with
+// StaleProfileError): a round played by one child can never pay tokens or Happiness to another profile.
+export function completeKittyCatchRound(score: number, owner: ProfileOwner = captureProfileOwner()): Promise<KittyCatchRoundResult> {
   const previous = pendingRound ?? Promise.resolve();
-  const next = previous.then(() => runCompleteRound(score), () => runCompleteRound(score));
+  const next = previous.then(() => runCompleteRound(score, owner), () => runCompleteRound(score, owner));
   pendingRound = next;
-  return next;
+  return trackOperation(next);
 }
 
-async function runCompleteRound(score: number): Promise<KittyCatchRoundResult> {
+async function runCompleteRound(score: number, owner: ProfileOwner): Promise<KittyCatchRoundResult> {
+  assertProfileOwner(owner);
   // Happiness is a decaying need (unlike Paw Tokens), so this round's +10
   // should apply on top of whatever Happiness is RIGHT NOW — catching up
   // any elapsed-time decay (and bedtime boundaries) first, same ordering
@@ -167,6 +172,7 @@ async function runCompleteRound(score: number): Promise<KittyCatchRoundResult> {
   const profileBeforeReward = await loadPetProfileWithNeedsUpdate();
   const previousHighScore = await loadHighScore();
   const dailyRecord = await loadDailyRecord();
+  assertProfileOwner(owner);
 
   const isNewHighScore = score > previousHighScore;
   const nextHighScore = isNewHighScore ? score : previousHighScore;
