@@ -149,9 +149,13 @@ export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;
 // change the selected pet's real saved needs/clock — turn this off for release.
 export const DEV_ENABLE_LIFECYCLE_TEST_CONTROLS = true;
 
-// Family mode (shared-device child profiles, the family picker and the parent PIN). OFF for every user. While it is off
-// nothing in the app changes: no PIN checker is registered, the parent area is open exactly as it always was, and the
-// native authentication / secure-storage modules are never loaded. Do NOT turn this on for real users until BUG-072
-// (care warnings and notifications for inactive children) and the real-device checks listed in FEATURE-088 are done.
-// The web is never supported (see @/utils/parent-pin.ts) until guardian-account authentication exists.
-export const FAMILY_MODE_ENABLED = false;
+// Family mode (shared-device child profiles, the family picker and the parent PIN). OFF for every user, and it CANNOT be on
+// in a production build: it needs __DEV__ (false in every release build) AND the environment variable
+// EXPO_PUBLIC_FAMILY_MODE=1 at the moment the development server starts, for example (PowerShell):
+//   $env:EXPO_PUBLIC_FAMILY_MODE='1'; npx expo start
+// While it is off nothing in the app changes: no PIN checker is registered, the parent area is open exactly as it always was,
+// the Parent PIN screens render nothing, and the native authentication / secure-storage modules are never loaded. Do NOT make
+// it true for real users until BUG-072 (care warnings and notifications for inactive children) and the real-device checks
+// listed in FEATURE-088 and FEATURE-089 are done. On the web it only ever selects the in-memory development preview (see
+// @/utils/parent-auth-preview.ts); the web has no secure storage, so family mode is never supported there for real users.
+export const FAMILY_MODE_ENABLED: boolean = __DEV__ && process.env.EXPO_PUBLIC_FAMILY_MODE === '1';

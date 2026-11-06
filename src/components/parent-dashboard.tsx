@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Card, ChoiceCard, Field, PageShell, ToggleRow } from '@/components/family-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { ParentPinCard } from '@/components/parent-pin-card';
 import { LANGUAGES, useT, type LanguageCode, type StringKey, getLocale } from '@/i18n';
 import {
   addChild,
@@ -130,6 +131,9 @@ export function ParentDashboard() {
           {t('localProfileNote')}
         </ThemedText>
       </View>
+
+      {/* Parent PIN (renders nothing unless family mode is on) */}
+      <ParentPinCard />
 
       {/* Parent profile */}
       <Card title={t('parentProfile')}>

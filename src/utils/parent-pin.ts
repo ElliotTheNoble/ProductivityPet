@@ -1,23 +1,18 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bytesToHex } from '@noble/hashes/utils';
 import { Platform } from 'react-native';
 
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import {
   limitedAttempt,
+  openParentSession,
   parseAttempts,
   refreshParentAccess,
   registerPinVerifier,
   type AttemptStore,
   type PinVerifier,
 } from '@/utils/parent-gate';
-import {
-  ATTEMPTS_KEY,
-  RECORD_KEY,
-  isSecureStorageAvailable,
-  readSecret,
-  writeSecret,
-} from '@/utils/parent-secrets';
+import { getAuthBackend, isSecureStorageAvailable, readSecret, setAuthBackend, writeSecret } from '@/utils/parent-auth-backend';
+import { ATTEMPTS_KEY, RECORD_KEY } from '@/utils/parent-secrets';
 import {
   checkSecret,
   generateRecoveryCode,
@@ -73,8 +68,6 @@ import { secureRandomBytes } from '@/utils/secure-random';
 //  a way in. Only guardian-account recovery (not built yet) will be able to restore parent access. The children's data is
 //  never touched either way.
 
-const MARKER_KEY = '@ProductivityPet:parentAuth';
-
 type Marker = { v: 1; installId: string; configuredAt: string };
 type AuthRecord = {
   v: 1;
@@ -115,7 +108,7 @@ type MarkerRead = { kind: 'none' } | { kind: 'marker'; marker: Marker } | { kind
 async function readMarker(): Promise<MarkerRead> {
   let raw: string | null;
   try {
-    raw = await AsyncStorage.getItem(MARKER_KEY);
+    raw = await getAuthBackend().markerRead();
   } catch {
     return { kind: 'unreadable' };
   }
@@ -167,12 +160,7 @@ export async function getAuthState(): Promise<AuthState> {
 }
 
 async function writeMarker(installId: string, configuredAt: string): Promise<boolean> {
-  try {
-    await AsyncStorage.setItem(MARKER_KEY, JSON.stringify({ v: 1, installId, configuredAt } satisfies Marker));
-    return true;
-  } catch {
-    return false;
-  }
+  return getAuthBackend().markerWrite(JSON.stringify({ v: 1, installId, configuredAt } satisfies Marker));
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -322,7 +310,8 @@ export async function confirmPinSetup(pin: string, code: string): Promise<Confir
     if (!(await saveRecord(active))) return { ok: false, reason: 'unavailable' };
     if (!(await writeMarker(active.installId, active.createdAt))) return { ok: false, reason: 'unavailable' };
     await secureAttemptStore.write({ version: 1, failures: 0, lockedUntil: 0, lastSeen: Date.now() });
-    refreshParentAccess();
+    // The parent has just typed back both the PIN and the recovery code: the parent area opens for them (first setup only).
+    openParentSession();
     return { ok: true };
   } finally {
     setupBusy = false;
@@ -364,7 +353,9 @@ export async function changePin(currentPin: string, newPin: string): Promise<Pin
       return saveRecord({ ...current, updatedAt: new Date().toISOString(), pin: await makeSecretRecord('pin', newPin) });
     }
   );
-  return mapOutcome(outcome);
+  const changed = mapOutcome(outcome);
+  if (changed.ok) refreshParentAccess();
+  return changed;
 }
 
 // Uses the recovery code to set a NEW PIN. A correct code is the only thing that is needed, and it is a counted guess. On
@@ -430,6 +421,7 @@ export async function regenerateRecoveryCode(pin: string): Promise<RecoveryResul
     }
   );
   const mapped = mapOutcome(outcome);
+  if (mapped.ok) refreshParentAccess(); // the recovery status is now 'unconfirmed'
   return mapped.ok ? { ok: true, recoveryCode: newCode } : mapped;
 }
 
@@ -453,7 +445,9 @@ export async function confirmRecoveryCode(code: string): Promise<ConfirmRecovery
       return saveRecord({ ...current, recoveryConfirmed: true, updatedAt: new Date().toISOString() });
     }
   );
-  return mapOutcome(outcome);
+  const confirmed = mapOutcome(outcome);
+  if (confirmed.ok) refreshParentAccess();
+  return confirmed;
 }
 
 function mapOutcome(
@@ -487,12 +481,19 @@ export function createPinVerifier(): PinVerifier {
   };
 }
 
-// Registers the PIN checker with the Parent Gate. Does NOTHING (and loads no native module) unless family mode is enabled
-// and the platform is not the web. Returns whether it registered.
-export function startParentAuth(options: { enabled?: boolean; platformOS?: string } = {}): boolean {
+// Registers the PIN checker with the Parent Gate. Does NOTHING (and loads no native module) unless family mode is enabled.
+// The web is never supported for real use (no secure storage): there it registers only when `devPreview` is true, which by
+// default means FAMILY_MODE_ENABLED (and therefore __DEV__), and then the authentication records live in the non-persistent
+// in-memory preview backend. Returns whether it registered.
+export function startParentAuth(options: { enabled?: boolean; platformOS?: string; devPreview?: boolean } = {}): boolean {
   const enabled = options.enabled ?? FAMILY_MODE_ENABLED;
   const os = options.platformOS ?? Platform.OS;
-  if (!enabled || os === 'web') return false;
+  if (!enabled) return false;
+  if (os === 'web') {
+    const preview = options.devPreview ?? FAMILY_MODE_ENABLED;
+    if (!preview) return false;
+    setAuthBackend((require('@/utils/parent-auth-preview') as typeof import('@/utils/parent-auth-preview')).createPreviewBackend());
+  }
   registerPinVerifier(createPinVerifier(), { attemptStore: secureAttemptStore });
   return true;
 }

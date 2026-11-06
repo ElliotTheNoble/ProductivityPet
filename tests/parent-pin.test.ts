@@ -50,9 +50,11 @@ async function activate(app: App, pin = PIN): Promise<string> {
   return begun.recoveryCode;
 }
 
+// A set-up PIN with the parent area LOCKED (finishing the first setup opens it, see the test below; most tests start locked).
 async function configured(opts: { seed?: Record<string, unknown> } = {}) {
   const app = await boot(opts);
   const code = await activate(app);
+  app.gate.lockParentArea();
   return { app, code };
 }
 
@@ -102,6 +104,10 @@ describe('setting up a PIN: step 1 (pending) and step 2 (confirmed)', () => {
     expect(await app.pin.getAuthState()).toMatchObject({ kind: 'ready' });
     expect(await app.pin.getRecoveryStatus()).toBe('confirmed');
     expect(JSON.parse((await app.dump()).get(MARKER)!)).toEqual({ v: 1, installId: record().installId, configuredAt: expect.any(String) });
+    // finishing the FIRST setup opens the parent area for the parent who just proved they hold both secrets...
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'unlocked' });
+    // ...and from then on it is protected: a lock, or a restart, needs the PIN
+    app.gate.lockParentArea();
     expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' });
   });
 
@@ -601,6 +607,17 @@ describe('family data without its PIN record (a restore, a new device, damage)',
 // ---------------------------------------------------------------------------------------------------------
 describe('interrupted recovery: a new recovery code that was never acknowledged is detected and replaced', () => {
   const familySeed = () => ({ [FAMILY]: (fixture('family-v1-mixed') as Record<string, unknown>)[FAMILY] });
+
+  test('recovery never opens the parent area (the new PIN must be typed to unlock); only the first setup does', async () => {
+    const { app, code } = await configured();
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' });
+    const recovered = await app.pin.recoverWithCode(code, NEW_PIN);
+    expect(recovered.ok).toBe(true);
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' }); // not silently unlocked
+    if (recovered.ok) expect(await app.pin.confirmRecoveryCode(recovered.recoveryCode)).toEqual({ ok: true });
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' }); // not even after confirming the new code
+    expect(await app.gate.unlockParentArea(NEW_PIN)).toEqual({ ok: true });
+  });
 
   test('recovery succeeds but the app closes before the new code is acknowledged -> "unconfirmed", the new PIN works, and the way forward is clear', async () => {
     const { app, code } = await configured({ seed: familySeed() });

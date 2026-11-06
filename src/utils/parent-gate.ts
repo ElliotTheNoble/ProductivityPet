@@ -205,6 +205,15 @@ export function touchParentSession(): void {
   if (session && sessionValid()) session.lastActivityAt = Date.now();
 }
 
+// Opens the parent area for a fresh session. Only the Parent PIN module calls this, right after a parent has just proved
+// they hold the secrets (finishing the first setup with both the PIN and the recovery code). It is NEVER called by recovery:
+// after a recovery the parent must unlock with the new PIN.
+export function openParentSession(): void {
+  const at = Date.now();
+  session = { startedAt: at, lastActivityAt: at };
+  notify();
+}
+
 // Tells listeners to re-read the access state (for example after a PIN was created or changed).
 export function refreshParentAccess(): void {
   notify();

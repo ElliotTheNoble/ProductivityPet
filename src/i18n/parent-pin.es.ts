@@ -1,0 +1,117 @@
+import type { parentPinEn } from './parent-pin.en';
+
+// Spanish strings for the Parent PIN screens. NOT yet reviewed by a native Spanish speaker: that review is required before
+// release.
+export const parentPinEs: Record<keyof typeof parentPinEn, string> = {
+  // number pad
+  pinKeyBackspace: 'Borrar el último dígito',
+  pinKeyClear: 'Borrar todos los dígitos',
+  pinDigitsEntered_one: '{count} dígito escrito',
+  pinDigitsEntered_other: '{count} dígitos escritos',
+  pinUseKeyboard: 'Usar el teclado del dispositivo',
+  pinUsePad: 'Usar el teclado numérico en pantalla',
+  pinPadLabel: 'Teclado numérico',
+
+  // errors
+  pePinFormat: 'Un PIN necesita de 6 a 8 dígitos.',
+  pePinWeak: 'Ese PIN es muy fácil de adivinar. Evita repeticiones y secuencias como 123456.',
+  pePinMismatch: 'Los dos PIN no coinciden. Inténtalo de nuevo.',
+  peMismatchBoth: 'Ese PIN o código de recuperación no coincide.',
+  peCodeFormat: 'Ese código de recuperación no parece correcto. Revisa cada carácter.',
+  peCodeWrong: 'Ese código de recuperación no es correcto.',
+  peUnavailable: 'Ahora mismo no se pudo guardar ni comprobar. No se cambió nada. Inténtalo de nuevo.',
+  peUnsupported: 'En este dispositivo no se puede guardar un PIN de los padres de forma segura.',
+  peBusy: 'Espera un momento e inténtalo de nuevo.',
+  peNotPending: 'No hay una configuración sin terminar. Empieza de nuevo.',
+  peAlreadyOn: 'Ya hay un PIN de los padres.',
+
+  // first setup
+  psIntroTitle: 'Protege el área para padres',
+  psIntroBody: 'Un PIN de los padres ayuda a mantener a los niños fuera del área para padres en este dispositivo. No comprueba quién está usando la app.',
+  psIntroSelf: 'Configúralo tú, no tu hijo o hija.',
+  psIntroSteps: 'Vas a: 1) elegir un PIN, 2) guardar un código de recuperación, 3) escribir ambos para terminar.',
+  psContinue: 'Continuar',
+  psCancel: 'Cancelar',
+  psBack: 'Atrás',
+  psNext: 'Siguiente',
+  psCreateTitle: 'Elige un PIN',
+  psCreateBody: 'Usa de 6 a 8 dígitos que tu hijo o hija no pueda adivinar.',
+  psConfirmTitle: 'Escribe el PIN otra vez',
+  psConfirmBody: 'Escribe el mismo PIN una vez más.',
+  psCodeTitle: 'Tu código de recuperación',
+  psCodeBody:
+    'Si olvidas tu PIN, este código es la única forma de elegir uno nuevo. Anótalo y guárdalo en un lugar seguro, lejos de tus hijos. La app no puede volver a mostrarlo.',
+  psCodeNoShot: 'Por favor, no hagas una captura de pantalla ni lo copies en un mensaje.',
+  psCodeCaptureOff: 'Este dispositivo no puede bloquear las capturas de pantalla, así que ten cuidado.',
+  psCodeSaved: 'Ya lo guardé',
+  psFinishTitle: 'Terminar la configuración',
+  psFinishBody: 'Escribe tu PIN y tu código de recuperación para demostrar que tienes los dos.',
+  psFinish: 'Terminar',
+  psResumeTitle: 'La configuración no se terminó',
+  psResumeBody: 'Todavía no hay nada protegido. Si guardaste tu código de recuperación, puedes terminar ahora. Si no, empieza de nuevo.',
+  psResumeSaved: 'Guardé mi código',
+  psResumeStart: 'Empezar de nuevo',
+  psLeaveTitle: '¿Salir de la configuración?',
+  psLeaveBody: 'Tu código de recuperación no se puede volver a mostrar. Si sales ahora, tendrás que empezar de nuevo.',
+  psLeaveStay: 'Quedarme',
+  psLeave: 'Salir',
+
+  // recovery code display and entry
+  rcReveal: 'Mostrar código',
+  rcHide: 'Ocultar código',
+  rcHidden: 'Código de recuperación oculto. Usa Mostrar código para verlo.',
+  rcShown: 'Código de recuperación. {spoken}',
+  rcFieldLabel: 'Código de recuperación',
+  rcFieldPlaceholder: 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX',
+  rcFieldHint: 'Puedes pegarlo. Los guiones y espacios no importan.',
+
+  // management
+  pmTitle: 'PIN de los padres',
+  pmOn: 'Un PIN de los padres protege el área para padres en este dispositivo.',
+  pmChange: 'Cambiar el PIN',
+  pmNewCode: 'Obtener un código de recuperación nuevo',
+  pmLockNow: 'Bloquear el área para padres ahora',
+  pmBackDashboard: 'Volver al panel de padres',
+  pmCurrentPin: 'Escribe tu PIN actual',
+  pmNewPin: 'Elige un PIN nuevo',
+  pmNewPinAgain: 'Escribe el PIN nuevo otra vez',
+  pmChanged: 'Tu PIN se cambió.',
+  pmNewCodeTitle: 'Obtener un código de recuperación nuevo',
+  pmNewCodeBody: 'Escribe tu PIN para obtener un código nuevo. Tu código de recuperación anterior dejará de funcionar.',
+  pmConfirmCodeBody: 'Escribe el código de recuperación nuevo para demostrar que lo guardaste.',
+  pmCodeConfirmed: 'Tu código de recuperación nuevo está confirmado.',
+  pmDone: 'Listo',
+
+  // forgotten PIN (recovery)
+  prStart: '¿Olvidaste tu PIN? Usar mi código de recuperación',
+  prTitle: 'Recuperar con tu código',
+  prBody: 'Escribe el código de recuperación que guardaste. Después elegirás un PIN nuevo.',
+  prNewPinTitle: 'Elige un PIN nuevo',
+  prNewCodeTitle: 'Tu código de recuperación nuevo',
+  prNewCodeBody: 'Tu código anterior ya no funciona. Guarda este código nuevo en un lugar seguro.',
+  prConfirmTitle: 'Confirma tu código nuevo',
+  prDoneTitle: 'Todo listo',
+  prDoneBody: 'Tu PIN nuevo está listo. Desbloquea el área para padres con él.',
+  prToUnlock: 'Ir a desbloquear',
+  prBackToPin: 'Volver al PIN',
+
+  // an unconfirmed recovery code
+  pgdTitle: 'Confirma tu código de recuperación',
+  pgdBody: 'Tu código de recuperación aún no está confirmado. Antes de usar el área para padres, confirma el código que guardaste o crea uno de reemplazo.',
+  pgdHave: 'Guardé mi código',
+  pgdNew: 'Crear un código de reemplazo',
+  pgdTypeTitle: 'Escribe tu código de recuperación',
+  pgdPinTitle: 'Escribe tu PIN',
+  pgdPinBody: 'Escribe tu PIN para obtener un código de reemplazo. Cualquier código anterior dejará de funcionar.',
+
+  // not available, preview and dashboard card
+  puTitle: 'El PIN de los padres no está disponible',
+  puBody: 'Este dispositivo no puede guardar un PIN de los padres de forma segura, así que el área para padres queda como está.',
+  ppBanner: 'VISTA PREVIA DE DESARROLLO. Nada de esto se guarda ni está protegido.',
+  pcTitle: 'PIN de los padres',
+  pcOff: 'Configura un PIN para mantener a los niños fuera del área para padres en este dispositivo.',
+  pcOn: 'Hay un PIN de los padres activado.',
+  pcPending: 'La configuración no se terminó.',
+  pcSetup: 'Configurar el PIN de los padres',
+  pcManage: 'Administrar el PIN de los padres',
+};

@@ -2,6 +2,23 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-04] — Parent PIN screens (set up, unlock, recover, manage), disabled for users
+
+### Added
+- Number-pad PIN entry, first-time setup with a recovery code, forgotten-PIN recovery, PIN change, replacement recovery code and "lock now", all English and Spanish, with the honest "local access barrier, not proof of who is using the app" wording (FEATURE-089).
+- Screens clear and hide everything when the app is backgrounded, the profile changes or the screen closes; screenshots and app-switcher previews are blocked where the platform allows (`expo-screen-capture` ~57.0.4, the only new dependency).
+- A "Parent PIN" card on the Parent Dashboard and a `/parent-security` route. Both render nothing unless family mode is on.
+
+### Changed
+- `FAMILY_MODE_ENABLED` is now `__DEV__ && EXPO_PUBLIC_FAMILY_MODE === '1'`: still false by default and impossible in a release build. The Parent Gate lock screen now uses the number pad.
+- Finishing the first setup opens the parent area once; a recovery never does (the parent unlocks with the new PIN, then must confirm the new code).
+
+### Fixed
+- Found by a new test: requesting a replacement recovery code from the management page replaced the screen and lost the code just shown.
+
+### Verified
+- 391 of 391 tests pass (72 new), plain `npx tsc --noEmit` clean. Not done: real-device checks and browser layout checks of the new screens (see FEATURE-089, BUG-077).
+
 ## [2026-11-04] — Authentication foundation: final verification pass (transactional setup and recovery)
 
 ### Changed

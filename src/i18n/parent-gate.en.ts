@@ -16,7 +16,7 @@ export const parentGateEn = {
   pgBackHome: 'Back to Home',
   pgForgotTitle: 'Forgot the PIN?',
   pgForgotText:
-    "This version of the app can't reset the PIN for you, and your family's data is never deleted to reset it. Parent accounts that can help recover access are planned for a later version.",
+    "Use the recovery code you saved to choose a new PIN. If you lost both the PIN and the code, the parent area stays locked and your family's data is kept: it is never deleted to reset a PIN. Parent accounts that can help recover access are planned for a later version.",
   pgHonest: 'This PIN only helps keep children out of the parent area on this device. It does not prove who is using the app.',
   pgVerifierMissing:
     "This device has family data, but its parent PIN can't be found (for example after a restore or on a new device). Your children's data is safe and nothing was changed or deleted. Parent access will need guardian-account recovery, which is planned for a later version.",

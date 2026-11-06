@@ -45,8 +45,12 @@ function noPin() {
   registerPinVerifier({ isConfigured: async () => false, verify: async () => false });
 }
 
+// Types the PIN on the on-screen number pad, then presses Unlock.
+async function typePin(pin: string) {
+  for (const digit of pin) await fireEvent.press(screen.getByRole('button', { name: digit }));
+}
 async function enterPin(pin: string) {
-  await fireEvent.changeText(screen.getByLabelText(en('pgPinLabel')), pin);
+  await typePin(pin);
   await fireEvent.press(screen.getByRole('button', { name: en('pgUnlock') }));
 }
 
@@ -158,7 +162,7 @@ describe('ParentGate', () => {
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
-  test('a PIN with the wrong shape gets a hint and is not counted', async () => {
+  test('a PIN that is too short cannot be submitted, and nothing is counted', async () => {
     setPin();
     await render(
       <ParentGate>
@@ -166,9 +170,11 @@ describe('ParentGate', () => {
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    await enterPin('12');
-    expect(await screen.findByText(en('pgFormat'))).toBeTruthy();
+    await typePin('12345');
+    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByRole('button', { name: en('pgUnlock') }));
     expect(await AsyncStorage.getItem('@ProductivityPet:parentGate')).toBeNull();
+    expect(screen.queryByText('SECRET')).toBeNull();
   });
 
   test('"Back to Home" leaves the lock screen', async () => {
@@ -195,7 +201,7 @@ describe('ParentGate', () => {
     expect(screen.getByText(es('pgSubtitle'))).toBeTruthy();
     expect(screen.getByText(es('pgHonest'))).toBeTruthy();
     expect(screen.getByText(es('pgForgotText'))).toBeTruthy();
-    await fireEvent.changeText(screen.getByLabelText(es('pgPinLabel')), '000000');
+    for (const digit of '000000') await fireEvent.press(screen.getByRole('button', { name: digit }));
     await fireEvent.press(screen.getByRole('button', { name: es('pgUnlock') }));
     expect(await screen.findByText(/Quedan 2 intentos/)).toBeTruthy();
     expect(screen.queryByText(en('pgTitle'))).toBeNull();
@@ -282,10 +288,11 @@ describe('opening a parent-only screen directly (/parent, /welcome)', () => {
 describe('switching away from a parent session', () => {
   test('the app going to the background locks an open parent area', async () => {
     setPin();
-    let handler: ((s: string) => void) | undefined;
+    const handlers: ((s: string) => void)[] = [];
+    const handler = (s: string) => handlers.forEach((h) => h(s)); // the real AppState tells every listener
     const remove = jest.fn();
     jest.spyOn(AppState, 'addEventListener').mockImplementation(((_t: string, cb: (s: string) => void) => {
-      handler = cb;
+      handlers.push(cb);
       return { remove };
     }) as never);
     const stop = startParentGateAutoLock();
@@ -293,10 +300,10 @@ describe('switching away from a parent session', () => {
     await screen.findByText(en('pgTitle'));
     await enterPin(PIN);
     expect(await screen.findByText('DASHBOARD-CONTENT')).toBeTruthy();
-    await act(async () => handler!('background'));
+    await act(async () => handler('background'));
     expect(await screen.findByText(en('pgTitle'))).toBeTruthy();
     expect(screen.queryByText('DASHBOARD-CONTENT')).toBeNull();
-    await act(async () => handler!('active')); // coming back does not unlock
+    await act(async () => handler('active')); // coming back does not unlock
     expect(screen.queryByText('DASHBOARD-CONTENT')).toBeNull();
     stop();
     (AppState.addEventListener as jest.Mock).mockRestore();

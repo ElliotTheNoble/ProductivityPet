@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,11 +22,31 @@ function isFocused(state: unknown): boolean {
   return (state as { focused?: boolean }).focused === true;
 }
 
-export function PageShell({ children, maxWidth = 760 }: { children: ReactNode; maxWidth?: number }) {
+// `scrollKey`: when it changes (a new step of a flow) the page goes back to the top, so the new step's heading is never left
+// above the visible part. `compact`: tighter padding for a short landscape screen.
+export function PageShell({
+  children,
+  maxWidth = 760,
+  scrollKey,
+  compact,
+}: {
+  children: ReactNode;
+  maxWidth?: number;
+  scrollKey?: string;
+  compact?: boolean;
+}) {
+  const scroller = useRef<ScrollView>(null);
+  useEffect(() => {
+    scroller.current?.scrollTo({ y: 0, animated: false });
+  }, [scrollKey]);
   return (
     <View style={styles.page}>
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={scroller}
+          contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <View style={[styles.column, { maxWidth }]}>{children}</View>
         </ScrollView>
       </SafeAreaView>
@@ -222,6 +242,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: FAMILY_BACKGROUND },
   safe: { flex: 1 },
   scroll: { padding: Spacing.three, paddingBottom: Spacing.six, alignItems: 'center' },
+  scrollCompact: { padding: Spacing.two, paddingBottom: Spacing.three },
   column: { width: '100%', gap: Spacing.three },
   card: { borderRadius: Spacing.four, padding: Spacing.three, gap: Spacing.two, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)' },
   cardTitle: { fontSize: 17, lineHeight: 22 },
