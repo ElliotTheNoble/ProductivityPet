@@ -1,4 +1,6 @@
-import { DAY, HOUR, T0, fixture, flush, freezeClock, iso, loadApp, pet, unfreezeClock, type App } from './helpers';
+import { DAY, HOUR, T0, configurePin, fixture, flush, freezeClock, iso, loadApp, pet, unfreezeClock, type App } from './helpers';
+
+jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
 
 // Family profile picker, Stage 1: the data layer behind it (releasing a profile, tracked household saves, reconciliation with
 // the profile registry, read-only care summaries). No screen exists yet; these tests are about what can never be lost or mixed up.
@@ -46,10 +48,7 @@ async function boot(options: Options = {}): Promise<App> {
   else delete process.env.EXPO_PUBLIC_FAMILY_MODE;
   const app = await loadApp(options.seed, options.storage);
   await app.profiles.ensureProfilesReady();
-  if (options.unlocked !== undefined) {
-    app.gate.registerPinVerifier({ isConfigured: async () => true, verify: async () => true });
-    if (options.unlocked === true) app.gate.openParentSession();
-  }
+  if (options.unlocked !== undefined) await configurePin(app, { unlocked: options.unlocked === true });
   return app;
 }
 const bootFamily = (extra: Options = {}) => boot({ familyMode: true, unlocked: true, ...extra });
@@ -524,7 +523,7 @@ describe('child creation interrupted, orphans, duplicates and unreadable records
   });
 
   test('a household that cannot be read: reconciliation changes nothing', async () => {
-    const app = await bootFamily({ seed: { [HOUSEHOLD]: householdJson([child('kid1')]) } });
+    const app = await boot({ familyMode: true, seed: { [HOUSEHOLD]: householdJson([child('kid1')]) } });
     const original = app.AsyncStorage.getItem;
     app.AsyncStorage.getItem = jest.fn(async (key: string) => {
       if (key === HOUSEHOLD) throw new Error('read failed');

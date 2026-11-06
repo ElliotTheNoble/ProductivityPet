@@ -54,7 +54,7 @@ const ADD_BLOCKED_TEXT = {
 } as const;
 
 type Purpose = 'main' | 'add';
-type View_ = { kind: 'grid' } | { kind: 'pin'; purpose: Purpose } | { kind: 'recovery' };
+type View_ = { kind: 'grid' } | { kind: 'pin'; purpose: Purpose } | { kind: 'recovery' } | { kind: 'claim' };
 type Busy = { label: string } | null;
 type Failure = { text: string; retry: () => void } | null;
 
@@ -168,6 +168,17 @@ export function FamilyPicker({ decision, onRetry }: { decision: Extract<PickerDe
     return <RecoveryFlow onBack={() => setView({ kind: 'pin', purpose: 'main' })} />;
   }
 
+  if (view.kind === 'claim') {
+    // The protected first setup of the Parent PIN (device security check first). It is not inside the app's navigation, so it is told
+    // where to go: back to the picker, which then looks at the PIN again.
+    const { ParentSetupClaim } = require('@/components/parent-setup-claim') as typeof import('@/components/parent-setup-claim');
+    const back = () => {
+      setView({ kind: 'grid' });
+      void refresh();
+    };
+    return <ParentSetupClaim onLeave={back} onFinished={back} />;
+  }
+
   if (view.kind === 'pin') {
     return (
       <PinPrompt
@@ -218,6 +229,13 @@ export function FamilyPicker({ decision, onRetry }: { decision: Extract<PickerDe
             ) : null}
 
             {problem ? <ProblemCard problem={problem} onRetry={onRetryProblem(problem, onRetry)} /> : null}
+
+            {entry === 'no-pin' ? (
+              <View style={styles.setupHint}>
+                <ThemedText type="small">{t('pkPickerHint')}</ThemedText>
+                <Button tone="mint" label={t('pkPickerButton')} onPress={() => setView({ kind: 'claim' })} />
+              </View>
+            ) : null}
 
             <View style={styles.grid}>
               {children.map((child) => {
@@ -555,6 +573,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.6 },
   focused: { outlineColor: '#6F4FB8', outlineStyle: 'solid', outlineWidth: 3, outlineOffset: 2, borderRadius: Spacing.four },
+  setupHint: { backgroundColor: 'rgba(255,255,255,0.8)', borderColor: '#CDBDF0', borderWidth: 2, borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.two },
   failure: { backgroundColor: '#FFE9E9', borderColor: '#F2B5B5', borderWidth: 2, borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.two },
   failureButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   switching: { alignItems: 'center', gap: Spacing.three, maxWidth: 420 },

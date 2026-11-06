@@ -89,6 +89,8 @@ function useFeedback() {
         return key('peCodeFormat');
       case 'unsupported':
         return key('peUnsupported');
+      case 'claim-required':
+        return key('pkClaimRequired');
       case 'already-configured':
         return key('peAlreadyOn');
       case 'verifier-missing':
@@ -212,7 +214,9 @@ function CodeNotes({ caps }: { caps: PrivacyCapabilities | null }) {
 
 type SetupStage = 'intro' | 'resume' | 'create' | 'again' | 'code' | 'finish';
 
-export function SetupFlow({ pending }: { pending: boolean }) {
+// `onLeave` / `onFinished` say where to go when the setup is left or finished (the default is the parent dashboard, which is what the
+// /parent-security route wants); the family picker, which is not inside the app's navigation, passes its own.
+export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; onLeave?: () => void; onFinished?: () => void }) {
   const { t } = useT();
   const router = useRouter();
   const feedback = useFeedback();
@@ -243,7 +247,7 @@ export function SetupFlow({ pending }: { pending: boolean }) {
 
   const sensitive = stage === 'code' || stage === 'finish';
   useBackGuard(sensitive, () => setLeaving(true));
-  const leave = () => router.replace('/parent');
+  const leave = () => (onLeave ? onLeave() : router.replace('/parent'));
   const cancel = () => (sensitive ? setLeaving(true) : leave());
 
   const next = () => {
@@ -281,7 +285,8 @@ export function SetupFlow({ pending }: { pending: boolean }) {
     if (result.ok) {
       clearAll();
       began.current = false;
-      router.replace('/parent'); // the parent area is open (the first setup opens it)
+      if (onFinished) onFinished();
+      else router.replace('/parent'); // the parent area is open (the first setup opens it)
       return;
     }
     setTypedPin('');

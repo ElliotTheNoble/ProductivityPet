@@ -3,10 +3,12 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Card, FAMILY_BACKGROUND, PageShell } from '@/components/family-ui';
 import { ParentGate } from '@/components/parent-gate';
+import { ParentSetupClaim } from '@/components/parent-setup-claim';
 import { ManageHome, SetupFlow } from '@/components/parent-pin-flows';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useParentAuthStatus } from '@/hooks/use-parent-auth-status';
+import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
 import { useT } from '@/i18n';
 
 // The /parent-security screen: what it shows depends only on the saved authentication state, never on anything passed in
@@ -52,12 +54,22 @@ export function ParentSecurityScreen() {
       </PageShell>
     );
   }
-  if (status.state === 'none' || status.state === 'pending') return <SetupFlow pending={status.state === 'pending'} />;
+  if (status.state === 'none' || status.state === 'pending') return <FirstSetup pending={status.state === 'pending'} />;
   return (
     <ParentGate>
       <ManageHome />
     </ParentGate>
   );
+}
+
+// The first setup. A household with no child record sets its PIN up as it always has; one that already has children (or whose family
+// list cannot be read) goes through the protected setup first (the device security check), so nobody can create the first PIN by
+// opening this address (BUG-077).
+function FirstSetup({ pending }: { pending: boolean }) {
+  const household = useHousehold();
+  if (!household) return <View style={styles.blank} />;
+  if (!hasAnyChildRecord(household, getHouseholdIntegrity())) return <SetupFlow pending={pending} />;
+  return <ParentSetupClaim />;
 }
 
 const styles = StyleSheet.create({

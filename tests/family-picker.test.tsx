@@ -120,7 +120,11 @@ async function boot(options: Options = {}) {
   // The app shell starts the PIN system at launch (family mode only), before anything is asked of it.
   pinModule.startParentAuth({ enabled: true, platformOS: 'ios' });
   if (options.pin === 'ready' || options.pin === 'unconfirmed' || options.pin === 'missing' || options.pin === 'pending') {
+    // The household already has children, so the first PIN needs the setup claim (a successful device security check).
+    const claim = require('@/utils/family-claim') as typeof import('@/utils/family-claim');
+    await claim.grantSetupClaim();
     const begun = await pinModule.beginPinSetup(PIN);
+    claim.clearSetupClaim();
     if (!begun.ok) throw new Error(`PIN setup failed: ${begun.reason}`);
     if (options.pin !== 'pending') {
       const done = await pinModule.confirmPinSetup(PIN, begun.recoveryCode);

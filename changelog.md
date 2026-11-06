@@ -2,6 +2,20 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-06] — Parent management safeguards and the protected first PIN setup (Stages 3.0 and 3.1), disabled for users
+
+### Added
+- A verified-parent-session check at the moment every parent-only action runs (tasks, settings, the parent profile, child add / rename / archive, restarting the set-up), so a stale, locked, paused or backgrounded session, or a missing, unconfirmed or unreadable PIN, can never change anything.
+- In family mode a household that has children but no Parent PIN no longer opens the dashboard, the welcome flow or the open PIN setup; it shows a protected setup that needs the operating system's device security check first (a screen lock, fingerprint or face), then the existing PIN setup. The screens say plainly that this verifies device access, not who you are. No screen lock, a cancelled or failed check and the browser are refused with an explanation.
+- A short-lived, single-use in-memory setup claim, enforced where the PIN is created, that ends on timeout, background, profile change, leaving the screen, starting the setup and finishing it.
+- A last permission check right before a parent-only change is written, so a session revoked or expired during the operation stops it.
+
+### Changed
+- Pet Care's Family card, the Parent Gate, `/parent-security` and the picker's Main card behave as above when no PIN exists and children do. With family mode off nothing changes.
+
+### Verified
+- 646 of 646 tests pass (115 new), plain `npx tsc --noEmit` clean. Not done: dashboard child controls (Stages 3.2 to 3.6), any real-device check of the native prompt (see FEATURE-092, BUG-081).
+
 ## [2026-11-05] — Family profile picker ("Who's playing today?"), disabled for users
 
 ### Added

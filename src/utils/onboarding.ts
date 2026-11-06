@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { DEFAULT_LANGUAGE, isLanguageCode, setCurrentLanguage, type LanguageCode } from '@/i18n';
 import { isParentAccessAllowed } from '@/utils/parent-gate';
+import { checkParentAction } from '@/utils/parent-session';
 
 // First-launch onboarding state. It lives in ITS OWN storage key and never reads from or writes to any pet,
 // task, token, shop or Pawadise data, so it can't reset or migrate anything.
@@ -174,8 +175,10 @@ export async function chooseMode(mode: UserMode): Promise<void> {
 
 // Used by a player who already had data (or chose to skip) to run the welcome flow again.
 export async function restartOnboarding(): Promise<void> {
-  // Restarting the family set-up is parent-only: with a parent PIN set it does nothing unless the parent area is open.
+  // Restarting the family set-up is parent-only: with a parent PIN set it does nothing unless a verified parent session is open, and
+  // in family mode a household that has children but no PIN yet does nothing either (see @/utils/parent-session.ts).
   if (!(await isParentAccessAllowed())) return;
+  if (!(await checkParentAction('parent')).ok) return;
   const s = await ensureOnboardingLoaded();
   set({ ...s, status: 'pending', mode: null, step: 'language' });
 }

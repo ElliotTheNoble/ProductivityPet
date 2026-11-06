@@ -7,6 +7,7 @@ import { PinEntry, useShortLandscape } from '@/components/pin-entry';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useParentAccess } from '@/hooks/use-parent-access';
+import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
 import {
@@ -24,11 +25,26 @@ import {
 // content is simply not rendered, opening the screen by its address (/parent, /welcome, /parent-security) cannot bypass the
 // lock. When the area is open but the recovery code has not been confirmed, the "confirm your recovery code" step is shown
 // first (see parent-recovery-gate.tsx).
+// Family mode, no Parent PIN yet. A household with NO child record is where the first set-up happens, so it stays open. A household that
+// already has children (or whose family list cannot be read) fails closed: the parent-only screen is NOT shown, and the only way
+// forward is the protected setup (the device security check first, see @/components/parent-setup-claim.tsx). Never blank-then-open:
+// nothing is shown until the household has been read.
+function UnprotectedGate({ children }: { children: ReactNode }) {
+  const household = useHousehold();
+  if (!household) return <View style={styles.blank} />;
+  if (!hasAnyChildRecord(household, getHouseholdIntegrity())) return <>{children}</>;
+  const { ParentSetupClaim } = require('@/components/parent-setup-claim') as typeof import('@/components/parent-setup-claim');
+  return <ParentSetupClaim />;
+}
+
 export function ParentGate({ children }: { children: ReactNode }) {
   const access = useParentAccess();
   const { t } = useT();
   if (access.state === 'checking') return <View style={styles.blank} />; // never shows the content while checking
-  if (access.state === 'unprotected') return <>{children}</>;
+  if (access.state === 'unprotected') {
+    // Family mode off (no PIN checker at all): open exactly as it always was. Family mode on: see UnprotectedGate.
+    return hasPinVerifier() ? <UnprotectedGate>{children}</UnprotectedGate> : <>{children}</>;
+  }
   if (access.state === 'unlocked') {
     // Loaded only when a PIN checker exists (family mode on), so with family mode off nothing extra is even loaded.
     const guarded = hasPinVerifier()

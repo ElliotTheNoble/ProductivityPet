@@ -75,8 +75,30 @@ describe('route protection: every route is classified', () => {
     expect(text).not.toMatch(/^import .*family-profiles/m);
   });
 
+  test('every parent-only household action asks for a verified parent session when it runs; the child-side one does not', () => {
+    const text = read('src/utils/household.ts');
+    const body = (name: string) => {
+      const start = text.indexOf(`export async function ${name}(`);
+      const end = text.indexOf('export ', start + 10);
+      return text.slice(start, end < 0 ? undefined : end);
+    };
+    for (const name of ['saveParentProfile', 'addChild', 'renameChild', 'setChildArchived', 'selectChild', 'updateChildSettings', 'addTask', 'approveTask', 'sendTaskBack', 'deleteTask']) {
+      expect([name, /'(parent|children)'/.test(body(name))]).toEqual([name, true]);
+    }
+    expect(/'(parent|children)'/.test(body('markTaskDone'))).toBe(false);
+  });
+
+  test('the Parent PIN is created only behind the setup claim, and the gate fails closed for a household with children and no PIN', () => {
+    expect(read('src/utils/parent-pin.ts')).toMatch(/if \(!\(await setupClaimSatisfied\(\)\)\) return \{ ok: false, reason: 'claim-required' \};/);
+    const gate = read('src/components/parent-gate.tsx');
+    expect(gate).toMatch(/<UnprotectedGate>/);
+    expect(gate).toMatch(/hasAnyChildRecord\(household, getHouseholdIntegrity\(\)\)/);
+    expect(read('src/components/parent-security-screen.tsx')).toMatch(/<ParentSetupClaim \/>/);
+  });
+
   test('restarting the family set-up (reachable from Pet Care and Alerts) is refused while the parent area is locked', () => {
     expect(read('src/utils/onboarding.ts')).toMatch(/if \(!\(await isParentAccessAllowed\(\)\)\) return;/);
+    expect(read('src/utils/onboarding.ts')).toMatch(/if \(!\(await checkParentAction\('parent'\)\)\.ok\) return;/);
   });
 });
 

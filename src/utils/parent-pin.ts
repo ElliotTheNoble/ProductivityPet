@@ -2,6 +2,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { Platform } from 'react-native';
 
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { clearSetupClaim, setupClaimSatisfied } from '@/utils/family-claim';
 import {
   limitedAttempt,
   openParentSession,
@@ -182,7 +183,8 @@ export const secureAttemptStore: AttemptStore = {
 
 export type BeginSetupResult =
   | { ok: true; recoveryCode: string }
-  | { ok: false; reason: 'format' | 'weak' | 'unsupported' | 'already-configured' | 'verifier-missing' | 'unavailable' };
+  // 'claim-required': a household with children and no PIN may only start the setup after the device security check (family-claim.ts)
+  | { ok: false; reason: 'format' | 'weak' | 'unsupported' | 'already-configured' | 'verifier-missing' | 'unavailable' | 'claim-required' };
 
 export type ConfirmSetupResult =
   | { ok: true }
@@ -244,6 +246,9 @@ let setupBusy = false;
 // should exist but its record is missing (it never silently creates a replacement), and when secure storage or secure
 // randomness is not available.
 export async function beginPinSetup(pin: string): Promise<BeginSetupResult> {
+  // In family mode a household that already has children needs the setup claim (a successful device security check, see
+  // @/utils/family-claim.ts) before anyone can create the first PIN. Checked here, where the PIN is made, not only on the screen.
+  if (!(await setupClaimSatisfied())) return { ok: false, reason: 'claim-required' };
   const policy = validateNewPin(pin);
   if (!policy.ok) return policy;
   if (setupBusy) return { ok: false, reason: 'unavailable' };
@@ -275,6 +280,7 @@ export async function beginPinSetup(pin: string): Promise<BeginSetupResult> {
       return { ok: false, reason: 'unavailable' };
     }
     if (!(await saveRecord(record))) return { ok: false, reason: 'unavailable' };
+    clearSetupClaim(); // the claim is single-use: starting the setup spends it (starting over needs the device check again)
     return { ok: true, recoveryCode };
   } finally {
     setupBusy = false;
@@ -310,6 +316,7 @@ export async function confirmPinSetup(pin: string, code: string): Promise<Confir
     if (!(await saveRecord(active))) return { ok: false, reason: 'unavailable' };
     if (!(await writeMarker(active.installId, active.createdAt))) return { ok: false, reason: 'unavailable' };
     await secureAttemptStore.write({ version: 1, failures: 0, lockedUntil: 0, lastSeen: Date.now() });
+    clearSetupClaim(); // the PIN exists now: no claim is ever needed (or valid) again
     // The parent has just typed back both the PIN and the recovery code: the parent area opens for them (first setup only).
     openParentSession();
     return { ok: true };

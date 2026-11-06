@@ -125,6 +125,27 @@ export async function loadApp(seed?: Record<string, unknown>, keepStorage?: Map<
 }
 export type App = Awaited<ReturnType<typeof loadApp>>;
 
+// Sets the REAL Parent PIN up on a freshly loaded app (family mode on, a phone or tablet), the way a parent does: the setup claim is
+// granted first (a household that already has children needs it; see src/utils/family-claim.ts), then PIN, recovery code and
+// confirmation. Leaves the parent area locked, or unlocked with `unlocked: true`. `unconfirmed` leaves a new recovery code unconfirmed.
+export const TEST_PIN = '246813';
+export async function configurePin(app: App, options: { unlocked?: boolean; unconfirmed?: boolean } = {}) {
+  app.pin.startParentAuth({ enabled: true, platformOS: 'ios' });
+  const claim = require('@/utils/family-claim') as typeof import('@/utils/family-claim');
+  // A restart keeps the secure store, so the PIN may already exist: then there is nothing to set up.
+  if ((await app.pin.getAuthState()).kind === 'none') {
+    await claim.grantSetupClaim();
+    const begun = await app.pin.beginPinSetup(TEST_PIN);
+    if (!begun.ok) throw new Error(`PIN setup failed: ${begun.reason}`);
+    const done = await app.pin.confirmPinSetup(TEST_PIN, begun.recoveryCode);
+    if (!done.ok) throw new Error(`PIN confirmation failed: ${done.reason}`);
+    claim.clearSetupClaim();
+    if (options.unconfirmed) await app.pin.regenerateRecoveryCode(TEST_PIN);
+  }
+  app.gate.lockParentArea();
+  if (options.unlocked) await app.gate.unlockParentArea(TEST_PIN);
+}
+
 // Deep copy of a saved-data fixture, so a test can never alter the file's data.
 // The in-memory stand-in for native secure storage (see tests/setup.ts). It survives jest.resetModules() like real
 // secure storage survives an app restart; call resetSecure() to simulate a device that never had a PIN.
