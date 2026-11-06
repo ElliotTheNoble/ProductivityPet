@@ -84,6 +84,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (FAMILY_MODE_ENABLED) (require('@/utils/parent-pin') as typeof import('@/utils/parent-pin')).startParentAuth();
   }, []);
+  // Gives every household child a storage profile with the same id (adds registry records only; it changes no child data and
+  // deletes nothing; what it cannot resolve is left as it is). There is no picker yet, so nothing visible comes of it.
+  useEffect(() => {
+    if (FAMILY_MODE_ENABLED) void (require('@/utils/family-profiles') as typeof import('@/utils/family-profiles')).reconcileFamilyProfiles().catch(() => {});
+  }, []);
   // The parent area locks itself when the app leaves the foreground or the profile changes (see @/utils/parent-gate.ts).
   useEffect(() => startParentGateAutoLock(), []);
   return <AppShell key={profileId} />;

@@ -695,6 +695,7 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Status:** Open by design (decided for M2): not a defect to fix in Stage 1. Pet needs, sickness and death are driven by saved timestamps (unchanged mortality rules), so a profile that nobody has opened keeps aging: its pets can become Sick (after a need reaches 0), Critical 24 hours later and die 96 hours after sickness began, with no reminder, because phone alerts and task reminders are scheduled only for the ACTIVE profile (the profile being left has its scheduled ones cancelled when the profile changes). Opening that profile later catches up to the right moment (checked by a test: a pet that died while its profile was unused is recorded as dying at its deadline). Free recovery still works as soon as the profile is opened.
 - **Related (fixed 2026-11-02):** a switch that fails (registry cannot be saved, a save fails during the switch, a store cannot reset) now changes nothing and cancels no notification; the old profile's reminders stay in place. After a REAL switch, everything scheduled or shown is cancelled and cleared from the tray so another child cannot see it. Real-device verification of the cancel/clear calls is still outstanding (see FEATURE-086).
 - **Future options (not decided):** scheduling alerts for every child's pets (with the child's name), or a "family overview" on the shared device.
+- **Decision (2026-11-05):** a read-only "needs care" badge per child comes with the picker (`peekProfileCare` exists since FEATURE-090: it advances a copy of a profile's pets and writes nothing). Cross-profile care alerts (phone notifications for every child's pets, with generic text that names no child or pet) must be done BEFORE public release, not before development testing. Archiving cannot pause aging (mortality is timestamp-driven), so the archive confirmation must say that archived pets keep aging.
 
 ### [BUG-073] Home crashes if a saved task has an unknown category (FIXED 2026-11-02)
 
@@ -709,6 +710,7 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - Cancelling "all" scheduled notifications assumes every notification this app schedules belongs to the active profile (true today); a future feature that schedules device-wide notifications must account for it.
 - Three unverifiable backup copies stop further backup attempts (safe mode); a very large save (over about 2 MB on Android, or more than roughly half of the browser's 5 MB) can fail the one-time backup and stay in safe mode (BUG-072, FEATURE-086 for the numbers).
 - Not tested on a real device: notification cancel/clear, a full device.
+- **Update (2026-11-05, FEATURE-090):** the "crash between saving the registry and the swap opens the new profile" case stops mattering once the picker exists, because a cold start will always show the picker (the saved id is only a last-used pointer). Registry writes now carry a revision and refuse a stale copy (two browser tabs); AsyncStorage still has no atomic compare-and-set, so a tiny window between the check and the write remains until the web single-tab lock exists.
 
 ### [BUG-075] Parent PIN: storage and recovery not implemented; security limits of a local PIN (OPEN, decision needed, 2026-11-03)
 
@@ -717,6 +719,22 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Forgotten PIN:** the app cannot recover it today. Without guardian accounts any recovery is either impossible or weaker than the PIN. Options: (1) none until accounts exist (safest; a forgotten PIN locks the parent area, children's play and all data stay intact); (2) a one-time recovery code shown at setup (same strength as the PIN if found); (3) the device's own lock (OS biometrics/passcode) on native only; (4) guardian account recovery in the cloud milestones.
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
+
+### [BUG-079] Task reminders were lost after leaving a profile and coming back (FIXED 2026-11-05)
+
+- **Status:** Fixed (found in the Stage 1 safety review, before anything was committed). Leaving a profile cancels everything scheduled on the phone, but each saved task keeps `scheduledNotificationId` and `scheduledNotificationFor`, and Home and Tasks skip the sync pass that fires only because their tasks finished loading. So after a profile swap the reminders of the profile you returned to were never scheduled again until a task was edited or the app restarted and a task changed. The bug existed in the profile switching of FEATURE-086; the family picker would have made it common.
+- **Fix:** a notification epoch counted only when a swap or release really happened; reminder and alert scheduling wait for the phone clean-up (at most 10 seconds); the first pass after an epoch change reschedules (old id cancelled first, so never twice); the two screens run that pass on load when it is needed. Failed or timed-out swaps and releases do not count, cancel or reschedule anything. Saved tasks are not changed except by the normal reschedule. 12 regression tests (they fail without the fix).
+- **Not verified:** real notifications on a real phone.
+
+### [BUG-078] Family picker data layer: remaining risks (documented, OPEN, 2026-11-05)
+
+- **Two tabs / two windows (web development preview):** the revision check refuses a stale write and a read-back catches a racing one, but AsyncStorage has no compare-and-set, so a very small window remains. A single-tab lock is planned for the web preview; family mode is never supported on the web for real users.
+- **Orphan profiles:** a child creation that stops between the registry step and the household step leaves an empty registry profile with no household record. It is invisible, holds no data, is reported by reconciliation and is never deleted automatically; a later screen has to let a parent link or ignore it.
+- **Duplicate child ids or unreadable entries:** the household becomes read-only (duplicates) or is copied aside before the first change (unreadable entries). There is no screen yet to resolve a duplicate; until there is, a household in that state cannot be changed.
+- **Leaving Main empties its alert-schedule bookkeeping:** switching or releasing away from the Main profile sets its `petAlertSchedule` record to `[]` because its phone notifications are cancelled (existing behavior, FEATURE-086). Every other Main key stays byte for byte (tested). The reminders themselves come back when Main is selected again: pet alerts are rebuilt from the pets, task reminders by the BUG-079 fix.
+- **Archived children keep aging:** nothing can pause a pet's clock. The archive confirmation (a later stage) must say so, and BUG-072 (alerts for inactive children) still applies.
+- **Care summaries are as good as the saved record:** a record that cannot be read is "unreadable" (never "healthy"); the summary is worked out with the device clock, like everything else.
+- **Not verified on a real device:** release-and-flush with real secure storage and real notifications.
 
 ### [BUG-077] Parent PIN screens: known limits (documented, OPEN, 2026-11-04)
 

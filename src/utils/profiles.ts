@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // written (a single atomic write, last). The backup is never read, changed or deleted by the app. If the backup
 // cannot be made, the app stays in "safe mode": main profile only, exactly as before this feature.
 //
-// Nothing here has any visible UI yet (no profile picker); that is Stage 2.
+// Nothing here has any visible UI yet (no profile picker); that comes later.
 
 const PREFIX = '@ProductivityPet:';
 const SCOPED_PREFIX = `${PREFIX}p:`;
@@ -35,7 +35,9 @@ export type ProfileKind = 'main' | 'child';
 export type ProfileStorage = 'legacy' | 'scoped';
 export type ProfileRecord = { id: string; kind: ProfileKind; storage: ProfileStorage; createdAt: string };
 export type BackupRecord = { key: string; createdAt: string; keyCount: number };
-type Registry = { version: 1; activeProfileId: string; profiles: ProfileRecord[]; backup: BackupRecord | null };
+// `revision` counts the writes of the registry (absent = 0). A write is only made over the revision it started from, so a
+// second browser tab holding an older copy cannot overwrite a newer registry (see writeRegistry).
+type Registry = { version: 1; activeProfileId: string; profiles: ProfileRecord[]; backup: BackupRecord | null; revision?: number };
 
 export type ProfilesState = 'uninitialized' | 'ready' | 'safe-mode';
 export type ProfilesStatus = {
@@ -45,6 +47,8 @@ export type ProfilesStatus = {
   backup: BackupRecord | null;
   // Why safe mode was entered (null when ready).
   issue: string | null;
+  // True while no profile is active (after releaseActiveProfile, until the next successful switch).
+  released: boolean;
 };
 
 function mainRecord(): ProfileRecord {
@@ -56,6 +60,10 @@ let registry: Registry = { version: 1, activeProfileId: MAIN_PROFILE_ID, profile
 let state: ProfilesState = 'uninitialized';
 let issue: string | null = null;
 let generation = 0;
+// True after releaseActiveProfile(): no profile is active, nothing of any profile is loaded, and asking for a profile's
+// storage key is an error (so no store can quietly load or write "the last profile"). Cleared by a successful switch.
+// `registry.activeProfileId` is then only the last-used pointer.
+let released = false;
 let initPromise: Promise<void> | null = null;
 
 // ---------------------------------------------------------------------------------------------------------
@@ -76,17 +84,29 @@ export function scopedKeyFor(profileId: string, name: string): string {
 // The storage key for the ACTIVE profile. Stores call this at the start of each operation and keep the result,
 // so an operation always reads and writes the profile it began in.
 export function scopedKey(name: string): string {
+  if (released) throw new Error('profile-released'); // no profile is active: never fall back to the last one
   return scopedKeyFor(registry.activeProfileId, name);
 }
 
 // True while the active profile uses the original unscoped keys (the main profile). Only such a profile may
 // import the pre-profile saves (old single-pet record, global task list...).
 export function isActiveProfileLegacy(): boolean {
-  return recordFor(registry.activeProfileId)?.storage === 'legacy';
+  return !released && recordFor(registry.activeProfileId)?.storage === 'legacy';
 }
 
+// While released this is only the last-used profile: check isProfileReleased() before treating it as the one in use.
 export function getActiveProfileId(): string {
   return registry.activeProfileId;
+}
+
+// True between releaseActiveProfile() and the next successful switch: the picker is showing and no profile data is loaded.
+export function isProfileReleased(): boolean {
+  return released;
+}
+
+// The names of the stores that clear themselves on a profile change (used by the safety tests).
+export function registeredProfileStoreNames(): string[] {
+  return stores.map((s) => s.name);
 }
 
 // Changes every time the active profile changes.
@@ -95,10 +115,38 @@ export function getProfileGeneration(): number {
 }
 
 export function getProfilesStatus(): ProfilesStatus {
-  return { state, activeProfileId: registry.activeProfileId, profiles: registry.profiles, backup: registry.backup, issue };
+  return { state, activeProfileId: registry.activeProfileId, profiles: registry.profiles, backup: registry.backup, issue, released };
 }
 
 const activeListeners = new Set<(profileId: string) => void>();
+
+// The phone-side clean-up after a profile swap or release (cancelling everything that was scheduled, clearing the tray) runs
+// just AFTER the swap. Anything that schedules notifications for the profile now in use (task reminders, pet alerts) must
+// wait for it, or it could schedule a reminder that the clean-up then cancels. The epoch counts the clean-ups that really
+// started (only a successful swap or release starts one, never a failed one): a reminder that was scheduled before the epoch
+// changed has been cancelled on the phone even though the saved task still says it is scheduled, so it has to be scheduled again.
+let notificationEpoch = 0;
+let cleanupDone: Promise<void> = Promise.resolve();
+const CLEANUP_WAIT_MS = 10_000;
+
+export function getNotificationEpoch(): number {
+  return notificationEpoch;
+}
+
+// Resolves when the clean-up of the last swap or release is finished (or after 10 seconds, so a phone call that never
+// returns can never block scheduling forever). Never rejects.
+export function whenProfileCleanupDone(): Promise<void> {
+  return withTimeout(cleanupDone, CLEANUP_WAIT_MS).then(
+    () => undefined,
+    () => undefined
+  );
+}
+
+function runCleanups(cleanups: (() => Promise<void>)[]): void {
+  notificationEpoch += 1;
+  const running = Promise.all(cleanups.map((cleanup) => cleanup().catch(() => {}))).then(() => undefined);
+  cleanupDone = Promise.all([cleanupDone, running]).then(() => undefined);
+}
 
 export function subscribeToActiveProfile(listener: (profileId: string) => void): () => void {
   activeListeners.add(listener);
@@ -276,6 +324,7 @@ function parseRegistry(raw: string): Registry | null {
   try {
     const r = JSON.parse(raw) as Partial<Registry>;
     if (!r || r.version !== 1 || !Array.isArray(r.profiles) || typeof r.activeProfileId !== 'string') return null;
+    if (r.revision !== undefined && (typeof r.revision !== 'number' || !Number.isInteger(r.revision) || r.revision < 0)) return null;
     const seen = new Set<string>();
     for (const p of r.profiles) {
       if (!p || typeof p.id !== 'string' || !ID_PATTERN.test(p.id) || seen.has(p.id)) return null;
@@ -379,40 +428,99 @@ function serialized<T>(run: () => Promise<T>): Promise<T> {
   return next;
 }
 
-async function writeRegistry(next: Registry): Promise<boolean> {
+// Saves the registry only over the revision this copy started from. AsyncStorage has no compare-and-set, so this reads what is
+// stored right now, refuses if it is newer or unreadable ("conflict": another tab changed it, or it was damaged; nothing is
+// overwritten), writes revision + 1 and reads it back to notice a racing write. The small window between the read and the
+// write cannot be closed with this storage; the web development preview also takes a single-tab lock (a later stage).
+type RegistryWrite = { status: 'ok'; registry: Registry } | { status: 'conflict' | 'failed' };
+
+async function writeRegistry(next: Registry): Promise<RegistryWrite> {
+  let storedRevision = 0;
   try {
-    await AsyncStorage.setItem(REGISTRY_KEY, JSON.stringify(next));
+    const raw = await AsyncStorage.getItem(REGISTRY_KEY);
+    if (raw !== null) {
+      const stored = parseRegistry(raw);
+      if (!stored) return { status: 'conflict' }; // something we do not understand is there: never write over it
+      storedRevision = stored.revision ?? 0;
+    }
+  } catch {
+    return { status: 'failed' };
+  }
+  if (storedRevision !== (registry.revision ?? 0)) return { status: 'conflict' };
+  const written: Registry = { ...next, revision: storedRevision + 1 };
+  const json = JSON.stringify(written);
+  try {
+    await AsyncStorage.setItem(REGISTRY_KEY, json);
+  } catch {
+    return { status: 'failed' };
+  }
+  try {
+    if ((await AsyncStorage.getItem(REGISTRY_KEY)) !== json) return { status: 'conflict' }; // another tab wrote in between
+  } catch {
+    return { status: 'failed' };
+  }
+  return { status: 'ok', registry: written };
+}
+
+// Adopts the registry that is stored right now (after a conflict). This tab keeps the profile it is using; the stored copy's
+// profiles are kept as they are. Returns false when the stored registry is missing or cannot be understood (then nothing changes).
+async function reloadRegistry(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(REGISTRY_KEY);
+    const stored = raw === null ? null : parseRegistry(raw);
+    if (!stored) return false;
+    const keep = stored.profiles.some((p) => p.id === registry.activeProfileId) ? registry.activeProfileId : stored.activeProfileId;
+    registry = { ...stored, activeProfileId: keep };
     return true;
   } catch {
     return false;
   }
 }
 
+// Re-reads the registry from storage so a profile added by another tab (or another part of the app) is seen. The profile in
+// use does not change. Returns false when the registry could not be read.
+export function reloadProfileRegistry(): Promise<boolean> {
+  return serialized(async () => {
+    await ensureProfilesReady();
+    if (state !== 'ready') return false;
+    return reloadRegistry();
+  });
+}
+
 export type RegisterResult =
   | { ok: true; created: boolean }
-  | { ok: false; reason: 'invalid-id' | 'unavailable' | 'storage' };
+  | { ok: false; reason: 'invalid-id' | 'unavailable' | 'storage' | 'conflict' };
 
 // Makes a child profile exist (its id should be the household child id). Creating it writes nothing but the
-// registry; the child's own data appears the first time the child is used.
+// registry; the child's own data appears the first time the child is used. Registering an id that already exists changes
+// nothing (so a repeated or interrupted creation never makes a second profile). If another tab saved the registry first,
+// the newer registry is adopted and this one record is added to it (nothing of the other copy is dropped).
 export function registerChildProfile(id: string): Promise<RegisterResult> {
   return serialized(async () => {
     if (typeof id !== 'string' || !ID_PATTERN.test(id) || id === MAIN_PROFILE_ID) return { ok: false, reason: 'invalid-id' } as const;
     await ensureProfilesReady();
     if (state !== 'ready') return { ok: false, reason: 'unavailable' } as const;
-    if (recordFor(id)) return { ok: true, created: false } as const;
-    const next: Registry = {
-      ...registry,
-      profiles: [...registry.profiles, { id, kind: 'child', storage: 'scoped', createdAt: new Date().toISOString() }],
-    };
-    if (!(await writeRegistry(next))) return { ok: false, reason: 'storage' } as const;
-    registry = next;
-    return { ok: true, created: true } as const;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (recordFor(id)) return { ok: true, created: false } as const;
+      const next: Registry = {
+        ...registry,
+        profiles: [...registry.profiles, { id, kind: 'child', storage: 'scoped', createdAt: new Date().toISOString() }],
+      };
+      const result = await writeRegistry(next);
+      if (result.status === 'ok') {
+        registry = result.registry;
+        return { ok: true, created: true } as const;
+      }
+      if (result.status === 'failed') return { ok: false, reason: 'storage' } as const;
+      if (!(await reloadRegistry())) return { ok: false, reason: 'conflict' } as const;
+    }
+    return { ok: false, reason: 'conflict' } as const;
   });
 }
 
 export type SwitchResult =
   | { ok: true; changed: boolean }
-  | { ok: false; reason: 'unknown-profile' | 'unavailable' | 'timeout' | 'busy' | 'unsaved-changes' | 'storage'; keys?: string[] };
+  | { ok: false; reason: 'unknown-profile' | 'unavailable' | 'timeout' | 'busy' | 'unsaved-changes' | 'storage' | 'conflict'; keys?: string[] };
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -452,9 +560,8 @@ async function settleAll(timeoutMs: number): Promise<SwitchResult | null> {
   return null;
 }
 
-// Synchronously makes `profileId` active: every store drops what it holds, then the id changes. Returns the
-// clean-up functions the stores asked for, and whether every reset worked.
-function commitActive(profileId: string): { cleanups: (() => Promise<void>)[]; clean: boolean } {
+// Every store drops what it holds. Returns the clean-up functions the stores asked for, and whether every reset worked.
+function resetStores(): { cleanups: (() => Promise<void>)[]; clean: boolean } {
   const cleanups: (() => Promise<void>)[] = [];
   let clean = true;
   for (const store of stores) {
@@ -465,51 +572,112 @@ function commitActive(profileId: string): { cleanups: (() => Promise<void>)[]; c
       clean = false;
     }
   }
+  return { cleanups, clean };
+}
+
+// Synchronously makes `profileId` active: every store drops what it holds, then the id changes. Returns the
+// clean-up functions the stores asked for, and whether every reset worked. After a release the stores are already empty
+// (and asking them to reset would need a profile key), so that one step is skipped.
+function commitActive(profileId: string, options: { alreadyReset?: boolean } = {}): { cleanups: (() => Promise<void>)[]; clean: boolean } {
+  const swapped = options.alreadyReset ? { cleanups: [], clean: true } : resetStores();
   registry = { ...registry, activeProfileId: profileId };
+  released = false;
   generation += 1;
   activeListeners.forEach((listener) => listener(profileId));
-  return { cleanups, clean };
+  return swapped;
 }
 
 // Switches the active profile. The order matters, so that a switch that fails leaves the CURRENT profile exactly as
 // it was (nothing reset, nothing cancelled, nothing lost):
 //   1. wait for every pending write and in-flight operation (a write that cannot be saved cancels the switch);
-//   2. save the new active id in the registry (a failure cancels the switch; nothing in memory has changed yet);
+//   2. save the new active id in the registry (a failure cancels the switch; nothing in memory has changed yet; a registry
+//      another tab saved first is adopted once and the switch retried, then it is a "conflict");
 //   3. wait once more, for anything that started while the registry was being saved (a failure puts the old id back
 //      in the registry and cancels the switch);
 //   4. only then swap profiles in ONE synchronous step, so nothing can run half in one profile and half in the other,
 //      and run the stores' clean-up (cancelling the old profile's phone notifications).
 // Nothing in memory is touched, and no clean-up runs, until step 4.
+// Switching to the profile that was last used works after a release too (the release is what is being ended).
 export function switchProfile(profileId: string, options: { timeoutMs?: number } = {}): Promise<SwitchResult> {
   return serialized(async (): Promise<SwitchResult> => {
     await ensureProfilesReady();
+    // A profile another tab added since this one started is not "unknown": look at the stored registry once before refusing.
+    if (!recordFor(profileId) && state === 'ready') await reloadRegistry();
     if (!recordFor(profileId)) return { ok: false, reason: 'unknown-profile' };
-    if (profileId === registry.activeProfileId) return { ok: true, changed: false };
+    if (profileId === registry.activeProfileId && !released) return { ok: true, changed: false };
     if (state !== 'ready') return { ok: false, reason: 'unavailable' };
     const timeoutMs = options.timeoutMs ?? SETTLE_TIMEOUT_MS;
     const previous = registry.activeProfileId;
+    const wasReleased = released;
 
     const blocked = await settleAll(timeoutMs);
     if (blocked) return blocked;
 
-    if (!(await writeRegistry({ ...registry, activeProfileId: profileId }))) return { ok: false, reason: 'storage' };
+    let written = await writeRegistry({ ...registry, activeProfileId: profileId });
+    if (written.status === 'conflict' && (await reloadRegistry())) {
+      if (!recordFor(profileId)) return { ok: false, reason: 'unknown-profile' };
+      written = await writeRegistry({ ...registry, activeProfileId: profileId });
+    }
+    if (written.status !== 'ok') return { ok: false, reason: written.status === 'conflict' ? 'conflict' : 'storage' };
+    registry = { ...registry, revision: written.registry.revision }; // the id in memory changes only in step 4
 
     const late = await settleAll(timeoutMs);
     if (late) {
-      await writeRegistry(registry); // put the old active id back (best effort; the data is consistent either way)
+      const back = await writeRegistry(registry); // put the old active id back (best effort; the data is consistent either way)
+      if (back.status === 'ok') registry = back.registry;
       return late;
     }
 
     // No await from here to the end of the swap.
-    const swapped = commitActive(profileId);
+    const swapped = commitActive(profileId, { alreadyReset: wasReleased });
     if (!swapped.clean) {
       // A store failed to reset. Everything was saved before the swap, so going back only means the stores reload
       // from storage; no clean-up has run.
       commitActive(previous);
-      await writeRegistry(registry);
+      const back = await writeRegistry(registry);
+      if (back.status === 'ok') registry = back.registry;
       return { ok: false, reason: 'storage' };
     }
-    for (const cleanup of swapped.cleanups) void cleanup().catch(() => {});
+    runCleanups(swapped.cleanups);
+    return { ok: true, changed: true };
+  });
+}
+
+export type ReleaseResult =
+  | { ok: true; changed: boolean }
+  | { ok: false; reason: 'unavailable' | 'timeout' | 'busy' | 'unsaved-changes' | 'storage'; keys?: string[] };
+
+// Leaves the active profile WITHOUT choosing another (for the family picker): every pending write and in-flight operation
+// finishes first (a write that cannot be saved cancels the release and the profile stays exactly as it was), then, in one
+// synchronous step, every store drops what it holds, the phone notifications of the profile being left are cancelled and
+// cleared (the same rule as a switch), the parent area locks (listeners are told) and no profile is active until the next
+// successful switchProfile(). Nothing is written to the registry: the last-used pointer stays as it was, which is not
+// an active profile. While released, scopedKey() throws, so no store can load or write anything by accident.
+export function releaseActiveProfile(options: { timeoutMs?: number } = {}): Promise<ReleaseResult> {
+  return serialized(async (): Promise<ReleaseResult> => {
+    await ensureProfilesReady();
+    if (released) return { ok: true, changed: false };
+    if (state !== 'ready') return { ok: false, reason: 'unavailable' };
+    const timeoutMs = options.timeoutMs ?? SETTLE_TIMEOUT_MS;
+    for (let round = 0; round < 3; round += 1) {
+      const blocked = await settleAll(timeoutMs);
+      if (blocked && !blocked.ok) return { ok: false, reason: blocked.reason === 'conflict' || blocked.reason === 'unknown-profile' ? 'storage' : blocked.reason, keys: blocked.keys };
+      if (operations.size === 0 && pendingWrites.size === 0) break;
+    }
+    if (operations.size > 0 || pendingWrites.size > 0) return { ok: false, reason: 'busy' };
+
+    // No await from here to the end of the release.
+    const previous = registry.activeProfileId;
+    const swapped = resetStores();
+    if (!swapped.clean) {
+      // A store failed to reset: stay in the profile (everything was saved), and make the screens reload what is saved.
+      commitActive(previous);
+      return { ok: false, reason: 'storage' };
+    }
+    released = true;
+    generation += 1;
+    activeListeners.forEach((listener) => listener(previous));
+    runCleanups(swapped.cleanups);
     return { ok: true, changed: true };
   });
 }

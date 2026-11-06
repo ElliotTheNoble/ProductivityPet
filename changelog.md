@@ -2,6 +2,24 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-05] — Family profile picker, Stages 0 and 1: guards and data layer (no screens yet)
+
+### Added
+- A way to leave the active profile without choosing another (`releaseActiveProfile`): pending saves finish first, every store lets go of its data, the left profile's notifications are cleared, the parent area locks, and no profile is active until the next switch.
+- Household children now have a permanent link to their storage profile (same id), reconciliation that only adds missing links and reports what it cannot resolve (duplicate ids, invalid ids, orphan profiles) without deleting anything, archive metadata (`archivedAt`) with no screen yet, and read-only care summaries of any profile's pets (sick, critical, passed away) that write and load nothing.
+- Route-protection and profile-reset audits as tests, so a new route, stored record or cheat switch has to be classified.
+
+### Changed
+- Household saves are tracked and checked: written and read back before memory changes, refused when another tab saved a newer copy, and nothing unreadable or duplicated is dropped silently. The profile registry got the same revision check.
+- In family mode adding a child needs the Parent PIN to exist and the parent area to be unlocked. With family mode off nothing changes.
+- All gameplay cheat flags (and the matching developer helpers) are switched off whenever family mode is on, even in development. With family mode off they keep their values.
+
+### Fixed
+- Task reminders of a profile were never scheduled again after leaving that profile and coming back (leaving cancels everything on the phone, the saved tasks still said "scheduled", and Home and Tasks skip the sync on load). Now the first pass after a real profile swap reschedules them once, after the phone clean-up has finished (BUG-079). Pet alerts also wait for that clean-up.
+
+### Verified
+- 472 of 472 tests pass (76 new, 12 of them for the reminder fix), plain `npx tsc --noEmit` clean. Not done: any screen, real-device checks (see FEATURE-090, BUG-078, BUG-079).
+
 ## [2026-11-04] — Parent PIN screens (set up, unlock, recover, manage), disabled for users
 
 ### Added

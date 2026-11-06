@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+import { ensureProfilesReady, isProfileReleased, registerProfileStore, scopedKey, trackOperation, whenProfileCleanupDone, writeScoped } from '@/utils/profiles';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -201,6 +201,10 @@ async function doSyncPetAlerts(): Promise<void> {
   }
   syncing = true;
   try {
+    // Not before the phone-side clean-up of the profile that was just left has finished (it cancels everything scheduled and
+    // empties that profile's schedule record, and must not undo what is scheduled for this one).
+    await whenProfileCleanupDone();
+    if (isProfileReleased()) return; // the picker is showing: nothing is scheduled for anyone
     const current = await getAlertSettings();
     const family = peekFamily() ?? (await ensureFamilyLoaded());
     const scheduleKey = scopedKey(SCHEDULE_KEY_NAME); // fixed for this whole run

@@ -28,7 +28,7 @@ import { useT, trList, tr } from '@/i18n';
 import { MOODS, getMoodMessage, getRandomMoodMessageIndex, type Mood } from '@/utils/mood';
 import { recordMoodEntry } from '@/utils/mood-log';
 import { getPetLifeMessage } from '@/utils/pet-life-messages';
-import { cancelTaskNotification, syncTaskNotifications } from '@/utils/notifications';
+import { cancelTaskNotification, reminderResyncNeeded, syncTaskNotifications } from '@/utils/notifications';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
 import { ensureProfilesReady, scopedKey, writeScoped } from '@/utils/profiles';
 import { isPoopPaused, applyCleanUpPile } from '@/utils/pet-poop';
@@ -472,6 +472,14 @@ export default function HomeScreen() {
     if (!isHydrated) return;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
+      // Nothing changed, so nothing is re-saved. The one exception: if a profile swap has cancelled the phone's reminders since
+      // the last pass, they are scheduled again now (see syncTaskNotifications); the tasks are only re-saved if that changed them.
+      if (!reminderResyncNeeded()) return;
+      syncTaskNotifications(tasks)
+        .then((updated) => {
+          if (updated !== tasks) setTasks(updated);
+        })
+        .catch(() => {});
       return;
     }
     persistCachedTasks(tasks);

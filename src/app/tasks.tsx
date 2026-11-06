@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { tr, useT } from '@/i18n';
 import { categoryLabel } from '@/utils/categorize-task';
 import { getHolidayForDate } from '@/utils/holidays';
-import { cancelTaskNotification, ensureNotificationPermission, syncTaskNotifications } from '@/utils/notifications';
+import { cancelTaskNotification, ensureNotificationPermission, reminderResyncNeeded, syncTaskNotifications } from '@/utils/notifications';
 import { getTaskRoom } from '@/utils/room-tasks';
 import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
@@ -177,6 +177,14 @@ export default function TasksScreen() {
     if (!isHydrated) return;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
+      // Nothing changed, so nothing is re-saved. The one exception: if a profile swap has cancelled the phone's reminders since
+      // the last pass, they are scheduled again now (see syncTaskNotifications); the tasks are only re-saved if that changed them.
+      if (!reminderResyncNeeded()) return;
+      syncTaskNotifications(tasks)
+        .then((updated) => {
+          if (updated !== tasks) setTasks(updated);
+        })
+        .catch(() => {});
       return;
     }
     persistCachedTasks(tasks);

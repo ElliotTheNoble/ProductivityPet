@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { tr } from '@/i18n';
+import { GAMEPLAY_CHEATS_ALLOWED } from '@/utils/dev-flags';
 import { endToySession, getToySession, resetToySessions, startToySession } from '@/utils/pet-toy-session';
 import {
   ensureProfilesReady,
@@ -62,7 +63,7 @@ export type { LifeState, PetEvent, PetEventType, PetLifecycle, PetRecord };
 
 // The family record belongs to the active profile (see @/utils/profiles.ts). The LEGACY_* keys below are the
 // pre-profile saves; only the main profile (which keeps the original keys) may ever import them.
-const FAMILY_KEY_NAME = 'petFamily';
+export const FAMILY_KEY_NAME = 'petFamily';
 const LEGACY_TASKS_KEY = '@ProductivityPet:tasks';
 const LEGACY_ALBUM_KEY = '@ProductivityPet:petAlbum';
 const LEGACY_HAT_KEY = '@ProductivityPet:equippedPetHatId';
@@ -305,6 +306,12 @@ function normalizePet(raw: unknown): PetRecord | null {
         }
       : undefined,
   };
+}
+
+// Understands a saved family record WITHOUT loading it into the store (no state, no listeners, no writes). Used to read another
+// profile's pets for the family picker (@/utils/family-profiles.ts).
+export function parseSavedFamily(raw: unknown): FamilyState | null {
+  return normalizeFamily(raw);
 }
 
 function normalizeFamily(raw: unknown): FamilyState | null {
@@ -963,7 +970,7 @@ export function markAlertSent(petId: string, kind: 'sick' | 'critical', episodeK
 // ----- developer test helpers (see DEV_ENABLE_LIFECYCLE_TEST_CONTROLS) -----
 
 export function devSetSelectedNeed(need: 'hunger' | 'cleanliness' | 'happiness' | 'energy', value: number): void {
-  if (!state) return;
+  if (!state || !GAMEPLAY_CHEATS_ALLOWED) return;
   const selected = getSelectedPet(state);
   if (!isLiving(selected)) return;
   const now = new Date();
@@ -979,7 +986,7 @@ export function devSetSelectedNeed(need: 'hunger' | 'cleanliness' | 'happiness' 
 // Moves the sickness start earlier so the 24h / 96h deadlines can be tested
 // without waiting. Only affects a pet that is already sick or critical.
 export function devShiftSicknessBack(hours: number): void {
-  if (!state) return;
+  if (!state || !GAMEPLAY_CHEATS_ALLOWED) return;
   const selected = getSelectedPet(state);
   if (!selected.lifecycle.sickSince || !isLiving(selected)) return;
   const earlier = new Date(new Date(selected.lifecycle.sickSince).getTime() - hours * 3600 * 1000).toISOString();
@@ -1005,7 +1012,7 @@ export type DevHealthStateResult = { ok: true } | { ok: false; reason: string };
 // normal sickness / death / paid-resurrection rules are untouched: from here the pet follows them
 // again (a Sick pet turns Critical after 24h, a Critical one passes away 96h after it fell sick).
 export function devSetSelectedHealthState(target: DevHealthState): DevHealthStateResult {
-  if (!__DEV__ || !state) return { ok: false, reason: 'Developer tools are only available in development builds.' };
+  if (!__DEV__ || !state || !GAMEPLAY_CHEATS_ALLOWED) return { ok: false, reason: 'Developer tools are only available in development builds.' };
   const selected = getSelectedPet(state);
   const now = new Date();
   const nowStamp = now.toISOString();
@@ -1229,7 +1236,7 @@ export function getPetLabel(pet: PetRecord, all: PetRecord[]): string {
 // labelled button on the Pet Care & Alerts page's Developer Tools. Records the
 // hatch date if the Egg hatches, exactly like a real task would.
 export function devAddGrowthToSelectedPet(tasks: number): void {
-  if (!state || !(tasks > 0)) return;
+  if (!state || !GAMEPLAY_CHEATS_ALLOWED || !(tasks > 0)) return;
   const selected = getSelectedPet(state);
   if (!isLiving(selected) || selected.lifecycle.state !== 'healthy') return;
   const now = new Date();
@@ -1266,7 +1273,7 @@ export function devAddGrowthToSelectedPet(tasks: number): void {
 // (and the "hatched" album event) only if the pet has never hatched; the
 // "highest stage reached" never goes down. Persists like any other save.
 export function devSetSelectedPetActualStage(stageIndex: number): void {
-  if (!state || !Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex > 4) return;
+  if (!state || !GAMEPLAY_CHEATS_ALLOWED || !Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex > 4) return;
   const selected = getSelectedPet(state);
   if (!isLiving(selected)) return;
   const now = new Date();

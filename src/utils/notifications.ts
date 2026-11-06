@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 
 import { getCurrentLanguage, tr, type LanguageCode } from '@/i18n';
+import { getNotificationEpoch, whenProfileCleanupDone } from '@/utils/profiles';
 import { addDaysISO, isOccurrenceCompleted, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
 const CHANNEL_ID = 'task-reminders';
@@ -150,13 +151,28 @@ export async function cancelTaskNotification(task: Task): Promise<void> {
 // A reminder's title is fixed when it is scheduled, so the first pass after the language is known or changes
 // re-schedules every reminder (otherwise an old English notification could still fire in Spanish).
 let lastSyncedLanguage: LanguageCode | null = null;
+// Leaving a profile cancels everything scheduled on the phone, but each saved task still says its reminder is scheduled (and
+// that saved record is NOT touched). So after a profile swap or release the next pass behaves like a language change: every
+// reminder is scheduled again (the old id is cancelled first, so nothing is ever scheduled twice). Only the pass that follows a
+// real swap does this; repeating the pass changes nothing. See getNotificationEpoch in @/utils/profiles.ts.
+let lastSyncedEpoch = 0;
+
+// True when a profile swap or release has cancelled the phone's reminders since the last pass, so the next pass has to schedule
+// them again even though no task changed (the screens skip the pass that fires only because their tasks finished loading).
+export function reminderResyncNeeded(): boolean {
+  return lastSyncedEpoch !== getNotificationEpoch();
+}
 
 export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
+  // The phone-side clean-up of the profile that was just left must be finished first, or it could cancel what is scheduled now.
+  await whenProfileCleanupDone();
   const now = new Date();
   let changed = false;
   const language = getCurrentLanguage();
-  const languageChanged = lastSyncedLanguage !== language;
+  const epoch = getNotificationEpoch();
+  const languageChanged = lastSyncedLanguage !== language || lastSyncedEpoch !== epoch;
   lastSyncedLanguage = language;
+  lastSyncedEpoch = epoch;
 
   const updated = await Promise.all(
     tasks.map(async (task) => {

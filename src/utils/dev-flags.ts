@@ -1,5 +1,22 @@
 import type { AccessoryPlacement } from '@/utils/pet-accessory-placement';
 
+// Family mode (shared-device child profiles, the family picker and the parent PIN). OFF for every user, and it CANNOT be on
+// in a production build: it needs __DEV__ (false in every release build) AND the environment variable
+// EXPO_PUBLIC_FAMILY_MODE=1 at the moment the development server starts, for example (PowerShell):
+//   $env:EXPO_PUBLIC_FAMILY_MODE='1'; npx expo start
+// While it is off nothing in the app changes: no PIN checker is registered, the parent area is open exactly as it always was,
+// the Parent PIN screens render nothing, and the native authentication / secure-storage modules are never loaded. Do NOT make
+// it true for real users until BUG-072 (care warnings and notifications for inactive children) and the real-device checks
+// listed in FEATURE-088 and FEATURE-089 are done. On the web it only ever selects the in-memory development preview (see
+// @/utils/parent-auth-preview.ts); the web has no secure storage, so family mode is never supported there for real users.
+export const FAMILY_MODE_ENABLED: boolean = __DEV__ && process.env.EXPO_PUBLIC_FAMILY_MODE === '1';
+
+// Every gameplay test control below (free tokens, unowned hats, growth without tasks, forced sickness, stage and hatch previews)
+// is switched OFF whenever family mode is on, even in a development build, so a child profile can never be given
+// an advantage by a leftover test button or helper. With family mode off (every real user today) each flag keeps the value it has
+// always had.
+export const GAMEPLAY_CHEATS_ALLOWED: boolean = !FAMILY_MODE_ENABLED;
+
 // Temporary development/testing flags — none of these belong in a real
 // release build. Each one is meant to be flipped to false (or this file
 // deleted and its imports removed) once the thing it unblocks is done.
@@ -21,7 +38,7 @@ import type { AccessoryPlacement } from '@/utils/pet-accessory-placement';
 // Turn this back to false (or delete this flag and the `if` that reads
 // it in pet-equipment.ts, plus the dev-only Shop button that uses it in
 // shop-screen.tsx) once all hat placements are tuned.
-export const DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP = true;
+export const DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP: boolean = GAMEPLAY_CHEATS_ALLOWED;
 
 // Read by pet-placeholder.tsx ONLY while DEV_ALLOW_UNOWNED_ACCESSORY_EQUIP
 // is true, and ONLY for a headHat item that has no placementOverrides of
@@ -55,7 +72,7 @@ export const DEV_UNTUNED_HEADHAT_FALLBACK_PLACEMENT: AccessoryPlacement = {
 //   is otherwise a completely normal, fully-charged upgrade.
 // Turn this back to false (or delete this flag and the check that reads
 // it in pet-growth.ts) once Baby -> Young -> Adult has been tested.
-export const DEV_BYPASS_GROWTH_TASK_REQUIREMENT = true;
+export const DEV_BYPASS_GROWTH_TASK_REQUIREMENT: boolean = GAMEPLAY_CHEATS_ALLOWED;
 
 // When true, shows a TEMPORARY "Dev: +1,500 Paw Tokens" button on Home
 // (next to the growth test control — see handleDevAddTestTokens in
@@ -74,7 +91,7 @@ export const DEV_BYPASS_GROWTH_TASK_REQUIREMENT = true;
 //   it's an explicit, visible test button, not a silent/automatic grant.
 // Turn this back to false (or delete this flag, DEV_TEST_PAW_TOKEN_GRANT_AMOUNT,
 // and the button + handler in src/app/index.tsx) once growth testing is done.
-export const DEV_ENABLE_TEST_PAW_TOKEN_GRANT = true;
+export const DEV_ENABLE_TEST_PAW_TOKEN_GRANT: boolean = GAMEPLAY_CHEATS_ALLOWED;
 export const DEV_TEST_PAW_TOKEN_GRANT_AMOUNT = 1500;
 
 // When true, shows a TEMPORARY "Dev: Pet Stage Preview" control on Home
@@ -96,7 +113,7 @@ export const DEV_TEST_PAW_TOKEN_GRANT_AMOUNT = 1500;
 //   returns to the real rendered stage.
 // Turn this back to false (or delete this flag and the control + state in
 // src/app/index.tsx) once stage/accessory-placement testing is done.
-export const DEV_ENABLE_STAGE_PREVIEW = true;
+export const DEV_ENABLE_STAGE_PREVIEW: boolean = GAMEPLAY_CHEATS_ALLOWED;
 
 // When true, shows a TEMPORARY "Dev: Dirty Kitty testing" card on Home
 // with buttons that write directly to the real saved Pet Profile: set
@@ -118,7 +135,7 @@ export const DEV_ENABLE_STAGE_PREVIEW = true;
 // Turn this back to false (or delete this flag, DEV_DIRTY_TEST_CLEANLINESS_VALUE,
 // and the card + handlers in src/app/index.tsx) once dirty-state/poop
 // testing is done.
-export const DEV_ENABLE_DIRTY_TEST_CONTROLS = true;
+export const DEV_ENABLE_DIRTY_TEST_CONTROLS: boolean = GAMEPLAY_CHEATS_ALLOWED;
 export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;
 
 // When true, shows a TEMPORARY "Dev: Preview Hatching Transition" button
@@ -138,7 +155,7 @@ export const DEV_DIRTY_TEST_CLEANLINESS_VALUE = 20;
 //   Preview (DEV_ENABLE_STAGE_PREVIEW above).
 // Turn this back to false (or delete this flag and the button + state in
 // src/app/index.tsx) once the hatching transition has been tested.
-export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;
+export const DEV_ENABLE_HATCH_INTRO_PREVIEW: boolean = GAMEPLAY_CHEATS_ALLOWED;
 
 
 // TEMPORARY, testing only. When true, the Pet Health Alerts page
@@ -147,15 +164,4 @@ export const DEV_ENABLE_HATCH_INTRO_PREVIEW = true;
 // Critical, death and resurrection can be tried without waiting 24 / 96 hours.
 // They go through the normal lifecycle rules (nothing is faked), but they do
 // change the selected pet's real saved needs/clock — turn this off for release.
-export const DEV_ENABLE_LIFECYCLE_TEST_CONTROLS = true;
-
-// Family mode (shared-device child profiles, the family picker and the parent PIN). OFF for every user, and it CANNOT be on
-// in a production build: it needs __DEV__ (false in every release build) AND the environment variable
-// EXPO_PUBLIC_FAMILY_MODE=1 at the moment the development server starts, for example (PowerShell):
-//   $env:EXPO_PUBLIC_FAMILY_MODE='1'; npx expo start
-// While it is off nothing in the app changes: no PIN checker is registered, the parent area is open exactly as it always was,
-// the Parent PIN screens render nothing, and the native authentication / secure-storage modules are never loaded. Do NOT make
-// it true for real users until BUG-072 (care warnings and notifications for inactive children) and the real-device checks
-// listed in FEATURE-088 and FEATURE-089 are done. On the web it only ever selects the in-memory development preview (see
-// @/utils/parent-auth-preview.ts); the web has no secure storage, so family mode is never supported there for real users.
-export const FAMILY_MODE_ENABLED: boolean = __DEV__ && process.env.EXPO_PUBLIC_FAMILY_MODE === '1';
+export const DEV_ENABLE_LIFECYCLE_TEST_CONTROLS: boolean = GAMEPLAY_CHEATS_ALLOWED;
