@@ -720,6 +720,16 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-080] Family picker: known limits (documented, OPEN, 2026-11-05)
+
+- **No way back yet:** until the header chip (Stage 4) the picker only comes back on the next cold start (`returnToPicker()` exists and is tested).
+- **No children, no picker:** with no active child the app opens straight into Main as it always has, PIN or not (nobody to choose between). Once an active child exists the picker applies and Main FAILS CLOSED: without a working, confirmed Parent PIN (never set up, unfinished, unconfirmed recovery code, secret missing, storage unavailable) Main and "Add a child" stay disabled with an explanation, children still play, and nothing creates or resets a PIN.
+- **OPEN, decision needed (parent routes in a household with no PIN):** `/parent`, `/welcome` and `/parent-security` are protected by the Parent Gate only when a PIN exists. In a household that has children but never set up a PIN (older or development data; new households have to set it up before adding children) those routes are open so that a PIN CAN be created, which is the first-setup race of BUG-077: a child could open the dashboard from Pet Care. Closing it needs a new, protected "set up the PIN" path (a design decision), so it was not changed in Stage 2.
+- **Same avatar twice:** avatars are worked out from the child id, so two children can share a picture; the name and the spoken label always differ.
+- **A slow switch waits up to 15 seconds** (the profile layer's own limit) before the timeout message; the loading screen is shown the whole time.
+- **Care badges use the device clock** and one read per profile every minute; the first paint says "Checking…". Main's badge is shown without the PIN (counts only, no pet names).
+- **Not verified on a real device:** screen-reader reading order, the PIN pad on a phone, real notification clean-up when switching.
+
 ### [BUG-079] Task reminders were lost after leaving a profile and coming back (FIXED 2026-11-05)
 
 - **Status:** Fixed (found in the Stage 1 safety review, before anything was committed). Leaving a profile cancels everything scheduled on the phone, but each saved task keeps `scheduledNotificationId` and `scheduledNotificationFor`, and Home and Tasks skip the sync pass that fires only because their tasks finished loading. So after a profile swap the reminders of the profile you returned to were never scheduled again until a task was edited or the app restarted and a task changed. The bug existed in the profile switching of FEATURE-086; the family picker would have made it common.

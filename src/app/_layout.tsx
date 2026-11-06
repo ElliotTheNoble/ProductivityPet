@@ -21,6 +21,7 @@ import { startPetAlerts } from '@/utils/pet-alerts';
 import { startPawadiseMail } from '@/utils/pawadise-mail';
 import { ensureOnboardingLoaded, useOnboarding } from '@/utils/onboarding';
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { consumePendingRoute } from '@/utils/family-session';
 import { startParentGateAutoLock } from '@/utils/parent-gate';
 import { ensureProfilesReady } from '@/utils/profiles';
 import { checkForPoopAccumulation } from '@/utils/pet-poop';
@@ -91,7 +92,15 @@ export default function RootLayout() {
   }, []);
   // The parent area locks itself when the app leaves the foreground or the profile changes (see @/utils/parent-gate.ts).
   useEffect(() => startParentGateAutoLock(), []);
-  return <AppShell key={profileId} />;
+  if (!FAMILY_MODE_ENABLED) return <AppShell key={profileId} />;
+  // Family mode (development only, never in a release build): the family picker comes first. Until someone has chosen a profile
+  // the app shell is not rendered, so no game store loads and nothing is scheduled (see @/components/family-gate.tsx).
+  const { FamilyGate } = require('@/components/family-gate') as typeof import('@/components/family-gate');
+  return (
+    <FamilyGate>
+      <AppShell key={profileId} />
+    </FamilyGate>
+  );
 }
 
 function AppShell() {
@@ -100,6 +109,11 @@ function AppShell() {
   const router = useRouter();
   const onboarding = useOnboarding();
   const isWelcome = pathname === '/welcome';
+  // The picker's parent-only "Add a child" path: after the PIN, Main opens and this goes on to the (still gated) parent dashboard.
+  useEffect(() => {
+    const route = consumePendingRoute();
+    if (route) router.replace(route);
+  }, [router]);
   // A brand-new install goes to the welcome flow until it is finished or skipped; everyone else is untouched.
   useEffect(() => {
     if (onboarding?.status === 'pending' && !isWelcome) router.replace('/welcome');

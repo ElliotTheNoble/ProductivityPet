@@ -8,7 +8,8 @@ import {
   type Household,
 } from '@/utils/household';
 import { FAMILY_KEY_NAME, parseSavedFamily } from '@/utils/pet-family';
-import { advancePet } from '@/utils/pet-lifecycle-core';
+import { RECOVERY_NEED_THRESHOLD } from '@/utils/pet-family-config';
+import { advancePet, isEggStage } from '@/utils/pet-lifecycle-core';
 import {
   MAIN_PROFILE_ID,
   ensureProfilesReady,
@@ -131,7 +132,7 @@ export async function getSelectableChildren(): Promise<ChildProfile[]> {
 // ---------------------------------------------------------------------------------------------------------
 // read-only care summary
 
-export type CareSeverity = 'none' | 'healthy' | 'deceased' | 'sick' | 'critical';
+export type CareSeverity = 'none' | 'healthy' | 'needs-care' | 'deceased' | 'sick' | 'critical';
 
 export type CareSummary =
   // No saved pets yet (a child who has not opened the app): the starter egg is created the first time they do.
@@ -143,13 +144,16 @@ export type CareSummary =
       // Pets at home (not passed away, not in Pet Pawadise).
       living: number;
       healthy: number;
+      // Healthy pets that are hungry, dirty or unhappy (a need below the recovery level, the same line the pet bar uses): they
+      // are not sick yet, but would be soon if nobody looks after them. Counted inside `healthy`.
+      lowNeeds: number;
       sick: number;
       critical: number;
       // Pets that have passed away and can still be brought back.
       deceased: number;
-      // critical > sick > deceased > healthy. 'none' = no pets at home and none passed away.
+      // critical > sick > deceased > needs-care > healthy. 'none' = no pets at home and none passed away.
       worst: CareSeverity;
-      // True when a pet is sick or critical, or a pet has passed away: the picker shows a "needs care" mark.
+      // True when a pet is sick or critical, has passed away, or has a need below the recovery level: the picker shows a mark.
       needsAttention: boolean;
       // The moment the summary was worked out for (the pets were advanced to this instant on a copy).
       asOf: string;
@@ -178,6 +182,7 @@ export async function peekProfileCare(profileId: string, now: Date = new Date())
 
   let living = 0;
   let healthy = 0;
+  let lowNeeds = 0;
   let sick = 0;
   let critical = 0;
   let deceased = 0;
@@ -199,18 +204,28 @@ export async function peekProfileCare(profileId: string, now: Date = new Date())
       default:
         living += 1;
         healthy += 1;
+        if (
+          !isEggStage(pet.growthUnits) &&
+          (pet.profile.hunger < RECOVERY_NEED_THRESHOLD ||
+            pet.profile.cleanliness < RECOVERY_NEED_THRESHOLD ||
+            pet.profile.happiness < RECOVERY_NEED_THRESHOLD)
+        ) {
+          lowNeeds += 1;
+        }
     }
   }
-  const worst: CareSeverity = critical > 0 ? 'critical' : sick > 0 ? 'sick' : deceased > 0 ? 'deceased' : healthy > 0 ? 'healthy' : 'none';
+  const worst: CareSeverity =
+    critical > 0 ? 'critical' : sick > 0 ? 'sick' : deceased > 0 ? 'deceased' : lowNeeds > 0 ? 'needs-care' : healthy > 0 ? 'healthy' : 'none';
   return {
     status: 'ok',
     living,
     healthy,
+    lowNeeds,
     sick,
     critical,
     deceased,
     worst,
-    needsAttention: sick + critical + deceased > 0,
+    needsAttention: sick + critical + deceased + lowNeeds > 0,
     asOf: now.toISOString(),
   };
 }

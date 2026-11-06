@@ -13,6 +13,8 @@ import { listsEs } from './lists.es';
 import { roomsEn } from './rooms.en';
 import { roomsEs } from './rooms.es';
 import { namesEs } from './names.es';
+import { familyPickerEn } from './family-picker.en';
+import { familyPickerEs } from './family-picker.es';
 import { parentGateEn } from './parent-gate.en';
 import { parentPinEn } from './parent-pin.en';
 import { parentGateEs } from './parent-gate.es';
@@ -36,11 +38,11 @@ import { tasksEs } from './tasks.es';
 // To add a language: create its tables (same keys), add them to TABLES, and add one line to LANGUAGES (its name
 // in ITS OWN language). It then appears in every language picker.
 
-export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn };
+export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn, ...familyPickerEn };
 export type Strings = typeof en;
 export type StringKey = keyof Strings;
 
-export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs };
+export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs, ...familyPickerEs };
 
 // Lists (message pools, month and weekday names). English is the fallback here too.
 export type ListKey = keyof typeof listsEn;

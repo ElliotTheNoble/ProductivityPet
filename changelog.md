@@ -2,6 +2,21 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-05] — Family profile picker ("Who's playing today?"), disabled for users
+
+### Added
+- A pastel picker shown on a cold start in family mode before anything of any profile is loaded: a card per active child (nickname, avatar, read-only care badge), a Main card behind the Parent PIN and a parent-only "Add a child" card. English and Spanish, phone portrait and landscape and tablets, long names, large text and screen-reader labels.
+- Care badges: healthy, needs care, sick, critical, passed away, new and unreadable (never shown as healthy), refreshed every minute and after a failed switch.
+- Clear loading and error states (timeout, unsaved changes, storage failure, safe mode, unreadable family list) with Try again; nothing is ever reported as opened before the switch has really succeeded.
+
+### Changed
+- Entering Main with the PIN opens the parent area for that PIN's session, the same way every time. Care summaries now also report pets that need care (a need below the recovery level).
+- Main fails closed: with active children, Main and "Add a child" open only with a working, confirmed Parent PIN; a missing, unfinished, unconfirmed, unreadable or unavailable PIN leaves them disabled with an explanation (children still play, no PIN is created or reset). The picker is only skipped when there is no active child, and a last check before Main is entered requires a PIN verified this session.
+- The app layout loads the picker only when family mode is on; with the flag off nothing changes.
+
+### Verified
+- 531 of 531 tests pass (59 new), plain `npx tsc --noEmit` clean. Isolated web preview at five sizes in English and Spanish. Not done: dashboard child controls, header chip, idle timeout, web single-tab lock, any real-device check (see FEATURE-091, BUG-080).
+
 ## [2026-11-05] — Family profile picker, Stages 0 and 1: guards and data layer (no screens yet)
 
 ### Added
