@@ -2,6 +2,25 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-06] — Family management in the Parent Dashboard (Stages 3.2 to 3.6), disabled for users
+
+### Added
+- Add, rename, archive and restore a child from the Parent Dashboard, each checking the verified parent session before saving, with friendly errors that say nothing was changed, a "storage may be full" hint only after two failed saves in a row, and a success message only after the save really worked.
+- A duplicate-nickname warning (never a block), an archive confirmation that explains nothing is deleted, pets keep aging and a pet that passed away is not brought back, the child's current care status, and a collapsed Archived section with Restore. Archived children are hidden from "Who's playing today?".
+- A Family health card, shown only when something needs a look (pets that need care, unreadable pets or household, duplicate IDs, unlinked children, orphan profiles). It only reports: nothing is deleted, repaired or merged.
+- English and Spanish text for all of it.
+
+### Changed
+- The old "Child profiles" card is replaced by the new management card; the shared confirmation dialog buttons are at least 44px tall and have accessible labels.
+
+### Fixed
+- Found in the browser preview: the buttons of a selected child's row stuck out past the card on a 390px-wide screen. They now wrap.
+- The older Parent Dashboard controls that were 36px or 40px tall (Pet Care and Alerts bell, Edit profile, Approve, Send back, Preview as child, Delete task) are now at least 44px tall; their behavior is unchanged and their button groups wrap on narrow screens.
+- Found in the browser preview at 150% text on a small phone: the shared confirmation dialog was taller than the screen with its Cancel button cut off. Its text now scrolls and its buttons wrap, so both stay reachable (this also helps the adopt-an-egg and resurrect dialogs).
+
+### Verified
+- 716 of 716 tests pass (70 new), plain `npx tsc --noEmit` clean. Isolated web preview at five sizes in English and Spanish. Not done: real-device checks and a native Spanish review (see FEATURE-093, BUG-082). Stage 4 not started.
+
 ## [2026-11-06] — Parent management safeguards and the protected first PIN setup (Stages 3.0 and 3.1), disabled for users
 
 ### Added

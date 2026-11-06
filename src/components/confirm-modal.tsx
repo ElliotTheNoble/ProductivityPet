@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
 
@@ -35,15 +35,20 @@ export function ConfirmModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <ThemedView type="background" style={styles.card}>
-          <ThemedText style={styles.title}>{title}</ThemedText>
-          <View style={styles.body}>{children}</View>
+          {/* Large text or a small screen: the words scroll, the buttons stay in reach. */}
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+            <ThemedText style={styles.title}>{title}</ThemedText>
+            <View style={styles.body}>{children}</View>
+          </ScrollView>
           <View style={styles.buttons}>
-            <Pressable onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
               <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
                 <ThemedText type="smallBold">{t('cancel')}</ThemedText>
               </ThemedView>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={confirmLabel}
               onPress={onConfirm}
               disabled={busy || confirmDisabled}
               style={({ pressed }) => [pressed && styles.pressed, (busy || confirmDisabled) && styles.disabled]}>
@@ -68,11 +73,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.three,
   },
-  card: { width: '100%', maxWidth: 420, borderRadius: Spacing.four, padding: Spacing.four, gap: Spacing.three },
+  card: { width: '100%', maxWidth: 420, maxHeight: '100%', borderRadius: Spacing.four, padding: Spacing.four, gap: Spacing.three },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  scrollContent: { gap: Spacing.three },
   title: { fontSize: 20, lineHeight: 26, fontWeight: '800' },
   body: { gap: Spacing.two },
-  buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: Spacing.two },
-  button: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Spacing.five },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: Spacing.two },
+  // At least 44 px tall (a comfortable touch target), centred.
+  button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Spacing.five },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.45 },
   pointer: { cursor: 'pointer' },

@@ -115,6 +115,7 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
     'src/utils/dev-stage-preview.ts', // a developer preview (switched off in family mode)
     'src/utils/profiles.ts',
     'src/utils/family-profiles.ts', // reads another profile's record, read-only, and holds no cache
+    'src/utils/family-management.ts', // lists storage keys to report leftovers, read-only, and holds no cache
   ];
   // Screens that keep a key in a ref (resolved through scopedKey) rather than in a store.
   const SCREENS_USING_SCOPED_KEYS = ['src/app/index.tsx', 'src/components/pet-family-bar.tsx'];
@@ -138,7 +139,7 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
   });
 
   test('device-level files do not read profile data through the active profile', () => {
-    for (const file of DEVICE_LEVEL.filter((f) => f !== 'src/utils/profiles.ts' && f !== 'src/utils/family-profiles.ts')) {
+    for (const file of DEVICE_LEVEL.filter((f) => f !== 'src/utils/profiles.ts' && f !== 'src/utils/family-profiles.ts' && f !== 'src/utils/family-management.ts')) {
       expect(read(file)).not.toMatch(/\bscopedKey\(/);
     }
   });

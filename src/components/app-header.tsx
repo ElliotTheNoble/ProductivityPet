@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   // comfortable touch area (at least 44 px wide and 40 px tall).
   bellPill: {
     minWidth: 44,
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: Spacing.two + 4,
     alignItems: 'center',
     justifyContent: 'center',

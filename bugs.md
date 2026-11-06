@@ -720,6 +720,19 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-082] Family management in the Parent Dashboard: known limits (documented, OPEN, 2026-11-06)
+
+- **Orphans are reported, never fixed:** unused empty profiles and profiles that hold data but belong to no child are only counted. There is no delete, merge or re-link control by design; a safe repair flow needs its own design (and the user's decision).
+- **Duplicate permanent IDs make the family list read-only** (nothing can be added, renamed, archived or restored) until someone resolves them outside the app. The Family health card explains this; no automatic repair exists.
+- **Archived children keep aging:** a long-archived child's pet can become sick or pass away. This is explained in the confirmation, but nothing reminds a parent that a child has been archived for a long time.
+- **Archive is blocked for the profile that is open** (Main or a child); the parent has to leave that profile first. There is no way back to the picker until Stage 4's header chip (see BUG-080).
+- **The "may be full" hint is a guess by design:** it appears only after two storage failures in a row and says "may". The cause is not measured; the counter is in memory and restarts with the app.
+- **Two tabs or devices:** a change made elsewhere is refused with a conflict message and nothing is overwritten; the parent has to try again.
+- **Family health is checked on demand** (when the dashboard opens and on "Check again"), not live.
+- **The preview's synthetic data is written into browser storage by a scratch-only helper**, because a PIN-less household with children cannot be set up on the web (BUG-081); the real screens and storage code were used for everything else.
+- **Not verified on a real device:** screen-reader reading order and wording, the Spanish text.
+- **Preview note:** at 150% text on a 360px phone, the page's own Back button is flagged as touching the screen edge in one full-length capture; it looks fine in the picture and was not changed.
+
 ### [BUG-081] Protected first PIN setup and parent-session checks: known limits (documented, OPEN, 2026-11-06)
 
 - **The device check is not identity.** A child who knows the device passcode (or whose face or fingerprint unlocks it) can pass it and become the one who sets the first PIN, which would lock the real parent out of Main and parent management (the recovery code would be shown to that person). Only guardian accounts can fix this; the screen and the docs say so.

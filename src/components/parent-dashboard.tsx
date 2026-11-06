@@ -5,15 +5,16 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Card, ChoiceCard, Field, PageShell, ToggleRow } from '@/components/family-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { FamilyHealthCard } from '@/components/family-health-card';
+import { FamilyManagementCard } from '@/components/family-management-card';
 import { ParentPinCard } from '@/components/parent-pin-card';
 import { LANGUAGES, useT, type LanguageCode, type StringKey, getLocale } from '@/i18n';
 import {
-  addChild,
   addTask,
   approveTask,
   deleteTask,
+  listActiveChildren,
   markTaskDone,
-  renameChild,
   saveParentProfile,
   selectChild,
   sendTaskBack,
@@ -43,10 +44,6 @@ export function ParentDashboard() {
   const { t } = useT();
   const household = useHousehold();
   const onboarding = useOnboarding();
-  const [newChild, setNewChild] = useState('');
-  const [addingChild, setAddingChild] = useState(false);
-  const [editingChild, setEditingChild] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
   const [taskText, setTaskText] = useState('');
   const [editingParent, setEditingParent] = useState(false);
   const [pName, setPName] = useState('');
@@ -55,22 +52,10 @@ export function ParentDashboard() {
 
   if (!household || !onboarding) return <PageShell>{null}</PageShell>;
 
-  const children = household.children;
+  // The children shown for tasks and settings are the ACTIVE ones (an archived child is managed in the family card below).
+  const children = listActiveChildren(household);
   const child: ChildProfile | null = children.find((c) => c.id === household.selectedChildId) ?? null;
   const groups = child ? tasksByStatus(child) : null;
-
-  async function submitChild() {
-    const r = await addChild(newChild);
-    if (r.ok) {
-      setNewChild('');
-      setAddingChild(false);
-    }
-  }
-
-  async function submitRename(id: string) {
-    const r = await renameChild(id, editName);
-    if (r.ok) setEditingChild(null);
-  }
 
   async function submitTask(by: 'parent' | 'child') {
     if (!child) return;
@@ -100,18 +85,18 @@ export function ParentDashboard() {
         <View style={styles.taskButtons}>
           {kind === 'pending' ? (
             <>
-              <Button small tone="mint" label={t('approve')} accessibilityLabel={`${t('approve')}: ${task.text}`} onPress={() => void approveTask(child.id, task.id)} />
-              <Button small tone="soft" label={t('sendBack')} accessibilityLabel={`${t('sendBack')}: ${task.text}`} onPress={() => void sendTaskBack(child.id, task.id)} />
+              <Button tone="mint" label={t('approve')} accessibilityLabel={`${t('approve')}: ${task.text}`} onPress={() => void approveTask(child.id, task.id)} />
+              <Button tone="soft" label={t('sendBack')} accessibilityLabel={`${t('sendBack')}: ${task.text}`} onPress={() => void sendTaskBack(child.id, task.id)} />
             </>
           ) : null}
           {kind === 'assigned' ? (
             <>
-              <Button small tone="soft" label={t('previewAsChild')} accessibilityLabel={`${t('previewAsChild')}: ${task.text}`} onPress={() => void markTaskDone(child.id, task.id)} />
-              <Button small tone="danger" label={t('deleteTask')} accessibilityLabel={`${t('deleteTask')}: ${task.text}`} onPress={() => void deleteTask(child.id, task.id)} />
+              <Button tone="soft" label={t('previewAsChild')} accessibilityLabel={`${t('previewAsChild')}: ${task.text}`} onPress={() => void markTaskDone(child.id, task.id)} />
+              <Button tone="danger" label={t('deleteTask')} accessibilityLabel={`${t('deleteTask')}: ${task.text}`} onPress={() => void deleteTask(child.id, task.id)} />
             </>
           ) : null}
           {kind === 'completed' ? (
-            <Button small tone="danger" label={t('deleteTask')} accessibilityLabel={`${t('deleteTask')}: ${task.text}`} onPress={() => void deleteTask(child.id, task.id)} />
+            <Button tone="danger" label={t('deleteTask')} accessibilityLabel={`${t('deleteTask')}: ${task.text}`} onPress={() => void deleteTask(child.id, task.id)} />
           ) : null}
         </View>
       </View>
@@ -156,7 +141,6 @@ export function ParentDashboard() {
           <View style={styles.row}>
             <ThemedText type="smallBold">{household.parent?.displayName ?? '—'}</ThemedText>
             <Button
-              small
               tone="soft"
               label={t('editParent')}
               onPress={() => {
@@ -169,76 +153,11 @@ export function ParentDashboard() {
         )}
       </Card>
 
-      {/* Child profiles */}
-      <Card title={t('childProfiles')}>
-        {children.length === 0 ? (
-          <View style={styles.empty}>
-            <ThemedText type="smallBold">{t('noChildrenTitle')}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {t('noChildrenText')}
-            </ThemedText>
-          </View>
-        ) : (
-          children.map((c) => {
-            const isSel = c.id === household.selectedChildId;
-            const pending = c.tasks.filter((x) => x.status === 'pending').length;
-            return (
-              <View key={c.id} style={[styles.childRow, isSel && styles.childRowSelected]}>
-                {editingChild === c.id ? (
-                  <View style={styles.editRow}>
-                    <View style={styles.editField}>
-                      <Field label={t('childNickname')} value={editName} onChangeText={setEditName} maxLength={40} />
-                    </View>
-                    <Button label={t('saveChild')} onPress={() => void submitRename(c.id)} />
-                    <Button label={t('cancel')} tone="soft" onPress={() => setEditingChild(null)} />
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.childInfo}>
-                      <ThemedText type="smallBold" style={styles.childName}>
-                        {c.nickname}
-                      </ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {`${c.tasks.length} ${t('tasksWord')} · ${t('pendingApprovals')}: ${pending}`}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.taskButtons}>
-                      <Button
-                        small
-                        tone={isSel ? 'mint' : 'soft'}
-                        label={isSel ? t('selected') : t('select')}
-                        accessibilityLabel={`${t('select')} ${c.nickname}`}
-                        onPress={() => void selectChild(c.id)}
-                      />
-                      <Button
-                        small
-                        tone="soft"
-                        label={t('edit')}
-                        accessibilityLabel={`${t('editChild')} ${c.nickname}`}
-                        onPress={() => {
-                          setEditName(c.nickname);
-                          setEditingChild(c.id);
-                        }}
-                      />
-                    </View>
-                  </>
-                )}
-              </View>
-            );
-          })
-        )}
-        {addingChild ? (
-          <View style={styles.editRow}>
-            <View style={styles.editField}>
-              <Field label={t('childNickname')} placeholder={t('childNicknamePlaceholder')} value={newChild} onChangeText={setNewChild} maxLength={40} />
-            </View>
-            <Button label={t('add')} onPress={() => void submitChild()} />
-            <Button label={t('cancel')} tone="soft" onPress={() => setAddingChild(false)} />
-          </View>
-        ) : (
-          <Button label={`＋ ${t('addChild')}`} onPress={() => setAddingChild(true)} />
-        )}
-      </Card>
+      {/* Child profiles: add, rename, archive and restore, with clear messages (see family-management-card.tsx) */}
+      <FamilyManagementCard selectedChildId={household.selectedChildId} onSelect={(id) => void selectChild(id)} />
+
+      {/* Family health: only shown when something needs a look (family mode only) */}
+      <FamilyHealthCard />
 
       {!child ? (
         <Card>
@@ -291,7 +210,7 @@ export function ParentDashboard() {
             <View style={styles.row}>
               <Button label={t('assign')} onPress={() => void submitTask('parent')} disabled={!taskText.trim()} />
               {child.settings.canCreateTasks ? (
-                <Button label={`${t('previewAsChild')}: ${t('add')}`} tone="soft" small onPress={() => void submitTask('child')} disabled={!taskText.trim()} />
+                <Button label={`${t('previewAsChild')}: ${t('add')}`} tone="soft" onPress={() => void submitTask('child')} disabled={!taskText.trim()} />
               ) : null}
             </View>
             {note ? (
@@ -369,6 +288,6 @@ const styles = StyleSheet.create({
   editField: { flexGrow: 1, minWidth: 180 },
   taskRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', paddingVertical: Spacing.one, borderBottomWidth: 1, borderColor: 'rgba(150,130,160,0.2)' },
   taskText: { flex: 1, minWidth: 160, gap: 2 },
-  taskButtons: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
+  taskButtons: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap', maxWidth: '100%', flexShrink: 1 },
   notice: { color: '#8A5A00' },
 });
