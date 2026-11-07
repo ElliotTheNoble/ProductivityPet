@@ -17,6 +17,7 @@ export function ConfirmModal({
   children,
   confirmLabel,
   cancelLabel,
+  singleAction,
   confirmDisabled,
   busy,
   onConfirm,
@@ -28,6 +29,8 @@ export function ConfirmModal({
   confirmLabel: string;
   // The label of the other button (default: Cancel).
   cancelLabel?: string;
+  // Only the confirm button (a notice with one answer, such as "Continue playing"); Back still calls onCancel.
+  singleAction?: boolean;
   confirmDisabled?: boolean;
   busy?: boolean;
   onConfirm: () => void;
@@ -44,11 +47,13 @@ export function ConfirmModal({
             <View style={styles.body}>{children}</View>
           </ScrollView>
           <View style={styles.buttons}>
-            <Pressable accessibilityRole="button" accessibilityLabel={cancelLabel ?? t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
-                <ThemedText type="smallBold">{cancelLabel ?? t('cancel')}</ThemedText>
-              </ThemedView>
-            </Pressable>
+            {singleAction ? null : (
+              <Pressable accessibilityRole="button" accessibilityLabel={cancelLabel ?? t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
+                <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
+                  <ThemedText type="smallBold">{cancelLabel ?? t('cancel')}</ThemedText>
+                </ThemedView>
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={confirmLabel}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { FamilyPicker } from '@/components/family-picker';
+import { IdleGuard } from '@/components/idle-guard';
 import { FAMILY_BACKGROUND } from '@/components/family-ui';
 import { LeavingCover } from '@/components/leaving-cover';
 import { ThemedText } from '@/components/themed-text';
@@ -9,6 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useT } from '@/i18n';
 import { decidePicker, type PickerDecision } from '@/utils/family-picker-model';
 import { markProfileChosen, useLeavingProfile, useProfileChosen } from '@/utils/family-session';
+import { notifyUserActivity } from '@/utils/idle-session';
 
 // Wraps the whole app in family mode (see src/app/_layout.tsx, which loads this file only when the flag is on). Until a profile
 // has been chosen on the picker, `children` (the app shell) is simply NOT rendered: no profile's game stores are read, no pet
@@ -21,6 +23,19 @@ const UNREACHABLE_PROPS = {
   'aria-hidden': true,
   inert: true,
 } as const;
+
+// Native: every touch that starts, moves or ends anywhere in the app counts as the person being there, and so does a CLICK: a screen
+// reader activating a control (TalkBack's "click", a hardware keyboard's Enter on Android) arrives as a click event, not as a touch,
+// and React Native's own Pressable answers it through the same event (see Pressability's onClick). These are capture handlers on the
+// container, so they only LOOK: they never claim the touch or the click, and buttons, gestures and screen readers are unaffected.
+// (iOS VoiceOver's double tap produces real touches at the control, so the touch handlers see it. The web listens to the document
+// instead, see @/components/idle-guard.tsx.)
+const NATIVE_TOUCH_TRACKING = {
+  onTouchStartCapture: () => notifyUserActivity(),
+  onTouchMoveCapture: () => notifyUserActivity(),
+  onTouchEndCapture: () => notifyUserActivity(),
+  onClickCapture: () => notifyUserActivity(),
+};
 
 export function FamilyGate({ children }: { children: ReactNode }) {
   const chosen = useProfileChosen();
@@ -49,9 +64,13 @@ export function FamilyGate({ children }: { children: ReactNode }) {
   if (chosen) {
     return (
       <>
-        <View style={[styles.app, leaving && styles.unreachable]} {...(leaving ? UNREACHABLE_PROPS : null)}>
+        <View
+          style={[styles.app, leaving && styles.unreachable]}
+          {...(leaving ? UNREACHABLE_PROPS : null)}
+          {...(Platform.OS === 'web' ? null : NATIVE_TOUCH_TRACKING)}>
           {children}
         </View>
+        <IdleGuard />
         {leaving ? <LeavingCover /> : null}
       </>
     );

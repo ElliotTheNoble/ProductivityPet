@@ -26,6 +26,15 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
 // 44px wide: the handle is a touch target (it was 36px).
 const TAB_WIDTH = 44;
 const TAB_HEIGHT = 150;
+
+// A closed panel is slid off the screen, not removed, so its controls must not stay reachable: no keyboard focus (`inert`, a web
+// attribute that react-native-web passes on), and hidden from screen readers on every platform. Only the tab handle stays.
+const HIDDEN_WHEN_CLOSED = {
+  importantForAccessibility: 'no-hide-descendants',
+  accessibilityElementsHidden: true,
+  'aria-hidden': true,
+  inert: true,
+} as const;
 const EDGE_SWIPE_WIDTH = 14;
 const SWIPE_CLAIM_PX = 10;
 const OPEN_DURATION_MS = 280;
@@ -194,6 +203,7 @@ export function SlideOutPanel({
           the room underneath from being touched or scrolled while the panel is open. */}
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
+        {...(open ? null : HIDDEN_WHEN_CLOSED)}
         style={[styles.backdrop, { opacity: backdropOpacity }]}>
         <Pressable
           noHover
@@ -221,6 +231,7 @@ export function SlideOutPanel({
         {/* The panel itself. */}
         <View
           {...panelResponder.panHandlers}
+          {...(open ? null : HIDDEN_WHEN_CLOSED)}
           style={[
             styles.panel,
             { width: panelWidth, backgroundColor: panelBackground },

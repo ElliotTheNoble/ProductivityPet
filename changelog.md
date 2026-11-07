@@ -2,6 +2,24 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-06] — Profile switching, Stage 4.3: the inactivity timer and the "Still playing?" warning, disabled for users
+
+### Added
+- Screen-reader and accessibility-input activations (a click, as TalkBack and hardware keyboards send them, and a trusted click on the web) count as the person being there, without polling focus or counting announcements; the warning announces itself once.
+- The 10-minute inactivity rule (family mode only): after 10 minutes without a meaningful interaction (touches, typing, keys, wheel, a moving pointer, a finger dragging in a game or over a bathing circle) the app goes back to the player picker through the safe leave. It applies to Main and children whenever the household has at least one child record, including when all children are archived.
+- A friendly "Still playing?" warning at 9 minutes with a Continue playing button; it names unfinished work that would be lost, is announced to screen readers, and can only be answered with the button.
+- If the return fails, a dialog with Try again and Keep playing; Keep playing starts a fresh 10 minutes and nothing retries by itself.
+- Background and foreground handling: the profile is not released in the background; on return, 10 minutes or more of inactivity returns to the picker, less keeps the profile. Device sleep and clock changes count conservatively.
+
+### Fixed
+- Closed Pet Progress and Home Features panels no longer leave their controls reachable by keyboard focus or screen readers (BUG-084).
+
+### Changed
+- The shared confirmation dialog can show a single button.
+
+### Verified
+- 919 of 919 tests pass (66 new), plain `npx tsc --noEmit` clean. Isolated browser preview with synthetic data (see the review sheet). Not done: the web-tab lock and the final preview (Stages 4.4 and 4.5); real-device checks (see FEATURE-096, BUG-085, BUG-072).
+
 ## [2026-11-06] — Profile switching, Stage 4.2: the header chip and unfinished-work tracking, disabled for users
 
 ### Added
