@@ -118,6 +118,7 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
     'src/utils/dev-stage-preview.ts', // a developer preview (switched off in family mode)
     'src/utils/profiles.ts',
     'src/utils/family-profiles.ts', // reads another profile's record, read-only, and holds no cache
+    'src/utils/family-care-input.ts', // reads other profiles' pets and alert setting, read-only (getItem only), and holds no cache
     'src/utils/family-management.ts', // lists storage keys to report leftovers, read-only, and holds no cache
   ];
   // Screens that keep a key in a ref (resolved through scopedKey) rather than in a store.

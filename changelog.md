@@ -2,6 +2,14 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-07] — Family pet-care notifications, Stage 4.5d: the pure schedule builder (not connected)
+
+### Added
+- `src/utils/family-care-plan.ts`: a pure builder of anonymous "a pet needs care" notification plans (eligible profiles, pet lifecycle predictions, 30-minute grouping, a maximum of 10, critical events kept first, exact English and Spanish text) and `src/utils/family-care-input.ts`: its read-only input side. Nothing uses them yet; no scheduling, cancelling, channels, foreground behavior, taps or clean-up changed.
+
+### Verified
+- 1120 tests in 41 suites pass, plain `npx tsc --noEmit` clean. A random test of 300 plans found that the cap option could exceed 10; fixed before this entry. No dependency, native configuration, saved-data format or Parent PIN rule changed. Stage 4.5e not started; BUG-072 not fixed.
+
 ## [2026-11-07] — Production exposure, Stage 4.5b: no household set-up without family mode, 44px Skip for now, quieter tests
 
 ### Changed
