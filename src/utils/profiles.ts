@@ -231,6 +231,11 @@ export function writeScoped(key: string, value: string): Promise<boolean> {
 
 // Marks an async operation as in flight. A profile switch waits for it to finish first, so it can never straddle
 // two profiles.
+// True while any tracked write or operation is still running (a leave would have to wait for it). Read-only; changes nothing.
+export function hasPendingProfileWork(): boolean {
+  return operations.size > 0 || pendingWrites.size > 0;
+}
+
 export function trackOperation<T>(promise: Promise<T>): Promise<T> {
   operations.add(promise);
   const forget = () => {

@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { DarkTheme, DefaultTheme, Slot, ThemeProvider, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import { AppState, StyleSheet, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, Platform, StyleSheet, View, useColorScheme, useWindowDimensions } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppHeader } from '@/components/app-header';
@@ -32,9 +32,17 @@ import { getCompletedTaskCount } from '@/utils/tasks';
 
 SplashScreen.preventAutoHideAsync();
 
+// Family mode on the WEB only (development, never in a release build): only one browser tab may use the family storage. The write fence
+// goes in RIGHT NOW, while this file loads, before anything can write: it refuses every ProductivityPet write until this document really
+// holds the family Web Lock, and WebTabGate (below) renders nothing of the app, and starts none of the startup work, until then. Nothing
+// that reads or writes private family data may run at import time in this mode, so the onboarding load below is part of that startup.
+const FAMILY_WEB = FAMILY_MODE_ENABLED && Platform.OS === 'web';
+if (FAMILY_WEB) (require('@/utils/family-tab') as typeof import('@/utils/family-tab')).installFamilyTabProtection();
+
 // Decide "new install or existing player?" RIGHT NOW, while this file loads, before anything below creates the
 // first pet. Existing players are never forced into onboarding (see @/utils/onboarding.ts).
-void ensureOnboardingLoaded().catch(() => {});
+// (In family mode on the web this happens once the tab owns the family storage instead, see RootLayoutContent.)
+if (!FAMILY_WEB) void ensureOnboardingLoaded().catch(() => {});
 
 const LIVING_ROOM_NORMAL = require('@/assets/images/rooms/living-room.png');
 const TASKS_NORMAL = require('@/assets/images/rooms/backgrounds/Task_Background.png');
@@ -76,7 +84,26 @@ function ImagePrefetchLayer() {
 // screen and hook remounts, so nothing from the previous profile can stay on screen. With only the main profile
 // the key never changes and nothing remounts.
 export default function RootLayout() {
+  if (FAMILY_WEB) {
+    const { WebTabGate } = require('@/components/web-tab-gate') as typeof import('@/components/web-tab-gate');
+    return (
+      <WebTabGate>
+        <RootLayoutContent gated />
+      </WebTabGate>
+    );
+  }
+  return <RootLayoutContent />;
+}
+
+// Everything that starts the app up lives here, so that in family mode on the web none of it runs until the tab owns the storage.
+function RootLayoutContent({ gated = false }: { gated?: boolean }) {
   const profileId = useActiveProfileId();
+  // Gated (family mode on the web): the onboarding decision is made now, in the first render after ownership was confirmed, which is
+  // still before any screen or store below can create a first pet.
+  useState(() => {
+    if (gated) void ensureOnboardingLoaded().catch(() => {});
+    return null;
+  });
   useEffect(() => {
     void ensureProfilesReady();
   }, []);

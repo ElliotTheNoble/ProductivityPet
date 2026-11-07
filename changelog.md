@@ -2,6 +2,41 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-07] — Web single-tab protection, Stage 4.4d: real-browser verification and a stricter hand-over consent, disabled for users
+
+### Changed
+- Going back to the player picker while another tab's hand-over question is open no longer counts as "yes": it declines the request ('in use') and closes the question. Only an owner that was already idle on the picker when asked may hand over without a question; otherwise only the explicit button does.
+
+### Verified
+- Real tabs with real Web Locks and BroadcastChannel in Edge 157 and Chrome 155 (all scenarios), and Firefox 122 (all that its debugging protocol can drive). Safari unavailable and unverified. No app bug was found in the browsers; the harness bugs found were fixed in the scratch tool only.
+- 1042 tests in 37 suites pass; plain `npx tsc --noEmit` clean. No dependency, native configuration, Parent PIN rule, pet mechanic or saved-data format changed. Stage 4.5 not started.
+
+## [2026-11-06] — Web single-tab protection, Stage 4.4c: the startup gate, the blocked screens and the hand-over question, disabled for users
+
+### Added
+- In family mode on the web, the whole app now starts only after the tab really owns the family storage: the write fence is installed at import (refusing every protected write until the Web Lock is held) and a gate renders nothing of the app, and starts no startup work, until then. A second tab sees a neutral pastel screen in the browser's language with no private detail.
+- Cooperative hand-over screens in English and Spanish: asking the other tab, waiting, "no answer" with "Try asking again" (it never forces), declined, save failed, the lock is free ("Use this tab"), switching to this tab, gave it away, lost control, waiting for the other tab to close, and unsupported browsers or insecure connections (fail closed, no buttons).
+- The owner's question: names the unfinished work that would be lost, runs the existing safe leave before handing over, keeps control if the person says no or the save fails, and hands over at once from the picker when nothing is pending.
+
+### Changed
+- The onboarding decision, the profile layer, the Parent PIN start and the profile reconciliation moved into `RootLayoutContent` so they run only after ownership is confirmed in family mode on the web; with family mode off the app starts exactly as before (onboarding still at import).
+- The web lock reports `claiming`, can be awaited by several callers, and does not answer a repeated question from the same tab twice.
+- Found in the browser preview at 150% text on a small phone: long button labels in the shared dialog ran off the card (Spanish). They now wrap inside it, for every dialog that uses it.
+
+### Verified
+- 1042 tests pass (63 new), plain `npx tsc --noEmit` clean. Import-time side effects of 31 storage modules audited; a blocked tab makes zero storage calls. Real two-tab browser preview with a private review sheet. Not done: Stage 4.4d and 4.5; Firefox, Safari, LAN and crash checks (see FEATURE-098, BUG-086, BUG-087, BUG-072, BUG-085).
+
+## [2026-11-06] — Web single-tab protection, Stages 4.4a and 4.4b: the Web Lock state machine and the storage write fence (not connected to the app yet), disabled for users
+
+### Added
+- A Web Lock based single-tab owner (`web-tab-lock.ts`): one exclusive lock held for the life of the owning document; a second tab is blocked; cooperative handoff (the owner finishes its tracked saves and leaves the profile, then releases; the asking tab reloads and claims); no takeover from a frozen or silent tab, no forcing, no heartbeat; closed or crashed owners release the lock; unsupported environments (no secure context, no Web Locks, failing storage) fail closed; without BroadcastChannel a second tab can only wait.
+- A write fence (`storage-fence.ts`) that refuses every write to a ProductivityPet key from a tab that does not hold the lock (all seven AsyncStorage mutators, multi-key calls refused whole, library keys and reads untouched), installed only for family mode on the web.
+- A static audit that lists every ProductivityPet storage write path and fails when a new, aliased or non-prefixed one appears or another storage API is used, plus a runtime battery showing that a tab without ownership changes nothing.
+- A two-tab browser simulator for the tests (locks, channel, crash, freeze, external steal, shared storage) and a seeded random run that never shows two owners.
+
+### Verified
+- 979 tests pass (60 new), plain `npx tsc --noEmit` clean. Family mode off and non-web platforms install nothing; nothing in the application uses the new modules yet. Not done: the startup gate, the screens and the browser verification (Stages 4.4c and 4.4d); real-browser checks (see FEATURE-097, BUG-086, BUG-072, BUG-085).
+
 ## [2026-11-06] — Profile switching, Stage 4.3: the inactivity timer and the "Still playing?" warning, disabled for users
 
 ### Added

@@ -48,9 +48,11 @@ export function ConfirmModal({
           </ScrollView>
           <View style={styles.buttons}>
             {singleAction ? null : (
-              <Pressable accessibilityRole="button" accessibilityLabel={cancelLabel ?? t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => pressed && styles.pressed}>
+              <Pressable accessibilityRole="button" accessibilityLabel={cancelLabel ?? t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => [styles.buttonWrap, pressed && styles.pressed]}>
                 <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
-                  <ThemedText type="smallBold">{cancelLabel ?? t('cancel')}</ThemedText>
+                  <ThemedText type="smallBold" style={styles.label}>
+                    {cancelLabel ?? t('cancel')}
+                  </ThemedText>
                 </ThemedView>
               </Pressable>
             )}
@@ -59,9 +61,9 @@ export function ConfirmModal({
               accessibilityLabel={confirmLabel}
               onPress={onConfirm}
               disabled={busy || confirmDisabled}
-              style={({ pressed }) => [pressed && styles.pressed, (busy || confirmDisabled) && styles.disabled]}>
+              style={({ pressed }) => [styles.buttonWrap, pressed && styles.pressed, (busy || confirmDisabled) && styles.disabled]}>
               <ThemedView type="accent" style={[styles.button, styles.pointer]}>
-                <ThemedText type="smallBold" style={styles.confirmText}>
+                <ThemedText type="smallBold" style={[styles.label, styles.confirmText]}>
                   {busy ? t('pleaseWait') : confirmLabel}
                 </ThemedText>
               </ThemedView>
@@ -89,8 +91,11 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: Spacing.two },
   // At least 44 px tall (a comfortable touch target), centred.
   button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Spacing.five },
+  // A long label (large text, Spanish) wraps inside the card instead of running off its edge.
+  buttonWrap: { maxWidth: '100%', flexShrink: 1 },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.45 },
   pointer: { cursor: 'pointer' },
   confirmText: { color: '#FFFFFF' },
+  label: { textAlign: 'center' },
 });
