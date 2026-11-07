@@ -2,6 +2,19 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-07] — Production exposure, Stage 4.5b: no household set-up without family mode, 44px Skip for now, quieter tests
+
+### Changed
+- With family mode off the Pet Care "Family" card is not shown, and `/parent` and `/parent-security` go back to the app without loading the dashboard, the gate or the PIN screens. The first-run welcome flow (`/welcome`) is now only the language choice; its parent steps need family mode. Nothing saved is touched.
+- The "Skip for now" button (the shared small family button) is 44px high instead of 36px.
+- The idle controller's manual `check()` now cancels its pending timer instead of orphaning it (no change for users).
+
+### Fixed (tests)
+- The Jest "worker process has failed to exit gracefully" warning: tests no longer leave real timers running (setup-claim expiry, tab-lock 'no answer', idle controller).
+
+### Verified
+- 1064 tests in 39 suites pass, plain `npx tsc --noEmit` clean. New tests cover direct route access, the flag off, in a release build and on, the card, the welcome flow in both languages and the 44px target. No dependency, native configuration, saved-data format or Parent PIN rule changed. Stage 4.5c not started; BUG-072 not implemented.
+
 ## [2026-11-07] — Web single-tab protection, Stage 4.4d: real-browser verification and a stricter hand-over consent, disabled for users
 
 ### Changed

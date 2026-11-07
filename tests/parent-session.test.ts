@@ -26,6 +26,8 @@ const originalFamilyMode = process.env.EXPO_PUBLIC_FAMILY_MODE;
 beforeEach(() => freezeClock(T0));
 afterEach(() => {
   unfreezeClock();
+  // the setup claim's expiry timer (minutes long) is cancelled, so it cannot outlive the test
+  (require('@/utils/family-claim') as typeof import('@/utils/family-claim')).clearSetupClaim();
   if (originalFamilyMode === undefined) delete process.env.EXPO_PUBLIC_FAMILY_MODE;
   else process.env.EXPO_PUBLIC_FAMILY_MODE = originalFamilyMode;
 });

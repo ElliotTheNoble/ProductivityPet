@@ -48,6 +48,7 @@ function makeDeps(init: { chosen?: boolean; work?: UnfinishedKind[]; leave?: Lea
 
 // A probe for "the whole app": it shows private data and reads storage the moment it is mounted.
 const mounts: string[] = [];
+const locks: TabLock[] = []; // every lock a test created (stopped after the test, see afterEach)
 function AppProbe({ name }: { name: string }) {
   useEffect(() => {
     mounts.push(name);
@@ -62,6 +63,7 @@ async function mountTab(sim: ReturnType<typeof createBrowserSim>, name: string, 
   const tab = sim.newTab({ unansweredMs: 5000, ...options }); // a person may take a while to answer
   const controller = new HandoffController(model.deps);
   const lock = new TabLock(tab.env, { consent: () => controller.consent() });
+  locks.push(lock);
   const view = await render(
     <WebTabGate lock={lock} controller={controller} language={language}>
       <AppProbe name={name} />
@@ -99,6 +101,7 @@ beforeEach(() => {
 afterEach(async () => {
   reads.mockRestore();
   await cleanup(); // every tab of the test is closed before the next one starts
+  for (const lock of locks.splice(0)) lock.stop(); // and its pending 'no answer' timer cancelled, so no timer outlives the test
 });
 
 const text = (m: Mount, key: StringKey, lang: 'en' | 'es' = 'en') => m.view.queryByText(t(key, lang));

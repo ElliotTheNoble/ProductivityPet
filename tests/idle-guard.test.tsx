@@ -59,6 +59,10 @@ beforeEach(() => {
 });
 afterEach(() => {
   unfreezeClock();
+  // the inactivity timer of the last test's idle session is cancelled, so no 10-minute timer outlives the test
+  const idle = require('@/utils/idle-session') as typeof import('@/utils/idle-session');
+  const controller = idle.getIdleController();
+  if (controller) idle.stopIdleSession(controller);
   (ReactNative.Platform as { OS: string }).OS = originalOS;
   delete (globalThis as { document?: unknown }).document;
   if (originalFamilyMode === undefined) delete process.env.EXPO_PUBLIC_FAMILY_MODE;

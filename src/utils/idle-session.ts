@@ -174,7 +174,9 @@ export class IdleController {
 
   // Looks at the clock now (the timer calls this; so do tests and the preview).
   check(): void {
-    this.handle = null;
+    // Cancels the pending timer rather than just forgetting it: when the timer itself calls this it has already fired (nothing to cancel),
+    // but a direct call (the preview, tests) must not leave the old timer behind to fire later and be forgotten again.
+    this.disarm();
     if (!this.alive() || this.background) return;
     if (this.snapshot.phase !== 'active' && this.snapshot.phase !== 'warning') return;
     this.apply(evaluate(this.clock, this.time.read()));

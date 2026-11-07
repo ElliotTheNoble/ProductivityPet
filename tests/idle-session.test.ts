@@ -101,6 +101,26 @@ describe('the warning and the timeout', () => {
   });
 });
 
+describe('looking at the clock by hand', () => {
+  test('a direct check never leaves an older timer behind: exactly one is pending, however often it is called', () => {
+    const r = rig();
+    expect(r.timers).toHaveLength(1);
+    for (let i = 0; i < 5; i += 1) {
+      r.advance(10 * SEC);
+      r.controller.check();
+      expect(r.timers).toHaveLength(1);
+    }
+  });
+
+  test('a stopped controller has no timer pending, and a late direct check does not create one', () => {
+    const r = rig();
+    r.controller.stop();
+    expect(r.timers).toHaveLength(0);
+    r.controller.check();
+    expect(r.timers).toHaveLength(0);
+  });
+});
+
 describe('meaningful activity', () => {
   test('an interaction resets the whole 10 minutes, and keeps resetting it', () => {
     const r = rig();

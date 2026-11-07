@@ -7,12 +7,20 @@ import { Spacing } from '@/constants/theme';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { useT } from '@/i18n';
 import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { hasPinVerifier } from '@/utils/parent-gate';
 import { restartOnboarding, useOnboarding } from '@/utils/onboarding';
 
 // The explicit, opt-in way for anyone (especially an existing player) to reach the new Family / Parent mode.
 // Starting setup only changes the onboarding status; no pet, task, token or Pawadise data is touched.
+// With family mode off (every user) there is no household setup or management to offer: the card is not rendered, and nothing below
+// (the household, the onboarding state, the parent access check) is even read.
 export function FamilyModeCard() {
+  if (!FAMILY_MODE_ENABLED) return null;
+  return <FamilyModeCardContent />;
+}
+
+function FamilyModeCardContent() {
   const router = useRouter();
   const { t } = useT();
   const onboarding = useOnboarding();

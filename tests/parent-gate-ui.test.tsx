@@ -18,6 +18,9 @@ import { ensureProfilesReady, registerChildProfile, switchProfile } from '@/util
 
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
+// These tests are about the Parent Gate on the parent-only screens and the Pet Care card, which exist only with family mode on (without it
+// /parent goes back to the app and the card is not shown: see tests/production-exposure-*.test.tsx). The gate itself does not read the flag.
+jest.mock('@/utils/dev-flags', () => ({ ...jest.requireActual('@/utils/dev-flags'), FAMILY_MODE_ENABLED: true, GAMEPLAY_CHEATS_ALLOWED: false }));
 // The real screens are big; only whether they are shown matters here.
 jest.mock('@/components/parent-dashboard', () => {
   const { Text: T } = require('react-native');

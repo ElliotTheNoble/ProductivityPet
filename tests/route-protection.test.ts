@@ -59,9 +59,12 @@ describe('route protection: every route is classified', () => {
     expect(text).toMatch(/<\/ParentGate>/);
   });
 
-  test('the family-only route renders nothing without family mode, and its screen is inside the gate', () => {
-    expect(read('src/app/parent-security.tsx')).toMatch(/if \(!FAMILY_MODE_ENABLED\) return null;/);
+  test('the family-only routes go back to the app without family mode, and their screens are inside the gate', () => {
+    expect(read('src/app/parent-security.tsx')).toMatch(/if \(!FAMILY_MODE_ENABLED\) return <Redirect href="\/" \/>;/);
     expect(read('src/components/parent-security-screen.tsx')).toMatch(/<ParentGate>/);
+    // the dashboard route too: without family mode there is no household to manage, so it never reaches the gate or the dashboard
+    expect(read('src/app/parent.tsx')).toMatch(/if \(!FAMILY_MODE_ENABLED\) return <Redirect href="\/" \/>;/);
+    expect(read('src/app/parent.tsx')).not.toMatch(/^import .*(parent-dashboard|parent-gate)/m);
   });
 
   test('child-safe routes never import the parent-only modules (household, parent PIN, parent dashboard)', () => {

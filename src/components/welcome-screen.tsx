@@ -6,6 +6,7 @@ import { Button, Card, ChoiceCard, Field, PageShell } from '@/components/family-
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { LANGUAGES, useT, type LanguageCode, type StringKey } from '@/i18n';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { saveParentProfile, useHousehold } from '@/utils/household';
 import {
   chooseMode,
@@ -18,7 +19,8 @@ import {
 } from '@/utils/onboarding';
 
 // The first-time welcome flow: 1) language, 2) who is using the app, 3) (Parent / Guardian only) a local parent
-// profile. Child and Independent only show a "coming soon" note: they create nothing and don't change the app.
+// profile. Child and Independent only show a "coming soon" note: they create nothing and don't change the app. Steps 2 and 3 exist
+// only in family mode; without it the flow is the language choice alone.
 // The chosen language and the current step are saved as you go, so a refresh resumes where you were. Nothing
 // here reads or writes pets, tasks, tokens or Pawadise data.
 
@@ -43,7 +45,9 @@ export function WelcomeScreen() {
 
   if (!onboarding) return <PageShell>{null}</PageShell>;
 
-  const step = onboarding.step;
+  // With family mode off (every user) the welcome flow is only the language choice: the 'who is using the app' and parent-profile steps
+  // (household setup) are never shown, whatever step an older run of the flow saved. Continue then simply finishes the flow.
+  const step = FAMILY_MODE_ENABLED ? onboarding.step : 'language';
   const lang = onboarding.language;
 
   async function finish() {
@@ -80,7 +84,7 @@ export function WelcomeScreen() {
           {LANGUAGES.map((l) => (
             <ChoiceCard key={l.code} title={l.nativeName} selected={lang === l.code} onPress={() => void setLanguage(l.code as LanguageCode)} />
           ))}
-          <Button label={t('continue')} onPress={() => void setStep('mode')} />
+          <Button label={t('continue')} onPress={() => void (FAMILY_MODE_ENABLED ? setStep('mode') : skip())} />
         </>
       ) : null}
 

@@ -15,7 +15,10 @@ import { resetSecure, secureTest } from './helpers';
 jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
 
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
+jest.mock('expo-router', () => ({
+  useRouter: () => mockRouter,
+  Redirect: ({ href }: { href: string }) => require('react').createElement(require('react-native').Text, null, `REDIRECT:${href}`),
+}));
 
 const fs = require('fs');
 const path = require('path');
@@ -62,10 +65,10 @@ describe('family mode off (the committed default and every release build)', () =
     }
   });
 
-  test('no PIN checker is registered and the /parent-security route renders nothing at all', async () => {
+  test('no PIN checker is registered and the /parent-security route just goes back to the app (no PIN screen)', async () => {
     expect(hasPinVerifier()).toBe(false);
     await render(<ParentSecurityPage />);
-    expect(screen.toJSON()).toBeNull();
+    expect(screen.toJSON()).toEqual(expect.objectContaining({ children: ['REDIRECT:/'] }));
   });
 
   test('the dashboard card renders nothing', async () => {

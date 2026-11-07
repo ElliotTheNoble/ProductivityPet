@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 17, lineHeight: 22 },
   buttonWrap: { alignSelf: 'flex-start' },
   button: { minHeight: 44, paddingHorizontal: Spacing.four, paddingVertical: Spacing.two, borderRadius: Spacing.five, alignItems: 'center', justifyContent: 'center' },
-  buttonSmall: { minHeight: 36, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2 },
+  buttonSmall: { minHeight: 44, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2 },
   smallLabel: { fontSize: 13 },
   whiteText: { color: '#FFFFFF' },
   pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
