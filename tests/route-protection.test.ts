@@ -191,7 +191,12 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
     // only a swap or release that really happened starts a clean-up (so only then is the epoch counted)
     const profiles = read('src/utils/profiles.ts');
     expect(profiles.match(/runCleanups\(swapped\.cleanups\)/g)).toHaveLength(2);
-    expect(profiles.match(/notificationEpoch \+= 1/g)).toHaveLength(1);
+    // (and by the start-up clean-up of stale private notifications, which family-notifications.ts registers with trackCleanup)
+    expect(profiles.match(/notificationEpoch \+= 1/g)).toHaveLength(2);
+    expect(profiles.match(/trackCleanup\(/g)).toHaveLength(1);
+    const callers = files('src').filter((file) => /trackCleanup\(/.test(read(file)) && file !== 'src/utils/profiles.ts');
+    expect(callers).toEqual(['src/utils/family-notifications.ts']);
+    expect(read('src/utils/family-care.ts')).toMatch(/await whenProfileCleanupDone\(\)/);
   });
 
   test('every module-level cache in the data layer is either registered or deliberately device-level', () => {

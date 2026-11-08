@@ -2,6 +2,27 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-07] — Family pet-care notifications, Stage 4.5e: a checked private clean-up and anonymous family-care reminders (family mode only)
+
+### Added
+- A checked clean-up of private notifications (task reminders, detailed pet alerts): list, classify, cancel only what is positively private, list again, and report `verified`, `unsupported` or `unverified`. Unknown notifications are never touched and keep the state unverified. Deadlines on every call, a 10-second bound, bounded retries that never run while a profile is open.
+- `leaveProfile()` reports `notificationCleanup` next to `ok`; a neutral Parent-dashboard notice (English and Spanish) shows while the clean-up is unverified.
+- Anonymous family-care reminders ("A pet needs care. Open ProductivityPet." / "Una mascota necesita cuidados. Abre ProductivityPet.") for Main and eligible children, with two new private Android channels, scheduled only when the clean-up is verified, never asking for permission, never touching another kind of notification.
+- A cold-start clean-up of stale private notifications, a foreground rule that hides the family-care banner while a profile is open, and a static audit of every notification scheduling site.
+
+### Changed
+- The family-care plan reads each pet's sick moment from the real pet lifecycle (dirty pets were up to a day late with the old prediction), and its cap always keeps the earliest group.
+- Task reminders and the test notification carry an ownership tag in their data. In family mode a profile change checks its clean-up instead of cancelling everything; with family mode off, or on the web, nothing changes.
+
+### Fixed (after a safety review, before any commit)
+- A clean-up that nobody waits for (a retry, the app coming back, entering a profile) could cancel the next profile's task reminder if the phone answered its list late: such runs now give up when a profile opens, and verify nothing when they do.
+- "Unsupported" is recognised only from the Expo Go message or the exact module-unavailable error code; ambiguous wording counts as a failure (unverified).
+- Family-care reminders are scheduled only when the clean-up is verified, never when it is unsupported, unverified, running or never run.
+- With family mode off the task reminder and the test notification are exactly what they always were (the ownership tags are family-mode only).
+
+### Verified
+- 1278 tests in 47 suites pass; plain `npx tsc --noEmit` clean. Not tested on a real device. No dependency, native configuration, saved-data format, Parent PIN rule or pet mechanic changed. BUG-072 is NOT closed; Stage 4.5f/4.5g not started.
+
 ## [2026-11-07] — Family pet-care notifications, Stage 4.5d: the pure schedule builder (not connected)
 
 ### Added

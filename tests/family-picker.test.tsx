@@ -27,6 +27,9 @@ jest.mock('@/components/welcome-screen', () => {
 jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
   cancelAllScheduledNotificationsAsync: jest.fn(async () => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => undefined),
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'scheduled-id'),
   setNotificationChannelAsync: jest.fn(async () => undefined),
@@ -225,7 +228,7 @@ describe('cold start', () => {
     await app.screen.findByText('Mia');
     expect(app.familyStore.peekFamily()).toBeNull();
     expect(require('expo-notifications').scheduleNotificationAsync).not.toHaveBeenCalled();
-    expect(require('expo-notifications').cancelAllScheduledNotificationsAsync).not.toHaveBeenCalled();
+    expect(require('expo-notifications').getAllScheduledNotificationsAsync).not.toHaveBeenCalled();
     expect(app.profiles.isProfileReleased()).toBe(false); // nothing was switched or released just by showing it
   });
 
@@ -281,16 +284,16 @@ describe('children choose their own profile without a PIN', () => {
 
   test('Child A, then back to the picker, then Child B, then back to Main: data stays separate and notifications are cleared each time', async () => {
     const app = await boot({ seed: twoKids(), pin: 'ready' });
-    const cancelAll = require('expo-notifications').cancelAllScheduledNotificationsAsync as jest.Mock;
+    const lists = require('expo-notifications').getAllScheduledNotificationsAsync as jest.Mock;
     await app.screen.findByText('Mia');
     await app.fireEvent.press(card(app, /Mia/));
     await app.screen.findByText(/SHELL kid-mia wallet 0/);
     app.familyStore.addToWallet(25);
-    expect(await app.session.returnToPicker()).toEqual({ ok: true, changed: true });
+    expect(await app.session.returnToPicker()).toMatchObject({ ok: true, changed: true });
     await app.screen.findByText(t(app, 'fpTitle'));
     expect(app.screen.queryByText(/SHELL/)).toBeNull();
     expect(app.familyStore.peekFamily()).toBeNull();
-    expect(cancelAll).toHaveBeenCalled();
+    expect(lists).toHaveBeenCalled(); // the private notifications were cleaned up and checked
 
     await app.fireEvent.press(card(app, /Leo/));
     await app.screen.findByText(/SHELL kid-leo wallet 0/); // Leo does not see Mia's 25

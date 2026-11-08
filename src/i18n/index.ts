@@ -21,6 +21,8 @@ import { idleEn } from './idle.en';
 import { idleEs } from './idle.es';
 import { tabLockEn } from './tab-lock.en';
 import { tabLockEs } from './tab-lock.es';
+import { notificationCleanupEn } from './notification-cleanup.en';
+import { notificationCleanupEs } from './notification-cleanup.es';
 import { familyPickerEn } from './family-picker.en';
 import { familyPickerEs } from './family-picker.es';
 import { parentClaimEn } from './parent-claim.en';
@@ -48,11 +50,11 @@ import { tasksEs } from './tasks.es';
 // To add a language: create its tables (same keys), add them to TABLES, and add one line to LANGUAGES (its name
 // in ITS OWN language). It then appears in every language picker.
 
-export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn, ...familyPickerEn, ...parentClaimEn, ...familyManagementEn, ...profileChipEn, ...idleEn, ...tabLockEn };
+export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn, ...familyPickerEn, ...parentClaimEn, ...familyManagementEn, ...profileChipEn, ...idleEn, ...tabLockEn, ...notificationCleanupEn };
 export type Strings = typeof en;
 export type StringKey = keyof Strings;
 
-export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs, ...familyPickerEs, ...parentClaimEs, ...familyManagementEs, ...profileChipEs, ...idleEs, ...tabLockEs };
+export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs, ...familyPickerEs, ...parentClaimEs, ...familyManagementEs, ...profileChipEs, ...idleEs, ...tabLockEs, ...notificationCleanupEs };
 
 // Lists (message pools, month and weekday names). English is the fallback here too.
 export type ListKey = keyof typeof listsEn;

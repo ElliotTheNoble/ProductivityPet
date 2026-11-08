@@ -8,6 +8,9 @@ jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, 
 jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
   cancelAllScheduledNotificationsAsync: jest.fn(async () => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => undefined),
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'scheduled-id'),
   setNotificationChannelAsync: jest.fn(async () => undefined),
@@ -113,7 +116,8 @@ function failWrites(app: App, match: (key: string) => boolean) {
     app.AsyncStorage.setItem = original;
   };
 }
-const cancelAll = () => require('expo-notifications').cancelAllScheduledNotificationsAsync as jest.Mock;
+// Family mode checks the clean-up by listing what the phone has scheduled (before and after cancelling the private ones): one clean-up is two lists.
+const lists = () => require('expo-notifications').getAllScheduledNotificationsAsync as jest.Mock;
 
 // ---------------------------------------------------------------------------------------------------------
 describe('leaving a profile that can be saved', () => {
@@ -122,16 +126,16 @@ describe('leaving a profile that can be saved', () => {
     await open(app, 'kid-a');
     app.family.addToWallet(7);
     const epoch = app.profiles.getNotificationEpoch();
-    const calls = cancelAll().mock.calls.length;
+    const calls = lists().mock.calls.length;
 
-    expect(await S().leaveProfile()).toEqual({ ok: true, changed: true });
+    expect(await S().leaveProfile()).toMatchObject({ ok: true, changed: true });
 
     expect(S().hasChosenProfile()).toBe(false);
     expect(S().isLeavingProfile()).toBe(false);
     expect(app.profiles.isProfileReleased()).toBe(true);
     expect(app.family.peekFamily()).toBeNull();
     expect(app.profiles.getNotificationEpoch()).toBe(epoch + 1); // the clean-up of the notification epoch ran exactly once
-    expect(cancelAll().mock.calls.length).toBe(calls + 1);
+    expect(lists().mock.calls.length).toBe(calls + 2); // one checked clean-up
     expect(await walletOf(app, 'kid-a')).toBe(49); // the work done just before leaving was saved
   });
 
@@ -193,7 +197,7 @@ describe('leaving a profile that can be saved', () => {
     const first = S().leaveProfile();
     const second = S().leaveProfile();
     expect(second).toBe(first);
-    expect(await first).toEqual({ ok: true, changed: true });
+    expect(await first).toMatchObject({ ok: true, changed: true });
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -201,9 +205,9 @@ describe('leaving a profile that can be saved', () => {
     const app = await boot();
     await open(app, 'kid-a');
     await S().leaveProfile();
-    const calls = cancelAll().mock.calls.length;
-    expect(await S().leaveProfile()).toEqual({ ok: true, changed: false });
-    expect(cancelAll().mock.calls.length).toBe(calls); // no second clean-up
+    const calls = lists().mock.calls.length;
+    expect(await S().leaveProfile()).toMatchObject({ ok: true, changed: false });
+    expect(lists().mock.calls.length).toBe(calls); // no second clean-up
     expect(S().hasChosenProfile()).toBe(false);
   });
 });
@@ -257,7 +261,7 @@ describe('leaving that cannot be finished', () => {
     app.family.addToWallet(7);
     const restore = failWrites(app, (k) => k === scoped('kid-a', 'petFamily'));
     const epoch = app.profiles.getNotificationEpoch();
-    const calls = cancelAll().mock.calls.length;
+    const calls = lists().mock.calls.length;
 
     const result = await S().leaveProfile({ timeoutMs: 200 });
 
@@ -269,11 +273,11 @@ describe('leaving that cannot be finished', () => {
     expect(app.profiles.getActiveProfileId()).toBe('kid-a');
     expect(app.family.peekFamily()?.wallet.pawTokens).toBe(49); // still in memory, nothing lost
     expect(app.profiles.getNotificationEpoch()).toBe(epoch); // no clean-up ran
-    expect(cancelAll().mock.calls.length).toBe(calls);
+    expect(lists().mock.calls.length).toBe(calls);
 
     // the failed value is not dropped: once storage works, leaving again saves it
     restore();
-    expect(await S().leaveProfile()).toEqual({ ok: true, changed: true });
+    expect(await S().leaveProfile()).toMatchObject({ ok: true, changed: true });
     expect(await walletOf(app, 'kid-a')).toBe(49);
   });
 
@@ -289,7 +293,7 @@ describe('leaving that cannot be finished', () => {
     expect(app.family.peekFamily()?.wallet.pawTokens).toBe(45);
 
     hold.release();
-    expect(await S().leaveProfile()).toEqual({ ok: true, changed: true });
+    expect(await S().leaveProfile()).toMatchObject({ ok: true, changed: true });
     expect(await walletOf(app, 'kid-a')).toBe(45);
   });
 
@@ -344,7 +348,7 @@ describe('delayed callbacks around a leave', () => {
     expect(finished).toBe(false); // the leave waits for the save
     expect(S().isLeavingProfile()).toBe(true);
     hold.release();
-    expect(await leaving).toEqual({ ok: true, changed: true });
+    expect(await leaving).toMatchObject({ ok: true, changed: true });
 
     expect(await walletOf(app, 'kid-a')).toBe(53);
     expect(await app.profiles.switchProfile('kid-b')).toMatchObject({ ok: true });
@@ -390,7 +394,7 @@ describe('family mode off (every real user and release build)', () => {
     await app.family.ensureFamilyLoaded();
     app.family.addToWallet(1);
     const before = await snapshot(app);
-    const calls = cancelAll().mock.calls.length;
+    const calls = lists().mock.calls.length;
     const release = jest.spyOn(app.profiles, 'releaseActiveProfile');
 
     expect(await S().leaveProfile()).toEqual({ ok: false, reason: 'not-available' });
@@ -398,7 +402,7 @@ describe('family mode off (every real user and release build)', () => {
     expect(release).not.toHaveBeenCalled();
     expect(app.profiles.isProfileReleased()).toBe(false);
     expect(app.family.peekFamily()).not.toBeNull();
-    expect(cancelAll().mock.calls.length).toBe(calls);
+    expect(lists().mock.calls.length).toBe(calls);
     expect(S().isLeavingProfile()).toBe(false);
     expect(await snapshot(app)).toEqual(before);
   });

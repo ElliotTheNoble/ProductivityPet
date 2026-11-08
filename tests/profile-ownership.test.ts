@@ -15,6 +15,8 @@ jest.mock('expo-notifications', () => {
       g.__phone.clear();
     }),
     dismissAllNotificationsAsync: jest.fn(async () => undefined),
+    // (family mode checks its clean-up by listing; this stand-in keeps no requests, only bodies, so it lists nothing)
+    getAllScheduledNotificationsAsync: jest.fn(async () => []),
     scheduleNotificationAsync: jest.fn(async (request: { content: { body?: string; title?: string } }) => {
       if (g.__holdSchedule) await g.__holdSchedule;
       g.__seq += 1;
@@ -332,7 +334,7 @@ describe('the profile session changing while asynchronous work is pending', () =
 
     holdA.release();
     await expect(round).resolves.toMatchObject({ score: 9 });
-    expect(await leaving).toEqual({ ok: true, changed: true });
+    expect(await leaving).toMatchObject({ ok: true, changed: true });
 
     expect(await walletOf(app, 'kid-a')).toBeGreaterThan(42);
     await open(app, 'kid-b');
@@ -376,7 +378,7 @@ describe('notification-related asynchronous work', () => {
     const sync = NT().syncTaskNotifications(tasks);
     await flush(); // the phone has been asked to schedule it, and is taking its time
 
-    expect(await S().leaveProfile()).toEqual({ ok: true, changed: true }); // the leave does not wait for the phone
+    expect(await S().leaveProfile()).toMatchObject({ ok: true, changed: true }); // the leave does not wait for the phone
     release();
     const result = await sync;
 

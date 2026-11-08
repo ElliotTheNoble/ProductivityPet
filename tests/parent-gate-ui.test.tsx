@@ -35,6 +35,10 @@ jest.mock('@/components/welcome-screen', () => {
 jest.mock('expo-notifications', () => ({
   cancelAllScheduledNotificationsAsync: jest.fn(async () => undefined),
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => undefined),
+  cancelScheduledNotificationAsync: jest.fn(async () => undefined),
 }));
 
 const PIN = '246813';

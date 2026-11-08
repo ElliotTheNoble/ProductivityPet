@@ -26,6 +26,9 @@ jest.mock('@/components/welcome-screen', () => {
 jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
   cancelAllScheduledNotificationsAsync: jest.fn(async () => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => undefined),
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'scheduled-id'),
   setNotificationChannelAsync: jest.fn(async () => undefined),
@@ -469,8 +472,8 @@ describe('at 10 minutes', () => {
     const app = await boot({ open: 'kid-mia' });
     await app.screen.findByText('SCREEN kid-mia');
     app.familyStore.addToWallet(7);
-    const cancelAll = require('expo-notifications').cancelAllScheduledNotificationsAsync as jest.Mock;
-    const calls = cancelAll.mock.calls.length;
+    const lists = require('expo-notifications').getAllScheduledNotificationsAsync as jest.Mock;
+    const calls = lists.mock.calls.length;
     const lock = jest.spyOn(app.gate, 'lockParentArea');
     const original = app.profiles.releaseActiveProfile;
     let lockedBefore = false;
@@ -487,7 +490,7 @@ describe('at 10 minutes', () => {
     expect(app.profiles.isProfileReleased()).toBe(true);
     expect(app.familyStore.peekFamily()).toBeNull(); // the departing profile's memory was cleared (after the release worked)
     expect(app.unfinished.listUnfinishedWork()).toEqual([]);
-    expect(cancelAll.mock.calls.length).toBe(calls + 1);
+    expect(lists.mock.calls.length).toBe(calls + 2); // one checked clean-up
     expect(await walletOf(app, scoped('kid-mia', 'petFamily'))).toBe(7); // the saved data, including the last change, is there
     expect(app.idle.getIdleController()?.getSnapshot().phase ?? 'none').not.toBe('failed');
   });

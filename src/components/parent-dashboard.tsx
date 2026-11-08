@@ -6,6 +6,7 @@ import { Button, Card, ChoiceCard, Field, PageShell, ToggleRow } from '@/compone
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FamilyHealthCard } from '@/components/family-health-card';
+import { NotificationCleanupNotice } from '@/components/notification-cleanup-notice';
 import { FamilyManagementCard } from '@/components/family-management-card';
 import { ParentPinCard } from '@/components/parent-pin-card';
 import { LANGUAGES, useT, type LanguageCode, type StringKey, getLocale } from '@/i18n';
@@ -158,6 +159,9 @@ export function ParentDashboard() {
 
       {/* Family health: only shown when something needs a look (family mode only) */}
       <FamilyHealthCard />
+
+      {/* Private notifications of an earlier profile that could not be confirmed as cleared (family mode only) */}
+      <NotificationCleanupNotice />
 
       {!child ? (
         <Card>

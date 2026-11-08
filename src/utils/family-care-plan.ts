@@ -1,4 +1,4 @@
-import { advancePet, isEggStage, predictSickTime, type PetRecord } from '@/utils/pet-lifecycle-core';
+import { advancePet, isEggStage, type PetRecord } from '@/utils/pet-lifecycle-core';
 import { SICK_TO_CRITICAL_HOURS } from '@/utils/pet-family-config';
 
 // The anonymous "family care" notification plan (Stage 4.5d). PURE: nothing here reads or writes storage, calls a notification API, sets a
@@ -14,16 +14,21 @@ import { SICK_TO_CRITICAL_HOURS } from '@/utils/pet-family-config';
 // Rules, in order:
 //   1. Who counts: a profile is left out when it is archived, when it is the profile that is open right now (its own detailed alerts
 //      cover it), when its own alert setting is off, or when its saved record could not be read. Main counts like any other profile.
-//   2. Events: for each living pet at home that is not an egg: a healthy pet gets a "sick" event at the predicted moment its first need
-//      would reach 0 and a "critical" event 24 hours after that; a sick pet gets a "critical" event 24 hours after it fell sick; critical
-//      and deceased pets get none (their moment has passed). The predictions come from the same functions the detailed alerts use
-//      (predictSickTime, SICK_TO_CRITICAL_HOURS), which never predict a moment before a pet could really be sick.
+//   2. Events: for each living pet at home that is not an egg: a healthy pet gets a "sick" event at the moment the pet lifecycle itself
+//      will record it as sick if nobody looks after it, and a "critical" event 24 hours after that; a sick pet gets a "critical" event
+//      24 hours after it fell sick; critical and deceased pets get none (their moment has passed). The "will record" moment is read from
+//      the real lifecycle (advancePet run on a COPY, 14 days ahead), not from predictSickTime: predictSickTime ignores the dirty penalty
+//      (a dirty pet's happiness falls twice as fast) and exhaustion, so for a dirty pet it can be a day late. The lifecycle result
+//      includes both and nothing is added to it (no margin). It assumes the situation stays as it is NOW: feeding, washing or playing
+//      with a pet, or a pet getting dirty, changes the real moment, so the plan is recomputed whenever the app can (leaving a profile,
+//      the picker opening, coming back to the app, a household or setting change).
 //   3. Anything not later than five seconds from now is dropped (the same margin the detailed alerts use).
 //   4. Grouping: events are sorted by time and an event joins the group of the one that started it when it is within 30 minutes of that
 //      first event. A group fires at its FIRST event's time, so grouping can only make a later event's notification earlier (by up to
 //      30 minutes), never later. A group is critical when any event in it is.
-//   5. Cap: at most 10 notifications, less when the platform's total pending-notification limit leaves less room. When there are more
-//      groups, the latest "normal" groups go first, then the latest critical ones: urgent and near notifications are kept.
+//   5. Cap: at most 10 notifications, less when the platform's total pending-notification limit leaves less room. The EARLIEST group is
+//      always kept (the nearest warning is what prompts someone to open the app). Among the others, when there are too many, the latest
+//      "normal" groups go first, then the latest critical ones.
 //   6. Wording: the exact text below. An unknown language gets English.
 
 export const FAMILY_CARE_ID_PREFIX = 'pp-family-care-';
@@ -34,6 +39,12 @@ export const MIN_LEAD_MS = 5000;
 export const PLATFORM_PENDING_LIMIT = 64;
 
 const HOUR_MS = 60 * 60 * 1000;
+// How far ahead the lifecycle is asked about a healthy pet: longer than the slowest need takes to run out (Happiness: 100 / (5/6) = 120
+// awake hours, 10 days of 12 awake hours).
+export const LIFECYCLE_HORIZON_MS = 14 * 24 * HOUR_MS;
+// No real event can be later than the horizon plus the sick-to-critical delay. A later one means the saved data or the clock is
+// inconsistent (for example the clock was set back), and it is dropped rather than scheduled for a wrong moment.
+export const MAX_EVENT_AHEAD_MS = LIFECYCLE_HORIZON_MS + SICK_TO_CRITICAL_HOURS * HOUR_MS;
 
 export type CareUrgency = 'normal' | 'critical';
 export type CareEvent = { atMs: number; urgency: CareUrgency };
@@ -96,26 +107,38 @@ export function familyCareMessage(language: string): { title: string; body: stri
 // events from saved pets
 
 // The upcoming care events of one profile's pets, from its saved pets (already read; nothing is read or written here). The pets are
-// advanced on COPIES to `now` with the same rules the app uses when the profile is opened.
+// advanced on COPIES with the same rules the app uses when the profile is opened. A pet whose saved data cannot be worked with (an
+// invalid timestamp, anything that makes the lifecycle throw) simply contributes nothing.
 export function careEventsFromPets(pets: readonly PetRecord[], now: Date): CareEvent[] {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return [];
   const events: CareEvent[] = [];
   const criticalAfterMs = SICK_TO_CRITICAL_HOURS * HOUR_MS;
+  const add = (atMs: number, urgency: CareUrgency) => {
+    if (Number.isFinite(atMs) && atMs <= nowMs + MAX_EVENT_AHEAD_MS) events.push({ atMs, urgency });
+  };
   for (const saved of pets) {
-    if (saved.retired) continue; // in Pet Pawadise: frozen, never sick
-    const pet = advancePet(saved, now);
-    if (pet.lifecycle.state === 'deceased') continue;
-    if (isEggStage(pet.growthUnits)) continue; // an egg cannot get sick
-    if (pet.lifecycle.state === 'healthy') {
-      const predicted = predictSickTime(pet.profile, now);
-      if (predicted && Number.isFinite(predicted.getTime())) {
-        events.push({ atMs: predicted.getTime(), urgency: 'normal' });
-        events.push({ atMs: predicted.getTime() + criticalAfterMs, urgency: 'critical' });
+    try {
+      if (saved.retired) continue; // in Pet Pawadise: frozen, never sick
+      const pet = advancePet(saved, now);
+      if (pet.lifecycle.state === 'deceased') continue;
+      if (isEggStage(pet.growthUnits)) continue; // an egg cannot get sick
+      if (pet.lifecycle.state === 'healthy') {
+        // When would the lifecycle itself mark this pet sick if nothing changes? Run it far ahead on a copy: whatever happens on the
+        // way (the dirty penalty, bedtime, exhaustion) is already in its answer.
+        const ahead = advancePet(pet, new Date(nowMs + LIFECYCLE_HORIZON_MS));
+        const since = ahead.lifecycle.sickSince ? new Date(ahead.lifecycle.sickSince).getTime() : Number.NaN;
+        if (Number.isFinite(since)) {
+          add(since, 'normal');
+          add(since + criticalAfterMs, 'critical');
+        }
+      } else if (pet.lifecycle.state === 'sick' && pet.lifecycle.sickSince) {
+        add(new Date(pet.lifecycle.sickSince).getTime() + criticalAfterMs, 'critical');
       }
-    } else if (pet.lifecycle.state === 'sick' && pet.lifecycle.sickSince) {
-      const since = new Date(pet.lifecycle.sickSince).getTime();
-      if (Number.isFinite(since)) events.push({ atMs: since + criticalAfterMs, urgency: 'critical' });
+      // 'critical': the sick and critical moments have both passed, and nothing is announced for a death.
+    } catch {
+      // unusable saved pet: nothing is claimed about it
     }
-    // 'critical': the sick and critical moments have both passed, and nothing is announced for a death.
   }
   return events;
 }
@@ -176,7 +199,9 @@ export function buildFamilyCarePlan(inputs: readonly ProfileCareInput[], options
       report.skipped.push({ profileId: input.profileId, reason: 'unreadable' });
       continue;
     }
-    const usable = input.events.filter((event) => Number.isFinite(event.atMs) && event.atMs > options.now + MIN_LEAD_MS);
+    const usable = input.events.filter(
+      (event) => Number.isFinite(event.atMs) && event.atMs > options.now + MIN_LEAD_MS && event.atMs <= options.now + MAX_EVENT_AHEAD_MS
+    );
     if (usable.length === 0) {
       report.skipped.push({ profileId: input.profileId, reason: 'no-events' });
       continue;
@@ -198,19 +223,23 @@ export function buildFamilyCarePlan(inputs: readonly ProfileCareInput[], options
     }
   }
 
-  // Cap: the latest normal groups go first, then the latest critical ones.
+  // Cap: the earliest group is always kept. Of the rest, the latest normal groups go first, then the latest critical ones.
   if (groups.length > report.cap) {
     const drop = groups.length - report.cap;
-    const doomed = new Set<Group>();
-    const latestFirst = [...groups].reverse();
-    for (const urgency of ['normal', 'critical'] as const) {
-      for (const group of latestFirst) {
-        if (doomed.size >= drop) break;
-        if (group.urgency === urgency) doomed.add(group);
-      }
-    }
-    groups = groups.filter((group) => !doomed.has(group));
     report.droppedGroups = drop;
+    if (report.cap <= 0) {
+      groups = [];
+    } else {
+      const doomed = new Set<Group>();
+      const latestFirst = groups.slice(1).reverse();
+      for (const urgency of ['normal', 'critical'] as const) {
+        for (const group of latestFirst) {
+          if (doomed.size >= drop) break;
+          if (group.urgency === urgency) doomed.add(group);
+        }
+      }
+      groups = groups.filter((group) => !doomed.has(group));
+    }
   }
 
   const { title, body } = familyCareMessage(options.language);

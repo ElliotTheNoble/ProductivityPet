@@ -102,6 +102,11 @@ function RootLayoutContent({ gated = false }: { gated?: boolean }) {
   // still before any screen or store below can create a first pet.
   useState(() => {
     if (gated) void ensureOnboardingLoaded().catch(() => {});
+    // Family mode on a phone: clean up private notifications left by an earlier run before anything schedules, and keep the anonymous
+    // family-care reminders current (see @/utils/family-notifications.ts). Nothing here on the web or with family mode off.
+    if (FAMILY_MODE_ENABLED && Platform.OS !== 'web') {
+      (require('@/utils/family-notifications') as typeof import('@/utils/family-notifications')).startFamilyNotifications();
+    }
     return null;
   });
   useEffect(() => {

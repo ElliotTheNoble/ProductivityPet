@@ -25,6 +25,9 @@ jest.mock('@/components/welcome-screen', () => {
 jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
   cancelAllScheduledNotificationsAsync: jest.fn(async () => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async () => []),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => undefined),
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'scheduled-id'),
   setNotificationChannelAsync: jest.fn(async () => undefined),
@@ -291,7 +294,7 @@ describe('unfinished-work tracking', () => {
     await app.fireEvent.changeText(app.screen.getByLabelText('draft'), 'Mia is writing');
     expect(app.unfinished.listUnfinishedWork()).toHaveLength(2);
     await app.rntl.act(async () => {
-      expect(await app.session.leaveProfile()).toEqual({ ok: true, changed: true });
+      expect(await app.session.leaveProfile()).toMatchObject({ ok: true, changed: true });
     });
     expect(app.unfinished.listUnfinishedWork()).toEqual([]);
     await app.screen.findByText(t(app, 'fpTitle'));

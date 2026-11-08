@@ -3,6 +3,7 @@ import {
   FAMILY_CARE_ID_PREFIX,
   FAMILY_CARE_TITLE,
   GROUP_WINDOW_MS,
+  MAX_EVENT_AHEAD_MS,
   MAX_GENERIC_NOTIFICATIONS,
   MIN_LEAD_MS,
   PLATFORM_PENDING_LIMIT,
@@ -14,7 +15,7 @@ import {
   type CareEvent,
   type ProfileCareInput,
 } from '@/utils/family-care-plan';
-import { predictSickTime } from '@/utils/pet-lifecycle-core';
+import { advancePet, predictSickTime } from '@/utils/pet-lifecycle-core';
 import { SICK_TO_CRITICAL_HOURS } from '@/utils/pet-family-config';
 import { DAY, HOUR, T0, iso, local, pet } from './helpers';
 
@@ -355,6 +356,134 @@ describe('events from saved pets', () => {
   });
 });
 
+describe('timing comes from the real lifecycle (Stage 4.5e)', () => {
+  const at = new Date(T0);
+  const hours = (e: { atMs: number }) => (e.atMs - T0) / HOUR;
+  // the planner's sick moment must equal what the pet lifecycle itself records when nobody looks after the pet
+  const recorded = (p: ReturnType<typeof pet>) => new Date(advancePet(p, new Date(T0 + 20 * DAY)).lifecycle.sickSince!).getTime();
+
+  test.each([
+    ['clean, happiness 20', { happiness: 20, hunger: 100, cleanliness: 100, needsBath: false }, 48],
+    ['DIRTY, happiness 20', { happiness: 20, hunger: 100, cleanliness: 100, needsBath: true }, 26],
+    ['clean, happiness 40', { happiness: 40, hunger: 100, cleanliness: 100, needsBath: false }, 76],
+    ['DIRTY, happiness 40', { happiness: 40, hunger: 100, cleanliness: 100, needsBath: true }, 50],
+    ['hungry (hunger 10, zero at 2 PM)', { hunger: 10 }, 4],
+  ])('%s: the "sick" event is when the lifecycle records it, the "critical" event 24 hours later', (_name, needs, expectedHours) => {
+    const p = pet({ p: needs });
+    const events = careEventsFromPets([p], at);
+    expect(events).toHaveLength(2);
+    expect(events[0].urgency).toBe('normal');
+    expect(events[1].urgency).toBe('critical');
+    expect(events[0].atMs).toBe(recorded(p));
+    expect(hours(events[0])).toBeCloseTo(expectedHours, 6);
+    expect(events[1].atMs - events[0].atMs).toBe(24 * HOUR);
+  });
+
+  test('a dirty pet is NOT predicted as late as predictSickTime would (which ignores the dirty penalty)', () => {
+    const p = pet({ p: { happiness: 20, hunger: 100, cleanliness: 100, needsBath: true } });
+    const old = predictSickTime(p.profile, at)!.getTime();
+    const events = careEventsFromPets([p], at);
+    expect(old - events[0].atMs).toBeGreaterThanOrEqual(20 * HOUR); // the old prediction was about 22 hours late
+  });
+
+  test('for a clean pet the lifecycle and predictSickTime agree exactly (no change where nothing was wrong)', () => {
+    const p = pet({ p: { hunger: 10 } });
+    expect(careEventsFromPets([p], at)[0].atMs).toBe(predictSickTime(p.profile, at)!.getTime());
+  });
+
+  test('the answer depends on how the pet is now: caring for it later moves the moment (a plan is only as good as the moment it is made)', () => {
+    const neglected = careEventsFromPets([pet({ p: { hunger: 10 } })], at)[0].atMs;
+    const fed = careEventsFromPets([pet({ p: { hunger: 100 } })], at)[0].atMs;
+    expect(fed).toBeGreaterThan(neglected + 10 * HOUR);
+  });
+
+  test('a sick pet: "critical" at exactly sickSince + 24 hours, from the saved record', () => {
+    const sickSince = T0 - 5 * HOUR;
+    const sick = pet({ p: { hunger: 0 }, lifecycle: { state: 'sick', exhausted: false, lastEvaluatedAt: iso(T0), sickSince: iso(sickSince) } });
+    expect(careEventsFromPets([sick], at)).toEqual([{ atMs: sickSince + 24 * HOUR, urgency: 'critical' }]);
+  });
+
+  test('near-critical boundaries: one second before the moment it still counts, at the moment (already critical) nothing is left', () => {
+    const make = (sickSince: number) => pet({ p: { hunger: 0 }, lifecycle: { state: 'sick', exhausted: false, lastEvaluatedAt: iso(T0), sickSince: iso(sickSince) } });
+    const almost = careEventsFromPets([make(T0 - 24 * HOUR + 1000)], at); // critical in one second
+    expect(almost).toEqual([{ atMs: T0 + 1000, urgency: 'critical' }]);
+    expect(plan([input('a', almost)]).notifications).toEqual([]); // inside the five-second margin: dropped by the planner
+    const ten = careEventsFromPets([make(T0 - 24 * HOUR + 10_000)], at);
+    expect(plan([input('a', ten)]).notifications.map((n) => n.atMs)).toEqual([T0 + 10_000]); // far enough: kept
+    expect(careEventsFromPets([make(T0 - 24 * HOUR)], at)).toEqual([]); // exactly 24 hours: the lifecycle already says critical
+    expect(careEventsFromPets([make(T0 - 24 * HOUR - 1)], at)).toEqual([]);
+  });
+
+  test('bad saved data never throws: an invalid timestamp, a pet that cannot be worked with, an invalid "now"', () => {
+    const badStamp = pet({ p: { hunger: 10, lastUpdatedAt: 'garbage' } });
+    expect(() => careEventsFromPets([badStamp], at)).not.toThrow();
+    const badSick = pet({ p: { hunger: 0 }, lifecycle: { state: 'sick', exhausted: false, lastEvaluatedAt: iso(T0), sickSince: 'not a date' } });
+    for (const e of careEventsFromPets([badSick], at)) expect(Number.isFinite(e.atMs)).toBe(true);
+    const broken = { ...pet(), profile: null } as unknown as ReturnType<typeof pet>;
+    expect(() => careEventsFromPets([broken], at)).not.toThrow();
+    expect(careEventsFromPets([broken, pet({ p: { hunger: 10 } })], at)).toHaveLength(2); // the good pet still counts
+    expect(careEventsFromPets([pet({ p: { hunger: 10 } })], new Date(Number.NaN))).toEqual([]);
+  });
+
+  test('clock anomalies: a clock set far back cannot produce an event in the far future', () => {
+    // the pet was last evaluated five days "after" the current clock: nothing is advanced, and nothing wildly late is scheduled
+    const p = pet({ p: { hunger: 10, lastUpdatedAt: iso(T0 + 5 * DAY) }, lifecycle: { state: 'healthy', exhausted: false, lastEvaluatedAt: iso(T0 + 5 * DAY) } });
+    for (const e of careEventsFromPets([p], at)) expect(e.atMs).toBeLessThanOrEqual(T0 + MAX_EVENT_AHEAD_MS);
+    // and the planner drops anything beyond what the lifecycle could ever produce
+    const far = plan([input('a', [normal(NOW + MAX_EVENT_AHEAD_MS), normal(NOW + MAX_EVENT_AHEAD_MS + 1)])]);
+    expect(times(far)).toEqual([NOW + MAX_EVENT_AHEAD_MS]);
+  });
+
+  test('retired and egg pets still give nothing, and a profile mixes its pets', () => {
+    const events = careEventsFromPets([pet({ id: 'a', p: { hunger: 10 } }), pet({ id: 'b', growthUnits: 0 }), pet({ id: 'c', retired: { since: iso(T0) } })], at);
+    expect(events).toHaveLength(2);
+  });
+});
+
+describe('the cap keeps the earliest group (Stage 4.5e)', () => {
+  const at = (h: number) => NOW + h * HOUR;
+
+  test('15 pets: the near "sick" warning is kept, then the earliest critical ones', () => {
+    const events = Array.from({ length: 15 }, (_, i) => [normal(at((i + 1) * 3)), critical(at((i + 1) * 3 + 24))]).flat();
+    const p = plan([input('a', events)]);
+    expect(p.notifications).toHaveLength(10);
+    expect(p.notifications[0]).toMatchObject({ atMs: at(3), urgency: 'normal' }); // not displaced
+    expect(p.notifications.slice(1).every((n) => n.urgency === 'critical')).toBe(true);
+    expect(p.notifications.slice(1).map((n) => n.atMs)).toEqual(Array.from({ length: 9 }, (_, i) => at((i + 1) * 3 + 24)));
+  });
+
+  test('one imminent normal alert and ten far critical ones: the imminent one stays, the latest critical one goes', () => {
+    const events = [normal(at(1)), ...Array.from({ length: 10 }, (_, i) => critical(at(40 + i * 3)))];
+    const p = plan([input('a', events)]);
+    expect(p.notifications).toHaveLength(10);
+    expect(p.notifications[0].atMs).toBe(at(1));
+    expect(times(p)).not.toContain(at(40 + 9 * 3));
+    expect(p.report.droppedGroups).toBe(1);
+  });
+
+  test('a cap of one keeps only the earliest; a cap of zero keeps none', () => {
+    const events = [critical(at(50)), normal(at(2)), critical(at(60))];
+    expect(times(plan([input('a', events)], { maxNotifications: 1 }))).toEqual([at(2)]);
+    expect(plan([input('a', events)], { maxNotifications: 0 }).notifications).toEqual([]);
+    expect(plan([input('a', events)], { otherPendingCount: 64 }).notifications).toEqual([]);
+  });
+
+  test('the earliest group is always in the plan whenever the plan is not empty (random plans)', () => {
+    let s = 7;
+    const rand = () => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+    for (let round = 0; round < 200; round += 1) {
+      const events = Array.from({ length: 1 + Math.floor(rand() * 40) }, () => ({ atMs: at(1 + Math.floor(rand() * 400)), urgency: rand() < 0.5 ? ('critical' as const) : ('normal' as const) }));
+      const earliest = Math.min(...events.map((e) => e.atMs));
+      const p = plan([input('a', events)], { maxNotifications: 1 + Math.floor(rand() * 10), otherPendingCount: Math.floor(rand() * 60) });
+      expect(p.notifications.length).toBeGreaterThan(0);
+      expect(p.notifications[0].atMs).toBe(earliest);
+    }
+  });
+});
+
 describe('the saved alert setting', () => {
   test('only an explicit true counts, exactly like the detailed alerts', () => {
     expect(alertsEnabledFromSaved(JSON.stringify({ notifications: true, vibration: true, flash: false }))).toBe(true);
@@ -426,18 +555,20 @@ describe('the plan is pure', () => {
     expect(text).not.toMatch(/@\/utils\/(profiles|household|pet-family'|pet-alerts|notifications)/);
   });
 
-  test('nothing in the app uses the family-care modules yet (no scheduling, cancelling, channels or clean-up are connected)', () => {
+  test('only the notification layer uses the plan modules, and the plan modules themselves stay free of native code', () => {
     const fs = require('fs');
     const path = require('path');
     const walk = (dir: string): string[] =>
       fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry: { name: string; isDirectory(): boolean }) => {
-        const full = path.join(dir, entry.name);
+        const full = path.join(dir, entry.name).split(path.sep).join('/');
         return entry.isDirectory() ? walk(full) : /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
       });
     const users = walk('src')
       .filter((file) => !/family-care-(plan|input)\.ts$/.test(file))
-      .filter((file) => /family-care-(plan|input)/.test(read(file)));
-    expect(users).toEqual([]);
+      .filter((file) => /family-care-(plan|input)/.test(read(file)))
+      .sort();
+    // the scheduler, the ownership classifier (reserved prefix), the foreground handler (reserved prefix) and nothing else
+    expect(users).toEqual(['src/utils/family-care.ts', 'src/utils/notification-ownership.ts', 'src/utils/notifications.ts']);
   });
 
   test('the alert-setting key name matches the one the detailed alerts use', () => {

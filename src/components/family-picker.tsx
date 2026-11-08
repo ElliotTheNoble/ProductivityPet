@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, FAMILY_BACKGROUND } from '@/components/family-ui';
@@ -129,6 +129,9 @@ export function FamilyPicker({ decision, onRetry }: { decision: Extract<PickerDe
         setFailure({ text: t('fpErrMainLocked'), retry: () => setFailure(null) });
         return;
       }
+      // Nobody has a profile open yet, so this cannot touch anyone's reminders: if the last clean-up of private notifications is not
+      // verified, try once more (bounded) before the profile starts. It never blocks the entry.
+      if (Platform.OS !== 'web') await (require('@/utils/family-notifications') as typeof import('@/utils/family-notifications')).prepareForProfileEntry();
       const result = await switchProfile(target.id);
       busyRef.current = false;
       if (!result.ok) {

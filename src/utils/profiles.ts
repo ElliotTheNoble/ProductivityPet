@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+
 // Profile-scoped local storage (M2, Stage 1). Every piece of personal data (pets, tasks, Paw Tokens, shop,
 // Pawadise, mood, journal, mini-game progress, alert settings...) belongs to ONE profile, and each store builds
 // its storage keys with scopedKey() instead of a fixed string.
@@ -181,6 +183,18 @@ export function whenProfileCleanupDone(): Promise<void> {
   );
 }
 
+// Registers clean-up work that did not come from a profile swap (the family-mode start-up clean-up of stale private notifications), so
+// that scheduling waits for it exactly like it waits for a swap's clean-up. It counts like a swap for the reminders: whatever it
+// cancelled has to be scheduled again by the next pass (see getNotificationEpoch). Never rejects.
+export function trackCleanup(work: Promise<unknown>): void {
+  notificationEpoch += 1;
+  const settled = work.then(
+    () => undefined,
+    () => undefined
+  );
+  cleanupDone = Promise.all([cleanupDone, settled]).then(() => undefined);
+}
+
 function runCleanups(cleanups: (() => Promise<void>)[]): void {
   notificationEpoch += 1;
   const running = Promise.all(cleanups.map((cleanup) => cleanup().catch(() => {}))).then(() => undefined);
@@ -274,6 +288,12 @@ export function registerProfileStore(hooks: ProfileStoreHooks): void {
 registerProfileStore({
   name: 'notifications',
   reset: () => async () => {
+    if (FAMILY_MODE_ENABLED) {
+      // Family mode: a clean-up that can be CHECKED (list, cancel only what is positively private, list again) and that never touches
+      // anything else; its result is kept as a state (see @/utils/notification-cleanup.ts). Everything else below is unchanged.
+      await (require('@/utils/notification-cleanup') as typeof import('@/utils/notification-cleanup')).cleanPrivateNotifications();
+      return;
+    }
     try {
       const Notifications = require('expo-notifications') as typeof import('expo-notifications');
       await Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});

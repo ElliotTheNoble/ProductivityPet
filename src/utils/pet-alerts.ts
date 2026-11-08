@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { subscribeToLanguage, tr } from '@/i18n';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { ensureNotificationPermission } from '@/utils/notifications';
 import {
   ensureFamilyLoaded,
@@ -391,6 +392,7 @@ export async function sendTestNotification(): Promise<boolean> {
         title: tr('ntTestTitle'),
         body: tr('ntTestBody'),
         sound: 'default',
+        ...(FAMILY_MODE_ENABLED ? { data: { pp: 'test' } } : null), // ownership tag (family mode only): public and harmless, never touched by the private clean-up
       },
       trigger: Platform.OS === 'android' ? { channelId: channelFor('critical', current.vibration) } : null,
     });

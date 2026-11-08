@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 
 import { getCurrentLanguage, tr, type LanguageCode } from '@/i18n';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { FAMILY_CARE_ID_PREFIX } from '@/utils/family-care-plan';
 import { captureProfileOwner, getNotificationEpoch, isProfileOwner, whenProfileCleanupDone } from '@/utils/profiles';
 import { addDaysISO, isOccurrenceCompleted, occursOnDate, todayISO, type Task } from '@/utils/tasks';
 
@@ -23,6 +25,21 @@ const SCAN_HORIZON_DAYS = 400;
 // the app — the feature still fully works wherever the native module does.
 let handlerRegistered = false;
 
+// True for a family-care reminder arriving while a profile is open (family mode only; never true otherwise).
+function isFamilyCareWhileInUse(identifier: unknown): boolean {
+  if (!FAMILY_MODE_ENABLED || typeof identifier !== 'string' || !identifier.startsWith(FAMILY_CARE_ID_PREFIX)) return false;
+  try {
+    return (require('@/utils/family-session') as typeof import('@/utils/family-session')).hasChosenProfile();
+  } catch {
+    return false;
+  }
+}
+
+// Makes sure the foreground handler is registered (it is also registered the first time a reminder permission is asked for).
+export function ensureNotificationHandler(): void {
+  ensureHandlerRegistered();
+}
+
 // Notifications should still show while the app is open, not just in the
 // background — reminders are meant to be seen wherever the user is.
 function ensureHandlerRegistered() {
@@ -30,12 +47,14 @@ function ensureHandlerRegistered() {
   handlerRegistered = true;
   try {
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
+      handleNotification: async (notification) => {
+        // Family mode: the anonymous family-care reminders are not shown as a banner (or a sound) while someone is using a profile; they
+        // are still delivered to the notification list. Everything else is shown as before.
+        if (isFamilyCareWhileInUse(notification?.request?.identifier)) {
+          return { shouldShowBanner: false, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false };
+        }
+        return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false };
+      },
     });
   } catch {
     // Notifications unsupported in this runtime (e.g. Expo Go on Android).
@@ -218,6 +237,10 @@ export async function syncTaskNotifications(tasks: Task[]): Promise<Task[]> {
                   ? tr('ntBirthday')
                   : tr('ntTask'),
             body: task.text,
+            // Ownership tag (see @/utils/notification-ownership.ts): this is a private task reminder, so the clean-up that runs when a
+            // profile is left can recognise it. It carries no profile or task identity. Family mode only: with it off the reminder is
+            // exactly what it always was.
+            ...(FAMILY_MODE_ENABLED ? { data: { pp: 'task' } } : null),
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
