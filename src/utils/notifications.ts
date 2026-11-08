@@ -1,7 +1,6 @@
-import * as Notifications from 'expo-notifications';
-
 import { getCurrentLanguage, tr, type LanguageCode } from '@/i18n';
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { Notifications } from '@/utils/native-notifications';
 import { FAMILY_CARE_ID_PREFIX } from '@/utils/family-care-plan';
 import { captureProfileOwner, getNotificationEpoch, isProfileOwner, whenProfileCleanupDone } from '@/utils/profiles';
 import { addDaysISO, isOccurrenceCompleted, occursOnDate, todayISO, type Task } from '@/utils/tasks';

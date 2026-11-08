@@ -723,6 +723,13 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-090] Expo Go on Android cannot test notifications (documented, OPEN, 2026-11-08)
+
+- **What:** Since SDK 53 `expo-notifications` does not work in Expo Go on Android: loading the package throws. The app now survives that (the package is loaded lazily, see FEATURE-102), but every notification feature is switched off there: task reminders are not scheduled, pet alerts and the test notification report failure, the permission is reported as not granted, and family mode's clean-up would report "unsupported" so no family-care reminder is scheduled.
+- **Use Expo Go on Android for UI testing only.** Anything about notifications (scheduling, channels, the lock screen, the cleanup, taps, Stage 4.5f) needs a development build or a production build on the phone. Expo Go on iOS only warns and may schedule local reminders; this has not been checked.
+- **Observed on the Samsung in Expo Go SDK 57 (2026-11-08):** the Home screen loads and tab navigation works after the lazy-loading fix. A warning "Cannot connect to Expo CLI" appeared on the phone; the app still worked. **Recorded only, not investigated or changed.** Cause unknown (possibly the dev server connection or network, unrelated to this app's code).
+- **Not verified:** that nothing else in the app is unsupported in Expo Go SDK 57 (checked only by reading the code and the package list, not by running it).
+
 ### [BUG-089] Family pet-care notifications, Stage 4.5e: known limits and review items (documented, OPEN, 2026-11-07)
 
 - **Cold start cannot reach a closed app.** If the app is closed by the system while a profile is open, that profile's DETAILED reminders (task text, pet names) stay scheduled and can appear until the next launch; JavaScript cannot run to remove them. The clean-up runs at the first moment the app starts. Notifications already delivered stay in the tray until then.

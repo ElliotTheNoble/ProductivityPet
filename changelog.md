@@ -2,6 +2,17 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-08] — Expo Go on Android no longer crashes at launch (lazy expo-notifications)
+
+### Fixed
+- The app crashed at startup in Expo Go on Android ("Android Push notifications ... was removed from Expo Go with the release of SDK 53"). The cause was importing `expo-notifications` at the top of `notifications.ts` and `pet-alerts.ts`: the package throws when it is loaded there. It is now loaded the first time something is read from it (`src/utils/native-notifications.ts`), so the throw lands in the try/catch every native call already has. Reminders, pet alerts and the test notification are simply unavailable in Expo Go on Android (permission reports "not granted", tasks stay unscheduled). Development and production builds load the real package and behave as before.
+
+### Documented
+- Expo Go on Android is for UI testing only and cannot validate any notification behavior (BUG-090, FEATURE-102).
+
+### Verified
+- New `tests/native-notifications.test.ts`: import-time failure, honest fallbacks (never success), one load attempt, pass-through when the package loads, and a static check that no source file imports `expo-notifications` at the top.
+
 ## [2026-11-07] — Family pet-care notifications, Stage 4.5e: a checked private clean-up and anonymous family-care reminders (family mode only)
 
 ### Added

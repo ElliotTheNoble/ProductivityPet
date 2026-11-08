@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { captureProfileOwner, ensureProfilesReady, isProfileOwner, isProfileReleased, registerProfileStore, scopedKey, trackOperation, whenProfileCleanupDone, writeScoped } from '@/utils/profiles';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { subscribeToLanguage, tr } from '@/i18n';
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
+import { Notifications } from '@/utils/native-notifications';
 import { ensureNotificationPermission } from '@/utils/notifications';
 import {
   ensureFamilyLoaded,
