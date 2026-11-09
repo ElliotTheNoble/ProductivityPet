@@ -2,12 +2,15 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { DevPinTiming } from '@/components/dev-pin-timing';
 import { Button, Card, FAMILY_BACKGROUND, PageShell } from '@/components/family-ui';
 import { PinEntry, useShortLandscape } from '@/components/pin-entry';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
+import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
+import { recordCheckTime } from '@/utils/pin-timing';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
 import {
@@ -91,10 +94,10 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
   const [recovering, setRecovering] = useState(false);
   const sideBySide = useShortLandscape();
 
-  // The typed digits are wiped when the app leaves the foreground or the profile changes; the screen also blocks screenshots
-  // and the app-switcher preview where the platform allows it.
+  // The typed digits are wiped when the app leaves the foreground or the profile changes. Screenshots are NOT blocked here: this
+  // screen shows only dots, never a digit, so a picture of it reveals nothing (recovery-code screens do block, see Frame).
   const clearPin = useCallback(() => setPin(''), []);
-  useSensitiveScreen(clearPin);
+  useSensitiveScreen(clearPin, 'parent-pin', { blockCapture: false });
 
   const accessUntil = useMemo(() => (access.state === 'cooldown' ? Date.now() + access.remainingMs : 0), [access]);
   const until = Math.max(accessUntil, localUntil);
@@ -113,11 +116,16 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
       setFeedback({ kind: 'format' });
       return;
     }
+    // The dots clear at once and the button says "Checking…": the key derivation behind a check can take a moment on a phone, and the
+    // screen must answer the tap immediately instead of looking frozen with the old digits still showing.
+    const attempt = pin;
+    setPin('');
     setBusy(true);
     setFeedback(null);
-    const result = await unlockParentArea(pin);
+    const started = Date.now();
+    const result = await unlockParentArea(attempt);
+    recordCheckTime(Date.now() - started);
     setBusy(false);
-    setPin('');
     if (result.ok) return; // the gate re-renders with the content
     const at = Date.now();
     setNow(at);
@@ -188,8 +196,9 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
             {t('pgUnavailable')}
           </ThemedText>
         ) : null}
-        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < 6} />
+        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < PIN_MIN_LENGTH} />
         <Button tone="soft" label={t('pgBackHome')} onPress={() => router.replace('/')} />
+        <DevPinTiming />
       </PinEntry>
     </Card>
   );

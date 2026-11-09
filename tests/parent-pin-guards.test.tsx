@@ -170,7 +170,8 @@ describe('static checks on the PIN screens', () => {
   test.each(files)('%s never logs, stores, copies or puts anything in a route or link', (file) => {
     const src = read(file).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(src).not.toMatch(/console\.(log|info|warn|error|debug)/);
-    expect(src).not.toMatch(/AsyncStorage|localStorage|sessionStorage|SecureStore|setItem|expo-clipboard|Clipboard|Share\.share|Linking/);
+    expect(src).not.toMatch(/AsyncStorage|localStorage|sessionStorage|SecureStore|setItem|expo-clipboard|Share\.share|Linking/);
+    // (copying and pasting go only through @/utils/clipboard, see the clipboard checks below)
     expect(src).not.toMatch(/router\.(push|replace|navigate)\(\s*[`{][^)]*(pin|code)/i);
     expect(src).not.toMatch(/useLocalSearchParams|useGlobalSearchParams|searchParams/);
   });
@@ -191,10 +192,24 @@ describe('static checks on the PIN screens', () => {
     expect(src).not.toMatch(/useRef<string|useRef\(''\)/);
   });
 
-  test('the recovery code is selectable-off and has no copy button', () => {
+  test('the recovery code is selectable-off; copying is a button that asks first and only works while the code is shown', () => {
     const src = code('src/components/recovery-code.tsx');
     expect(src).toMatch(/selectable=\{false\}/);
-    expect(src).not.toMatch(/Clipboard|rcCopy|copy/i);
+    // copyText is called in exactly one place (after the warning is confirmed) and never from an effect
+    expect(src.match(/copyText\(/g)).toHaveLength(1);
+    expect(src).toMatch(/onConfirm=\{\(\) => void copy\(\)\}/);
+    expect(src).not.toMatch(/useEffect\([^)]*copyText/);
+    expect(src).not.toMatch(/expo-clipboard/);
+  });
+
+  test('only @/utils/clipboard touches expo-clipboard, and it keeps and logs nothing', () => {
+    const offenders = ['src/components', 'src/hooks', 'src/utils', 'src/app']
+      .flatMap((dir) => require('fs').readdirSync(require('path').resolve(dir)).map((f: string) => `${dir}/${f}`))
+      .filter((f: string) => /\.(ts|tsx)$/.test(f) && f !== 'src/utils/clipboard.ts')
+      .filter((f: string) => /expo-clipboard/.test(read(f)));
+    expect(offenders).toEqual([]);
+    const util = code('src/utils/clipboard.ts');
+    expect(util).not.toMatch(/console\.|AsyncStorage|SecureStore|setItem/);
   });
 
   test('screen capture protection is requested by the sensitive screen hook and released when it closes', () => {

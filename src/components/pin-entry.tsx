@@ -25,7 +25,7 @@ import { useT } from '@/i18n';
 // the app goes to the background or the profile changes.
 
 export const PIN_MAX_LENGTH = 8;
-const DOT_SLOTS = 6;
+const DOT_SLOTS = 4; // the shortest PIN; more dots appear as digits are added (up to 8)
 
 type Props = {
   value: string;
@@ -111,7 +111,7 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
             placeholderTextColor="#A58FB0"
             style={[styles.input, { color: theme.text }]}
           />
-          <Pressable accessibilityRole="button" onPress={() => choose('pad')} style={styles.linkTarget}>
+          <Pressable accessibilityRole="button" onPress={() => choose('pad')} style={linkStyle}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.link}>
               {t('pinUsePad')}
             </ThemedText>
@@ -175,7 +175,8 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
           onPress={key.onPress}
           style={(state) => [
             styles.key,
-            { width: keySize, height: keySize, borderRadius: keySize / 2, backgroundColor: theme.backgroundElement },
+            // The key turns a deeper pink while pressed (touch) or hovered (mouse, web), on top of the lift and shrink.
+            { width: keySize, height: keySize, borderRadius: keySize / 2, backgroundColor: state.pressed || (state as { hovered?: boolean }).hovered === true ? '#F6C6D8' : theme.backgroundElement },
             state.pressed && styles.pressed,
             disabled && styles.disabled,
             hoverLift(state, !disabled),
@@ -189,7 +190,7 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
     </View>
   );
   const keyboardLink = (
-    <Pressable accessibilityRole="button" onPress={() => choose('keyboard')} style={styles.linkTarget}>
+    <Pressable accessibilityRole="button" onPress={() => choose('keyboard')} style={linkStyle}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.link}>
         {t('pinUseKeyboard')}
       </ThemedText>
@@ -223,6 +224,13 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
   );
 }
 
+// The two text links (use the device keyboard / the number pad) show a pink pill while pressed (touch) or hovered (mouse, web).
+const linkStyle = (state: unknown) => [
+  styles.linkTarget,
+  (state as { hovered?: boolean }).hovered === true && styles.linkHover,
+  (state as { pressed?: boolean }).pressed === true && styles.linkPressed,
+];
+
 const KEY = 68;
 const KEY_SIDE = 56; // the pad on a short landscape screen (still well above the 44 px minimum)
 const styles = StyleSheet.create({
@@ -234,11 +242,13 @@ const styles = StyleSheet.create({
   pad: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, justifyContent: 'center' },
   key: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'transparent' },
   keyLabel: { fontSize: 26, lineHeight: 32, fontWeight: '600' },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.94 }] },
   disabled: { opacity: 0.45 },
   // The whole row is the tap target (at least 44 px tall and wide); only the words are underlined.
   linkTarget: { minHeight: 44, minWidth: 44, paddingHorizontal: Spacing.three, alignItems: 'center', justifyContent: 'center' },
   link: { textAlign: 'center', textDecorationLine: 'underline' },
+  linkHover: { backgroundColor: 'rgba(246, 198, 216, 0.35)', borderRadius: 16 },
+  linkPressed: { backgroundColor: 'rgba(246, 198, 216, 0.75)', borderRadius: 16 },
   sideRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: Spacing.four },
   sidePad: { flexShrink: 0 },
   sideInfo: { flex: 1, minWidth: 0, alignItems: 'center', gap: Spacing.one },

@@ -177,7 +177,7 @@ describe('ParentGate', () => {
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    await typePin('12345');
+    await typePin('123');
     expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
     await fireEvent.press(screen.getByRole('button', { name: en('pgUnlock') }));
     expect(await AsyncStorage.getItem('@ProductivityPet:parentGate')).toBeNull();

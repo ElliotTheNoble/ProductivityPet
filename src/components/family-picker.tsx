@@ -9,6 +9,8 @@ import { Spacing } from '@/constants/theme';
 import { hoverLift } from '@/constants/hover';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { useParentAuthStatus } from '@/hooks/use-parent-auth-status';
+import { DevPinTiming } from '@/components/dev-pin-timing';
+import { useKeyboardAvoidance } from '@/hooks/use-keyboard-avoidance';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
 import { peekProfileCare, type CareSummary } from '@/utils/family-profiles';
@@ -29,6 +31,8 @@ import {
 import { markProfileChosen } from '@/utils/family-session';
 import type { ChildProfile } from '@/utils/household';
 import { PIN_FORMAT, formatRemaining, openParentSession, unlockParentArea } from '@/utils/parent-gate';
+import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
+import { recordCheckTime } from '@/utils/pin-timing';
 import { MAIN_PROFILE_ID, retryProfileInitialization, switchProfile } from '@/utils/profiles';
 
 // "Who's playing today?" (family mode only; see @/components/family-gate.tsx). It is shown INSTEAD of the app on a cold start, so no
@@ -335,7 +339,7 @@ function CareBadge({ kind }: { kind: BadgeKind }) {
   );
 }
 
-function ProfileCard({
+export function ProfileCard({
   basis,
   emoji,
   fill,
@@ -377,7 +381,16 @@ function ProfileCard({
         hoverLift(state, !disabled),
         (state as { focused?: boolean }).focused === true && styles.focused,
       ]}>
-      <View style={[styles.card, accent && styles.cardAccent, dashed && styles.cardDashed]}>
+      {(state: unknown) => (
+      <View
+        style={[
+          styles.card,
+          accent && styles.cardAccent,
+          dashed && styles.cardDashed,
+          // A clear tint and border while pressed (touch) or hovered (mouse, web); a disabled card shows neither.
+          !disabled && (state as { hovered?: boolean }).hovered === true && styles.cardHover,
+          !disabled && (state as { pressed?: boolean }).pressed === true && styles.cardPressed,
+        ]}>
         <View style={[styles.avatar, { backgroundColor: fill }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <ThemedText style={styles.avatarEmoji}>{emoji}</ThemedText>
         </View>
@@ -398,6 +411,7 @@ function ProfileCard({
           {badge ? <CareBadge kind={badge} /> : null}
         </View>
       </View>
+      )}
     </Pressable>
   );
 }
@@ -439,7 +453,8 @@ function PinPrompt({
   const [localUntil, setLocalUntil] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const clearPin = useCallback(() => setPin(''), []);
-  useSensitiveScreen(clearPin); // the digits are wiped when the app goes to the background; screenshots are blocked where possible
+  const keyboard = useKeyboardAvoidance();
+  useSensitiveScreen(clearPin, 'parent-pin', { blockCapture: false }); // the digits are wiped when the app goes to the background; only dots are shown, so screenshots are allowed
 
   const accessUntil = useMemo(() => (access.state === 'cooldown' ? Date.now() + access.remainingMs : 0), [access]);
   const remaining = Math.max(accessUntil, localUntil) - now;
@@ -456,11 +471,15 @@ function PinPrompt({
       setFeedback({ kind: 'format' });
       return;
     }
+    // The dots clear at once and the button says "Checking…" (see ParentGate): the screen answers the tap immediately.
+    const attempt = pin;
+    setPin('');
     setBusy(true);
     setFeedback(null);
-    const result = await unlockParentArea(pin);
+    const started = Date.now();
+    const result = await unlockParentArea(attempt);
+    recordCheckTime(Date.now() - started);
     setBusy(false);
-    setPin('');
     if (result.ok) {
       // "ok" must come from a PIN that was really verified (a gate with no PIN also says ok): check the session itself.
       if (await parentSessionVerified()) onUnlocked();
@@ -480,7 +499,14 @@ function PinPrompt({
   return (
     <View style={styles.page}>
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View ref={keyboard.frameRef} collapsable={false} style={styles.keyboardFrame}>
+        <ScrollView
+          ref={keyboard.scrollRef}
+          onScroll={keyboard.onScroll}
+          scrollEventThrottle={32}
+          contentContainerStyle={[styles.scroll, keyboard.bottomInset > 0 && { paddingBottom: Spacing.five + keyboard.bottomInset }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <View style={[styles.column, styles.pinColumn]}>
             <View style={styles.heading}>
               <ThemedText style={styles.paw}>🔒</ThemedText>
@@ -514,8 +540,9 @@ function PinPrompt({
                     {t('pgUnavailable')}
                   </ThemedText>
                 ) : null}
-                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < 6} />
+                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < PIN_MIN_LENGTH} />
                 <Button tone="soft" label={t('fpCancel')} onPress={onCancel} />
+                <DevPinTiming />
               </PinEntry>
             </Card>
             <View style={styles.forgot}>
@@ -523,6 +550,7 @@ function PinPrompt({
             </View>
           </View>
         </ScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -533,6 +561,7 @@ const styles = StyleSheet.create({
   centered: { alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   safe: { flex: 1 },
   scroll: { padding: Spacing.three, paddingBottom: Spacing.five, alignItems: 'center' },
+  keyboardFrame: { flex: 1 },
   column: { width: '100%', maxWidth: 960, gap: Spacing.three },
   pinColumn: { maxWidth: 520 },
   heading: { alignItems: 'center', gap: Spacing.one, paddingTop: Spacing.two },
@@ -553,6 +582,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
   },
   cardAccent: { borderColor: '#CDBDF0', backgroundColor: '#F6F1FD' },
+  // Pressed / hovered look of a card (see ProfileCard): a clear pink tint and border, in the same pastel style.
+  cardPressed: { backgroundColor: '#FBD3E4', borderColor: '#F28DAE' },
+  cardHover: { backgroundColor: '#FFE9F2', borderColor: '#F6C6D8' },
   cardDashed: { borderStyle: 'dashed', borderColor: '#CDBDF0', backgroundColor: 'rgba(255,255,255,0.6)' },
   cardText: { flex: 1, minWidth: 0, gap: Spacing.one, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, alignSelf: 'stretch' },

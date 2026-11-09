@@ -1,4 +1,4 @@
-import { generateRecoveryCode, isSecretRecord, makeSecretRecord, checkSecret, normalizeRecoveryCode, validateNewPin } from '@/utils/pin-crypto';
+import { generateRecoveryCode, isSecretRecord, makeSecretRecord, checkSecret, normalizeRecoveryCode, validateNewPin, isSimplePin, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from '@/utils/pin-crypto';
 
 // Most tests use a cheap scrypt setting so the suite stays fast; the real default settings are tested in pin-crypto-real.test.ts.
 jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
@@ -73,18 +73,25 @@ describe('secret records (PIN and recovery code verifiers)', () => {
 });
 
 describe('PIN rules', () => {
-  test.each(['135792', '246801', '90817263', '472916'])('%s is accepted', (pin) => {
+  test.each(['135792', '246801', '90817263', '472916', '4829', '73514'])('%s is accepted', (pin) => {
     expect(validateNewPin(pin)).toEqual({ ok: true });
   });
-  test.each(['', '12345', '123456789', 'abcdef', '12 3456', '12345a', '1234.5'])('%j has the wrong format', (pin) => {
+  test.each(['', '1', '123', '123456789', 'abcdef', '12 3456', '12345a', '1234.5', '١٢٣٤'])('%j has the wrong format', (pin) => {
     expect(validateNewPin(pin)).toEqual({ ok: false, reason: 'format' });
   });
-  test.each(['000000', '999999', '11111111', '123456', '234567', '654321', '98765432', '121212', '123123', '12341234', '565656'])(
-    '%s is too easy to guess',
-    (pin) => {
-      expect(validateNewPin(pin)).toEqual({ ok: false, reason: 'weak' });
-    }
-  );
+  // Simple PINs are ALLOWED (the screens only show a note); none is ever refused as "weak".
+  const SIMPLE = ['1111', '0000', '1234', '4321', '000000', '999999', '11111111', '123456', '234567', '654321', '98765432', '121212', '123123', '12341234', '565656', '1212'];
+  test.each(SIMPLE)('%s is accepted, and is recognised as a simple PIN', (pin) => {
+    expect(validateNewPin(pin)).toEqual({ ok: true });
+    expect(isSimplePin(pin)).toBe(true);
+  });
+  test.each(['135792', '4829', '2580', '90817263', '472916'])('%s is not a simple PIN', (pin) => {
+    expect(isSimplePin(pin)).toBe(false);
+  });
+  test('the length limits are 4 to 8', () => {
+    expect(PIN_MIN_LENGTH).toBe(4);
+    expect(PIN_MAX_LENGTH).toBe(8);
+  });
 });
 
 describe('recovery codes', () => {

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { hoverLift } from '@/constants/hover';
+import { useKeyboardAvoidance } from '@/hooks/use-keyboard-avoidance';
 import { useTheme } from '@/hooks/use-theme';
 
 // Small pastel building blocks shared by the welcome flow and the Parent Dashboard, so both look like the rest
@@ -21,6 +22,9 @@ function isHovered(state: unknown): boolean {
 function isFocused(state: unknown): boolean {
   return (state as { focused?: boolean }).focused === true;
 }
+function isPressed(state: unknown): boolean {
+  return (state as { pressed?: boolean }).pressed === true;
+}
 
 // `scrollKey`: when it changes (a new step of a flow) the page goes back to the top, so the new step's heading is never left
 // above the visible part. `compact`: tighter padding for a short landscape screen.
@@ -35,20 +39,24 @@ export function PageShell({
   scrollKey?: string;
   compact?: boolean;
 }) {
-  const scroller = useRef<ScrollView>(null);
+  const { scrollRef, frameRef, bottomInset, onScroll } = useKeyboardAvoidance();
   useEffect(() => {
-    scroller.current?.scrollTo({ y: 0, animated: false });
-  }, [scrollKey]);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [scrollKey, scrollRef]);
   return (
     <View style={styles.page}>
       <SafeAreaView style={styles.safe}>
-        <ScrollView
-          ref={scroller}
-          contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <View style={[styles.column, { maxWidth }]}>{children}</View>
-        </ScrollView>
+        <View ref={frameRef} collapsable={false} style={styles.frame}>
+          <ScrollView
+            ref={scrollRef}
+            onScroll={onScroll}
+            scrollEventThrottle={32}
+            contentContainerStyle={[styles.scroll, compact && styles.scrollCompact, bottomInset > 0 && { paddingBottom: Spacing.six + bottomInset }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <View style={[styles.column, { maxWidth }]}>{children}</View>
+          </ScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -110,7 +118,8 @@ export function Button({
           styles.button,
           styles.smooth,
           small && styles.buttonSmall,
-          { backgroundColor: isHovered(state) && !disabled ? hoverBg : bg },
+          // A deeper shade of the same colour while the mouse is over the button (web) AND while it is being pressed (touch).
+          { backgroundColor: (isHovered(state) || isPressed(state)) && !disabled ? hoverBg : bg },
         ]}>
         <ThemedText type="smallBold" style={[small && styles.smallLabel, light && styles.whiteText]}>
           {label}
@@ -149,8 +158,8 @@ export function ChoiceCard({
           styles.choice,
           styles.smooth,
           {
-            borderColor: selected ? theme.purple : isHovered(state) ? '#F28DAE' : 'rgba(255,255,255,0.9)',
-            backgroundColor: selected ? '#E4DAF7' : isHovered(state) ? '#FFE9F2' : 'rgba(255,255,255,0.92)',
+            borderColor: selected ? theme.purple : isHovered(state) || isPressed(state) ? '#F28DAE' : 'rgba(255,255,255,0.9)',
+            backgroundColor: selected ? (isPressed(state) ? '#D6C8F0' : '#E4DAF7') : isPressed(state) ? '#FBD3E4' : isHovered(state) ? '#FFE9F2' : 'rgba(255,255,255,0.92)',
           },
         ]}>
         <View style={styles.choiceHead}>
@@ -196,7 +205,7 @@ export function ToggleRow({
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
       accessibilityLabel={label}
-      style={(state) => [styles.toggleRow, styles.smooth, state.pressed && styles.pressed, isHovered(state) && styles.toggleRowHover, isFocused(state) && styles.focusRing]}>
+      style={(state) => [styles.toggleRow, styles.smooth, state.pressed && styles.pressed, (isHovered(state) || isPressed(state)) && styles.toggleRowHover, isFocused(state) && styles.focusRing]}>
       {(state: unknown) => (
       <>
       <View style={styles.toggleText}>
@@ -212,7 +221,7 @@ export function ToggleRow({
           styles.pill,
           styles.smooth,
           { backgroundColor: value ? theme.mint : '#E3D9EE' },
-          isHovered(state) && styles.pillHover,
+          (isHovered(state) || isPressed(state)) && styles.pillHover,
         ]}>
         <ThemedText type="smallBold">{value ? onLabel : offLabel}</ThemedText>
       </View>
@@ -241,6 +250,7 @@ export function Field(props: TextInputProps & { label: string }) {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: FAMILY_BACKGROUND },
   safe: { flex: 1 },
+  frame: { flex: 1 },
   scroll: { padding: Spacing.three, paddingBottom: Spacing.six, alignItems: 'center' },
   scrollCompact: { padding: Spacing.two, paddingBottom: Spacing.three },
   column: { width: '100%', gap: Spacing.three },
@@ -251,7 +261,7 @@ const styles = StyleSheet.create({
   buttonSmall: { minHeight: 44, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 2 },
   smallLabel: { fontSize: 13 },
   whiteText: { color: '#FFFFFF' },
-  pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.96 }] },
   disabled: { opacity: 0.45 },
   choiceWrap: { alignSelf: 'stretch' },
   choice: { borderWidth: 3, borderRadius: Spacing.four, padding: Spacing.three, gap: Spacing.one, minHeight: 64, justifyContent: 'center' },

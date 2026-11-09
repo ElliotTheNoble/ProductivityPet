@@ -294,8 +294,8 @@ export type UnlockResult =
   | { ok: false; reason: 'cooldown'; remainingMs: number }
   | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
 
-// A PIN must be 6 to 8 digits (see @/utils/parent-pin.ts); entering anything else is refused without a guess.
-export const PIN_FORMAT = /^\d{6,8}$/;
+// A PIN must be 4 to 8 digits (see @/utils/parent-pin.ts); entering anything else is refused without a guess.
+export const PIN_FORMAT = /^\d{4,8}$/;
 
 // Checks a PIN and opens the parent area (see limitedAttempt for how guesses are counted).
 export async function unlockParentArea(pin: string): Promise<UnlockResult> {

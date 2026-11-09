@@ -723,6 +723,15 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-091] Shorter Parent PINs and the recovery-code clipboard: known limits (documented, OPEN, 2026-11-09)
+
+- **A 4-digit PIN has only 10,000 possibilities.** Anyone who could read the stored verifier could guess it offline whatever the key-derivation settings; the protection is the native secure storage plus the pauses (3 free tries, then 30 s, 5, 15 and finally 60 minutes per try). Simple PINs (1111, 1234) are allowed on purpose; the screens only say they are easier to guess.
+- **The clipboard is readable outside the app.** Other apps, keyboards and clipboard histories may see a copied recovery code (the warning says so). The code is not cleared from the clipboard automatically.
+- **Screenshots of a recovery code, when the parent allows them, can be shared or backed up.** The switch is per step and off by default.
+- **Copy and Paste need a new development build** (`expo-clipboard` is a native module); an older build shows "not available in this version yet" (since 2026-11-09 the app asks for the native module before loading the package; before that, an older build showed Metro's "Uncaught Error: Cannot find native module 'ExpoClipboard'" red screen, because Metro hands an error thrown while a package loads to the global error reporter instead of to a surrounding try/catch).
+- **Other optional native modules loaded with `require`** (`expo-secure-store`, `expo-notifications`) have the same latent weakness in a build that lacks them. They exist in the current builds, so it is not triggered today.
+- **Not verified on a real phone:** the keyboard spacing on Android 15+ (edge to edge), the screenshot flag on the Samsung, and the clipboard toast Android 13+ shows when an app reads it.
+
 ### [BUG-090] Expo Go on Android cannot test notifications (documented, OPEN, 2026-11-08)
 
 - **What:** Since SDK 53 `expo-notifications` does not work in Expo Go on Android: loading the package throws. The app now survives that (the package is loaded lazily, see FEATURE-102), but every notification feature is switched off there: task reminders are not scheduled, pet alerts and the test notification report failure, the permission is reported as not granted, and family mode's clean-up would report "unsupported" so no family-care reminder is scheduled.

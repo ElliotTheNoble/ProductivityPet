@@ -62,9 +62,9 @@ describe('with a PIN set', () => {
     for (const value of (await app.dump()).values()) expect(value).not.toContain(PIN);
   });
 
-  test('a PIN that is not 6-8 digits is refused without counting or checking', async () => {
+  test('a PIN that is not 4-8 digits is refused without counting or checking', async () => {
     const { app, verifier } = await boot();
-    for (const bad of ['', '123', '1234', '12345', '123456789', 'abcdef', '12 345', '12.456', ' 246813']) {
+    for (const bad of ['', '1', '123', '123456789', 'abcdef', '12 345', '12.456', ' 246813']) {
       expect(await app.gate.unlockParentArea(bad)).toEqual({ ok: false, reason: 'invalid-format' });
     }
     expect(verifier.verify).not.toHaveBeenCalled();

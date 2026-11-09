@@ -152,9 +152,9 @@ describe('setting up a PIN: step 1 (pending) and step 2 (confirmed)', () => {
     for (const s of sets) expect(s.options).toEqual({ keychainAccessible: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY' });
   });
 
-  test('a PIN that is too short, too long, not digits or too easy is refused and nothing is stored', async () => {
+  test('a PIN that is too short, too long or not digits is refused and nothing is stored', async () => {
     const app = await boot();
-    for (const [pin, reason] of [['12345', 'format'], ['123456789', 'format'], ['abcdef', 'format'], ['123456', 'weak'], ['111111', 'weak']] as const) {
+    for (const [pin, reason] of [['123', 'format'], ['123456789', 'format'], ['abcdef', 'format'], ['12 34', 'format']] as const) {
       expect(await app.pin.beginPinSetup(pin)).toEqual({ ok: false, reason });
     }
     expect(secureTest().map.size).toBe(0);
@@ -411,12 +411,11 @@ describe('recovery code', () => {
     expect(result.ok).toBe(true);
   });
 
-  test('a mistyped code (bad check character), a wrong length, or a weak new PIN are refused WITHOUT counting a guess', async () => {
+  test('a mistyped code (bad check character), a wrong length, or a badly formed new PIN are refused WITHOUT counting a guess', async () => {
     const { app, code } = await configured();
     const mistyped = compact(code).slice(0, 24) + (compact(code)[24] === '0' ? '1' : '0');
     expect(await app.pin.recoverWithCode(mistyped, NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' });
     expect(await app.pin.recoverWithCode('ABC', NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' });
-    expect(await app.pin.recoverWithCode(code, '123456')).toEqual({ ok: false, reason: 'weak' });
     expect(await app.pin.recoverWithCode(code, '12')).toEqual({ ok: false, reason: 'format' });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
   });
@@ -475,6 +474,89 @@ describe('recovery code', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------
+describe('changing the PIN: the change is verified by reading the record back', () => {
+  // Makes every write of the PIN record go through `onWrite(realSet, key, value)` instead of straight to storage.
+  function interceptWrites(onWrite: (realSet: (k: string, v: string) => unknown, key: string, value: string) => void) {
+    const secure = secureTest();
+    const realSet = secure.map.set.bind(secure.map);
+    secure.map.set = ((key: string, value: string) => {
+      onWrite(realSet, key, value);
+      return secure.map;
+    }) as typeof secure.map.set;
+    return () => {
+      secure.map.set = realSet as typeof secure.map.set;
+    };
+  }
+
+  test('a verified change stores the new PIN verifier and leaves the recovery code, its generation and its confirmed state exactly as they were', async () => {
+    const { app } = await configured();
+    const before = record();
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: true });
+    const after = record();
+    expect(await checkSecret('pin', NEW_PIN, after.pin)).toBe(true);
+    expect(await checkSecret('pin', PIN, after.pin)).toBe(false);
+    expect(after.recovery).toEqual(before.recovery);
+    expect(after.recoveryGeneration).toBe(before.recoveryGeneration);
+    expect(after.recoveryConfirmed).toBe(before.recoveryConfirmed);
+    expect(await app.pin.getRecoveryStatus()).toBe('confirmed');
+  });
+
+  test('a write that fails is not a change: it says unavailable and the old PIN keeps working', async () => {
+    const { app } = await configured();
+    secureTest().failKeys.add(RECORD);
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    secureTest().failKeys.delete(RECORD);
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
+    expect(await app.gate.unlockParentArea(NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong' });
+  });
+
+  test('a write that is silently dropped (the read-back still shows the old record) is NOT reported as a change', async () => {
+    const { app } = await configured();
+    const old = secureTest().map.get(RECORD)!;
+    const restore = interceptWrites((realSet, key, value) => realSet(key, key === RECORD ? old : value));
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+    restore();
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true }); // the old PIN still works
+    expect(await app.gate.unlockParentArea(NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong' });
+  });
+
+  test('a read-back that shows a different recovery code, generation or confirmed state is not a verified change', async () => {
+    for (const tamper of [
+      (r: Record<string, unknown>) => ({ ...r, recoveryGeneration: (r.recoveryGeneration as number) + 1 }),
+      (r: Record<string, unknown>) => ({ ...r, recoveryConfirmed: !r.recoveryConfirmed }),
+    ]) {
+      resetSecure();
+      const { app } = await configured();
+      const restore = interceptWrites((realSet, key, value) => realSet(key, key === RECORD ? JSON.stringify(tamper(JSON.parse(value))) : value));
+      expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+      restore();
+    }
+  });
+
+  test('a read-back that cannot be read is not a verified change (and says the PIN may not have changed, not that nothing happened)', async () => {
+    const { app } = await configured();
+    const restore = interceptWrites((realSet, key, value) => {
+      realSet(key, value);
+      if (key === RECORD) secureTest().failGet = true; // the storage stops answering right after the write
+    });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+    restore();
+    secureTest().failGet = false;
+    expect(await app.gate.unlockParentArea(NEW_PIN)).toEqual({ ok: true }); // the write had in fact gone through
+  });
+
+  test('an unverified change still counts the current-PIN guess, and never touches the recovery code', async () => {
+    const { app } = await configured();
+    const before = record();
+    const old = secureTest().map.get(RECORD)!;
+    const restore = interceptWrites((realSet, key, value) => realSet(key, key === RECORD ? old : value));
+    await app.pin.changePin(PIN, NEW_PIN);
+    restore();
+    expect(record().recovery).toEqual(before.recovery);
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(1);
+  });
+});
+
 describe('changing the PIN', () => {
   test('needs the current PIN; afterwards only the new PIN works and the recovery code is still valid', async () => {
     const { app, code } = await configured();
@@ -486,9 +568,9 @@ describe('changing the PIN', () => {
     expect((await app.pin.recoverWithCode(code, OTHER_PIN)).ok).toBe(true);
   });
 
-  test('refuses a weak new PIN without counting a guess; an interrupted write leaves the old PIN working', async () => {
+  test('refuses a badly formed new PIN without counting a guess; an interrupted write leaves the old PIN working', async () => {
     const { app } = await configured();
-    expect(await app.pin.changePin(PIN, '111111')).toEqual({ ok: false, reason: 'weak' });
+    expect(await app.pin.changePin(PIN, '12')).toEqual({ ok: false, reason: 'format' });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
     secureTest().failKeys.add(RECORD);
     expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable' });

@@ -192,7 +192,9 @@ export type ConfirmSetupResult =
 
 export type PinChangeResult =
   | { ok: true }
-  | { ok: false; reason: 'format' | 'weak' | 'not-configured' | 'verifier-missing' | 'unavailable' }
+  // 'not-verified': the new record was written but reading it back did not show what was written (or could not be read), so the PIN may not
+  // have changed. The change is NOT reported as done.
+  | { ok: false; reason: 'format' | 'weak' | 'not-configured' | 'verifier-missing' | 'unavailable' | 'not-verified' }
   | { ok: false; reason: 'cooldown'; remainingMs: number }
   | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
 
@@ -292,7 +294,7 @@ export async function beginPinSetup(pin: string): Promise<BeginSetupResult> {
 // the two leaves "no PIN" (an active record nothing refers to is ignored), never a marker pointing at nothing. This does not
 // count as a guess: nothing is protected yet, so there is nothing to gain by guessing.
 export async function confirmPinSetup(pin: string, code: string): Promise<ConfirmSetupResult> {
-  if (typeof pin !== 'string' || !/^\d{6,8}$/.test(pin)) return { ok: false, reason: 'format' };
+  if (typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return { ok: false, reason: 'format' };
   const canonical = normalizeRecoveryCode(code);
   if (!canonical) return { ok: false, reason: 'invalid-code' };
   if (setupBusy) return { ok: false, reason: 'unavailable' };
@@ -346,22 +348,43 @@ async function pinMatches(pin: string): Promise<boolean> {
   return !!record && (await checkSecret('pin', pin, record.pin));
 }
 
+// Two verifier records are the same (compared only with each other, never shown or logged).
+function sameSecretRecord(a: SecretRecord, b: SecretRecord): boolean {
+  return a.salt === b.salt && a.hash === b.hash && JSON.stringify(a.kdf) === JSON.stringify(b.kdf);
+}
+
 // Changes the PIN. The current PIN is a counted guess. The recovery code stays valid (and keeps its confirmed state).
+//
+// The change counts as done only when it has been VERIFIED: after the write the record is read back from storage and must hold exactly
+// the new PIN verifier that was written AND the same recovery code, generation and confirmed state as before. Anything else (the write
+// failed, the read-back failed, or showed something different) is not reported as a success.
 export async function changePin(currentPin: string, newPin: string): Promise<PinChangeResult> {
   const policy = validateNewPin(newPin);
   if (!policy.ok) return policy;
   const state = await getAuthState();
   if (state.kind !== 'ready') return { ok: false, reason: reasonFor(state) };
+  let notVerified = false;
   const outcome = await limitedAttempt(
     () => pinMatches(currentPin),
     async () => {
       const current = await readyRecord();
       if (!current) return false;
-      return saveRecord({ ...current, updatedAt: new Date().toISOString(), pin: await makeSecretRecord('pin', newPin) });
+      const next: AuthRecord = { ...current, updatedAt: new Date().toISOString(), pin: await makeSecretRecord('pin', newPin) };
+      if (!(await saveRecord(next))) return false;
+      const back = await readyRecord();
+      const verified =
+        !!back &&
+        sameSecretRecord(back.pin, next.pin) &&
+        sameSecretRecord(back.recovery, current.recovery) &&
+        back.recoveryGeneration === current.recoveryGeneration &&
+        back.recoveryConfirmed === current.recoveryConfirmed;
+      if (!verified) notVerified = true;
+      return verified;
     }
   );
   const changed = mapOutcome(outcome);
   if (changed.ok) refreshParentAccess();
+  else if (notVerified && changed.reason === 'unavailable') return { ok: false, reason: 'not-verified' };
   return changed;
 }
 

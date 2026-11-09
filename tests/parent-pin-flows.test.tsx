@@ -120,23 +120,30 @@ describe('first setup', () => {
     expect(screen.queryByLabelText(/^Recovery code\. /)).toBeNull();
   });
 
-  test('there is no Copy button anywhere on the code screen', async () => {
+  test('there is no Copy button until the code is shown (it is never copyable while hidden)', async () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('psIntroTitle'));
     await chooseAndConfirm();
     await screen.findByText(en('psCodeTitle'));
+    expect(screen.queryByRole('button', { name: en('rcCopy') })).toBeNull();
     await press(en('rcReveal'));
-    expect(screen.queryByRole('button', { name: /copy|copiar/i })).toBeNull();
+    expect(screen.getByRole('button', { name: en('rcCopy') })).toBeTruthy();
+    await press(en('rcHide'));
+    expect(screen.queryByRole('button', { name: en('rcCopy') })).toBeNull();
   });
 
-  test('a weak PIN is refused with a friendly message; mismatched confirmation is refused and starts the second entry again', async () => {
+  test('a simple PIN is allowed, with a note that it is easier to guess; mismatched confirmation is refused and starts the second entry again', async () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('psIntroTitle'));
     await press(en('psContinue'));
-    await typeDigits('123456');
-    await press(en('psNext'));
-    expect(await screen.findByText(en('pePinWeak'))).toBeTruthy();
+    await typeDigits('1111');
+    expect(screen.getByText(en('pePinSimple'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: en('psNext') }).props.accessibilityState).toMatchObject({ disabled: false });
+    await press(en('psNext')); // accepted: on to "enter it again"
+    expect(await screen.findByText(en('psConfirmTitle'))).toBeTruthy();
+    await press(en('psBack'));
     await press(en('pinKeyClear'));
+    expect(screen.queryByText(en('pePinSimple'))).toBeNull(); // a less obvious PIN: no note
     await typeDigits(PIN);
     await press(en('psNext'));
     await typeDigits(NEW_PIN);
@@ -145,12 +152,14 @@ describe('first setup', () => {
     expect(secureText()).toBe(''); // nothing was created
   });
 
-  test('a PIN shorter than 6 digits cannot be submitted', async () => {
+  test('a PIN shorter than 4 digits cannot be submitted; 4 digits can', async () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('psIntroTitle'));
     await press(en('psContinue'));
-    await typeDigits('13579');
+    await typeDigits('135');
     expect(screen.getByRole('button', { name: en('psNext') }).props.accessibilityState).toMatchObject({ disabled: true });
+    await typeDigits('7');
+    expect(screen.getByRole('button', { name: en('psNext') }).props.accessibilityState).toMatchObject({ disabled: false });
   });
 
   test('a wrong code at the end does not finish; the right PIN with the right code does', async () => {
@@ -419,6 +428,7 @@ describe('PIN management', () => {
 
   test('change PIN: current -> new -> again; the new PIN works and the old one does not', async () => {
     await openManage();
+    mockRouter.replace.mockClear();
     await press(en('pmChange'));
     await typeDigits(PIN);
     await press(en('psNext'));
@@ -426,9 +436,11 @@ describe('PIN management', () => {
     await press(en('psNext'));
     await typeDigits(NEW_PIN);
     await press(en('psFinish'));
-    expect(await screen.findByText(en('pmChanged'))).toBeTruthy();
-    await press(en('pmDone'));
-    await press(en('pmLockNow'));
+    expect(await screen.findByText(en('pmChangedBody'))).toBeTruthy(); // the confirmation card; nothing leaves the page by itself
+    expect(mockRouter.replace).not.toHaveBeenCalledWith('/parent');
+    await press(en('pmBackNow'));
+    expect(mockRouter.replace).toHaveBeenCalledWith('/parent');
+    lockParentArea();
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
     await press(en('pgUnlock'));

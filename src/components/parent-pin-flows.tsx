@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, Switch, View } from 'react-native';
 
 import { Button, Card, PageShell } from '@/components/family-ui';
 import { ConfirmModal } from '@/components/confirm-modal';
 import { PinEntry, useShortLandscape } from '@/components/pin-entry';
-import { RecoveryCodeDisplay, RecoveryCodeField } from '@/components/recovery-code';
+import { CaptureReadyContext, RecoveryCodeDisplay, RecoveryCodeField } from '@/components/recovery-code';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useSensitiveScreen, type PrivacyCapabilities } from '@/hooks/use-sensitive-screen';
@@ -20,7 +20,7 @@ import {
   recoverWithCode,
   regenerateRecoveryCode,
 } from '@/utils/parent-pin';
-import { normalizeRecoveryCode, validateNewPin } from '@/utils/pin-crypto';
+import { PIN_MIN_LENGTH, isSimplePin, normalizeRecoveryCode, validateNewPin } from '@/utils/pin-crypto';
 
 // The Parent PIN screens. Every flow here only calls the existing authentication APIs (@/utils/parent-pin.ts and
 // parent-gate.ts); there is no second authentication system. State that holds a PIN or a recovery code lives ONLY in React
@@ -83,6 +83,8 @@ function useFeedback() {
         return key('pePinFormat');
       case 'weak':
         return key('pePinWeak');
+      case 'not-verified':
+        return key('peNotVerified');
       case 'mismatch':
         return key('pePinMismatch');
       case 'invalid-code':
@@ -128,26 +130,46 @@ function useBackGuard(active: boolean, onAttempt: () => void) {
 }
 
 // A page: title, explanation, content. On a short landscape screen the words go beside the content instead of above it.
+// `recovery`: this step shows or asks for a recovery code. Those steps block screenshots (and the recent-apps preview) unless the parent
+// switches "Allow screenshots on this screen" on; the switch starts off on every step and is dropped when the step changes or the
+// screen closes. The steps that only handle PIN dots do not block anything: they never show a digit.
 function Frame({
   title,
   body,
   onClear,
+  recovery,
   children,
 }: {
   title: string;
   body?: string;
   onClear: () => void;
+  recovery?: boolean;
   children: ReactNode | ((caps: PrivacyCapabilities | null) => ReactNode);
 }) {
   const { t } = useT();
-  const caps = useSensitiveScreen(onClear);
+  // The "allow screenshots" choice is stored WITH the step it was made on, so on any other step it is simply not set, in the same
+  // render (no effect that resets it afterwards, hence no moment where a new recovery step is unprotected by a leftover choice).
+  const step = `${title}|${recovery ? 1 : 0}`;
+  const [allowedStep, setAllowedStep] = useState<string | null>(null);
+  const allowShots = !!recovery && allowedStep === step;
+  const caps = useSensitiveScreen(onClear, 'parent-pin', { blockCapture: !!recovery && !allowShots });
+  // Nothing sensitive can be revealed or pasted on a recovery step until the block was asked for (or the parent allowed screenshots).
+  const protectionSettled = !recovery || allowShots || caps !== null;
   const sideBySide = useShortLandscape();
   const banner = isDevAuthPreview() ? (
     <View accessibilityRole="alert" style={styles.banner}>
       <ThemedText type="smallBold">{t('ppBanner')}</ThemedText>
     </View>
   ) : null;
-  const content = typeof children === 'function' ? children(caps) : children;
+  const inner = typeof children === 'function' ? children(caps) : children;
+  const content = recovery ? (
+    <>
+      {inner}
+      <ScreenshotSwitch value={allowShots} onChange={(on) => setAllowedStep(on ? step : null)} />
+    </>
+  ) : (
+    inner
+  );
   const heading = (
     <View style={styles.heading}>
       <ThemedText type="subtitle" accessibilityRole="header" style={styles.center}>
@@ -162,6 +184,7 @@ function Frame({
   );
   return (
     <PageShell maxWidth={sideBySide ? 960 : 520} scrollKey={title} compact={sideBySide}>
+      <CaptureReadyContext.Provider value={protectionSettled}>
       {sideBySide ? (
         <View style={styles.sideBySide}>
           <View style={styles.sideLeft}>
@@ -177,6 +200,7 @@ function Frame({
           {content}
         </>
       )}
+      </CaptureReadyContext.Provider>
     </PageShell>
   );
 }
@@ -193,19 +217,45 @@ function LeaveDialog({ visible, onStay, onLeave }: { visible: boolean; onStay: (
   );
 }
 
+function ScreenshotSwitch({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  const { t } = useT();
+  return (
+    <View style={styles.shotRow}>
+      <View style={styles.shotText}>
+        <ThemedText type="smallBold">{t('psShotAllow')}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('psShotAllowHint')}
+        </ThemedText>
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={t('psShotAllow')} />
+    </View>
+  );
+}
+
 function CodeNotes({ caps }: { caps: PrivacyCapabilities | null }) {
   const { t } = useT();
   return (
     <>
       <ThemedText type="small" themeColor="textSecondary">
-        {t('psCodeNoShot')}
+        {caps?.unblocked ? t('psShotOn') : t('psCodeNoShot')}
       </ThemedText>
-      {caps && !caps.blocksCapture ? (
+      {caps && !caps.unblocked && !caps.blocksCapture ? (
         <ThemedText type="small" themeColor="accent">
           {t('psCodeCaptureOff')}
         </ThemedText>
       ) : null}
     </>
+  );
+}
+
+// A note under the "choose a PIN" boxes when the PIN is easy to guess. It never stops the PIN from being used.
+function SimplePinNote({ pin }: { pin: string }) {
+  const { t } = useT();
+  if (!isSimplePin(pin)) return null;
+  return (
+    <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+      {t('pePinSimple')}
+    </ThemedText>
   );
 }
 
@@ -324,8 +374,9 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
     body = (
       <Card>
         <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={next}>
+          <SimplePinNote pin={pin} />
           <ErrorLine text={feedback.text()} />
-          <Button label={t('psNext')} onPress={next} disabled={pin.length < 6} />
+          <Button label={t('psNext')} onPress={next} disabled={pin.length < PIN_MIN_LENGTH} />
           <Button tone="soft" label={t('psCancel')} onPress={leave} />
         </PinEntry>
       </Card>
@@ -337,7 +388,7 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
       <Card>
         <PinEntry label={t('pgPinLabel')} value={again} onChange={setAgain} onSubmit={() => void begin()} disabled={busy}>
           <ErrorLine text={feedback.text()} />
-          <Button label={t('psNext')} onPress={() => void begin()} disabled={busy || again.length < 6} />
+          <Button label={t('psNext')} onPress={() => void begin()} disabled={busy || again.length < PIN_MIN_LENGTH} />
           <Button
             tone="soft"
             label={t('psBack')}
@@ -361,7 +412,7 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
         <PinEntry label={t('pgPinLabel')} value={typedPin} onChange={setTypedPin} disabled={busy || feedback.paused}>
           <RecoveryCodeField value={typedCode} onChange={setTypedCode} onSubmit={() => void finish()} disabled={busy} />
           <ErrorLine text={feedback.text()} />
-          <Button label={t('psFinish')} onPress={() => void finish()} disabled={busy || typedPin.length < 6 || typedCode.length < 29} />
+          <Button label={t('psFinish')} onPress={() => void finish()} disabled={busy || typedPin.length < PIN_MIN_LENGTH || typedCode.length < 29} />
           {code ? <Button tone="soft" label={t('psBack')} onPress={() => setStage('code')} /> : null}
           <Button tone="soft" label={t('psCancel')} onPress={cancel} />
         </PinEntry>
@@ -371,7 +422,7 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
 
   return (
     <>
-      <Frame title={title} body={blurb} onClear={clearAll}>
+      <Frame title={title} body={blurb} onClear={clearAll} recovery={stage === 'code' || stage === 'finish'}>
         {(caps) =>
           stage === 'code' ? (
             <Card>
@@ -409,7 +460,7 @@ export function ConfirmCodeFlow({ title, body, onDone, onBack }: { title: string
     feedback.show(result, 'code');
   };
   return (
-    <Frame title={title} body={body} onClear={clear}>
+    <Frame title={title} body={body} onClear={clear} recovery>
       <Card>
         <RecoveryCodeField value={typed} onChange={setTyped} onSubmit={() => void submit()} disabled={busy || feedback.paused} />
         <ErrorLine text={feedback.text()} />
@@ -483,13 +534,13 @@ export function ReplacementCodeFlow({
   }
   return (
     <>
-      <Frame title={stage === 'pin' ? pinTitle : t('psCodeTitle')} body={stage === 'pin' ? pinBody : t('psCodeBody')} onClear={clearAll}>
+      <Frame title={stage === 'pin' ? pinTitle : t('psCodeTitle')} body={stage === 'pin' ? pinBody : t('psCodeBody')} onClear={clearAll} recovery={stage !== 'pin'}>
         {(caps) =>
           stage === 'pin' ? (
             <Card>
               <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void issue()} disabled={busy || feedback.paused}>
                 <ErrorLine text={feedback.text()} />
-                <Button label={t('psNext')} onPress={() => void issue()} disabled={busy || feedback.paused || pin.length < 6} />
+                <Button label={t('psNext')} onPress={() => void issue()} disabled={busy || feedback.paused || pin.length < PIN_MIN_LENGTH} />
                 {onCancel ? <Button tone="soft" label={t('psCancel')} onPress={onCancel} /> : null}
               </PinEntry>
             </Card>
@@ -518,6 +569,9 @@ export function ReplacementCodeFlow({
 // ---------------------------------------------------------------------------------------------------------
 // change the PIN: current -> new -> again
 
+// How long "PIN updated successfully" stays before the screen returns to the Parent Dashboard by itself.
+export const PIN_UPDATED_RETURN_MS = 4000;
+
 export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const { t } = useT();
   const feedback = useFeedback();
@@ -526,14 +580,35 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
   const [fresh, setFresh] = useState('');
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
+  // What the wipe on "the app left the foreground" must know without waiting for a re-render.
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  const saving = useRef(false);
   const clearAll = useCallback(() => {
+    // The typed digits are always wiped. The page is only sent back to the first step when nothing is under way: a save that is
+    // running keeps showing "Saving…", and a finished one keeps its confirmation (neither shows anything secret).
     setCurrent('');
     setFresh('');
     setAgain('');
-    setStage('current');
+    if (!saving.current && stageRef.current !== 'done') setStage('current');
     feedback.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Back to the dashboard: after the confirmation has been shown for a few seconds, or at once by the button; only ever once.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const left = useRef(false);
+  const goBack = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
+    onDoneRef.current();
+  }, []);
+  useEffect(() => {
+    if (stage !== 'done') return;
+    const id = setTimeout(goBack, PIN_UPDATED_RETURN_MS);
+    return () => clearTimeout(id);
+  }, [stage, goBack]);
 
   const toAgain = () => {
     const policy = validateNewPin(fresh);
@@ -542,16 +617,26 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
     setStage('again');
   };
   const save = async () => {
+    if (saving.current) return; // one save at a time, however it was started (button, keyboard "done", a double tap)
     if (again !== fresh) {
       setAgain('');
       return feedback.show({ ok: false, reason: 'mismatch' }, 'pin');
     }
+    saving.current = true;
     setBusy(true);
-    const result = await changePin(current, fresh);
-    setBusy(false);
+    let result: Awaited<ReturnType<typeof changePin>>;
+    try {
+      result = await changePin(current, fresh);
+    } catch {
+      result = { ok: false, reason: 'unavailable' }; // changePin does not throw; if it ever did, that is a failed save, never a success
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
     setCurrent('');
     setFresh('');
     setAgain('');
+    // Success is shown only for a change that changePin has VERIFIED (the record was read back and holds the new PIN).
     if (result.ok) {
       feedback.clear();
       return setStage('done');
@@ -560,33 +645,54 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
     feedback.show(result, 'pin');
   };
 
-  const cancelButton = <Button tone="soft" label={t('psCancel')} onPress={onCancel} />;
-  const title = stage === 'current' ? t('pmCurrentPin') : stage === 'new' ? t('pmNewPin') : stage === 'again' ? t('pmNewPinAgain') : t('pmChanged');
+  // While the new PIN is being saved nothing can interrupt it: Cancel and the Android back button are off until it has finished.
+  useBackGuard(busy, () => {});
+  const cancelButton = <Button tone="soft" label={t('psCancel')} onPress={onCancel} disabled={busy} />;
+  const title = stage === 'current' ? t('pmCurrentPin') : stage === 'new' ? t('pmNewPin') : stage === 'again' ? t('pmNewPinAgain') : t('pmChangedTitle');
   return (
     <Frame title={title} onClear={clearAll}>
-      <Card>
+      <Card color={stage === 'done' ? '#E6F7EF' : undefined}>
         {stage === 'current' ? (
-          <PinEntry label={t('pgPinLabel')} value={current} onChange={setCurrent} onSubmit={() => current.length >= 6 && setStage('new')} disabled={feedback.paused}>
+          <PinEntry label={t('pgPinLabel')} value={current} onChange={setCurrent} onSubmit={() => current.length >= PIN_MIN_LENGTH && setStage('new')} disabled={feedback.paused}>
             <ErrorLine text={feedback.text()} />
-            <Button label={t('psNext')} onPress={() => { feedback.clear(); setStage('new'); }} disabled={feedback.paused || current.length < 6} />
+            <Button label={t('psNext')} onPress={() => { feedback.clear(); setStage('new'); }} disabled={feedback.paused || current.length < PIN_MIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}
         {stage === 'new' ? (
           <PinEntry label={t('pgPinLabel')} value={fresh} onChange={setFresh} onSubmit={toAgain}>
+            <SimplePinNote pin={fresh} />
             <ErrorLine text={feedback.text()} />
-            <Button label={t('psNext')} onPress={toAgain} disabled={fresh.length < 6} />
+            <Button label={t('psNext')} onPress={toAgain} disabled={fresh.length < PIN_MIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}
         {stage === 'again' ? (
           <PinEntry label={t('pgPinLabel')} value={again} onChange={setAgain} onSubmit={() => void save()} disabled={busy}>
             <ErrorLine text={feedback.text()} />
-            <Button label={t('psFinish')} onPress={() => void save()} disabled={busy || again.length < 6} />
+            {busy ? (
+              <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+                {t('pmSavingNote')}
+              </ThemedText>
+            ) : null}
+            <Button label={busy ? t('pmSaving') : t('psFinish')} onPress={() => void save()} disabled={busy || again.length < PIN_MIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}
-        {stage === 'done' ? <Button label={t('pmDone')} onPress={onDone} /> : null}
+        {stage === 'done' ? (
+          <>
+            <ThemedText style={styles.doneMark} accessibilityElementsHidden importantForAccessibility="no">
+              ✓
+            </ThemedText>
+            <ThemedText type="smallBold" style={styles.center} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {t('pmChangedBody')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+              {t('pmReturning')}
+            </ThemedText>
+            <Button label={t('pmBackNow')} onPress={goBack} />
+          </>
+        ) : null}
       </Card>
     </Frame>
   );
@@ -690,8 +796,9 @@ export function RecoveryFlow({ onBack }: { onBack: () => void }) {
     content = (
       <Card>
         <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={toAgain}>
+          <SimplePinNote pin={pin} />
           <ErrorLine text={feedback.text()} />
-          <Button label={t('psNext')} onPress={toAgain} disabled={pin.length < 6} />
+          <Button label={t('psNext')} onPress={toAgain} disabled={pin.length < PIN_MIN_LENGTH} />
           <Button tone="soft" label={t('psBack')} onPress={() => { feedback.clear(); setStage('code'); }} />
         </PinEntry>
       </Card>
@@ -703,7 +810,7 @@ export function RecoveryFlow({ onBack }: { onBack: () => void }) {
       <Card>
         <PinEntry label={t('pgPinLabel')} value={again} onChange={setAgain} onSubmit={() => void recover()} disabled={busy}>
           <ErrorLine text={feedback.text()} />
-          <Button label={t('psNext')} onPress={() => void recover()} disabled={busy || again.length < 6} />
+          <Button label={t('psNext')} onPress={() => void recover()} disabled={busy || again.length < PIN_MIN_LENGTH} />
         </PinEntry>
       </Card>
     );
@@ -723,7 +830,7 @@ export function RecoveryFlow({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <Frame title={title} body={blurb} onClear={clearAll}>
+      <Frame title={title} body={blurb} onClear={clearAll} recovery={stage === 'code' || stage === 'show'}>
         {(caps) =>
           stage === 'show' ? (
             <Card>
@@ -793,13 +900,7 @@ export function ManageHome() {
   const home = () => setView('home');
   if (view === 'change') {
     return (
-      <ChangePinFlow
-        onDone={() => {
-          setNotice(t('pmChanged'));
-          home();
-        }}
-        onCancel={home}
-      />
+      <ChangePinFlow onDone={() => router.replace('/parent')} onCancel={home} />
     );
   }
   if (view === 'code') {
@@ -846,4 +947,7 @@ const styles = StyleSheet.create({
   sideBySide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
   sideLeft: { flex: 2, minWidth: 0, gap: Spacing.two },
   sideRight: { flex: 3, minWidth: 0, gap: Spacing.three },
+  shotRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.two },
+  shotText: { flex: 1, minWidth: 0, gap: 2 },
+  doneMark: { fontSize: 44, lineHeight: 52, textAlign: 'center', color: '#2E9E6F', fontWeight: '800' },
 });

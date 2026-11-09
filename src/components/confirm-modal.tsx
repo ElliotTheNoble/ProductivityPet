@@ -49,11 +49,13 @@ export function ConfirmModal({
           <View style={styles.buttons}>
             {singleAction ? null : (
               <Pressable accessibilityRole="button" accessibilityLabel={cancelLabel ?? t('cancel')} onPress={onCancel} disabled={busy} style={({ pressed }) => [styles.buttonWrap, pressed && styles.pressed]}>
-                <ThemedView type="backgroundElement" style={[styles.button, styles.pointer]}>
-                  <ThemedText type="smallBold" style={styles.label}>
-                    {cancelLabel ?? t('cancel')}
-                  </ThemedText>
-                </ThemedView>
+                {({ pressed }) => (
+                  <ThemedView type="backgroundElement" style={[styles.button, styles.pointer, pressed && styles.cancelPressed]}>
+                    <ThemedText type="smallBold" style={styles.label}>
+                      {cancelLabel ?? t('cancel')}
+                    </ThemedText>
+                  </ThemedView>
+                )}
               </Pressable>
             )}
             <Pressable
@@ -62,11 +64,13 @@ export function ConfirmModal({
               onPress={onConfirm}
               disabled={busy || confirmDisabled}
               style={({ pressed }) => [styles.buttonWrap, pressed && styles.pressed, (busy || confirmDisabled) && styles.disabled]}>
-              <ThemedView type="accent" style={[styles.button, styles.pointer]}>
-                <ThemedText type="smallBold" style={[styles.label, styles.confirmText]}>
-                  {busy ? t('pleaseWait') : confirmLabel}
-                </ThemedText>
-              </ThemedView>
+              {({ pressed }) => (
+                <ThemedView type="accent" style={[styles.button, styles.pointer, pressed && styles.confirmPressed]}>
+                  <ThemedText type="smallBold" style={[styles.label, styles.confirmText]}>
+                    {busy ? t('pleaseWait') : confirmLabel}
+                  </ThemedText>
+                </ThemedView>
+              )}
             </Pressable>
           </View>
         </ThemedView>
@@ -93,7 +97,10 @@ const styles = StyleSheet.create({
   button: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Spacing.five },
   // A long label (large text, Spanish) wraps inside the card instead of running off its edge.
   buttonWrap: { maxWidth: '100%', flexShrink: 1 },
-  pressed: { opacity: 0.8 },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },
+  // A deeper shade of each button while it is pressed.
+  cancelPressed: { backgroundColor: '#F6C6D8' },
+  confirmPressed: { backgroundColor: '#EE7AA0' },
   disabled: { opacity: 0.45 },
   pointer: { cursor: 'pointer' },
   confirmText: { color: '#FFFFFF' },

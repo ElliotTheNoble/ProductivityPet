@@ -2,6 +2,7 @@ import { scryptAsync } from '@noble/hashes/scrypt';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 
 import { DEFAULT_KDF, type KdfParams } from '@/utils/kdf-params';
+import { recordDeriveTime } from '@/utils/pin-timing';
 import { secureRandomBytes, type RandomBytes } from '@/utils/secure-random';
 
 // PIN and recovery-code verification primitives. Nothing here stores anything.
@@ -11,9 +12,10 @@ import { secureRandomBytes, type RandomBytes } from '@/utils/secure-random';
 // widely used library); no hash or key-derivation function is written here. PIN and recovery code use different
 // "domains", so a record made for one can never be used to check the other.
 //
-// Honest limit: a 6-8 digit PIN has few possibilities, so ANY stored verifier that someone can read can be guessed offline,
-// whatever the settings. The protection comes from keeping the record in native secure storage (where an app user cannot
-// read it) plus the attempt limits in parent-gate.ts; scrypt only makes each offline guess slower.
+// Honest limit: a 4-8 digit PIN has few possibilities (a 4-digit one only 10,000), so ANY stored verifier that someone can read can
+// be guessed offline, whatever the settings. The protection comes from keeping the record in native secure storage (where an app
+// user cannot read it) plus the attempt limits in parent-gate.ts (3 free tries, then 30 seconds, 5, 15 and finally 60 minutes per
+// try); scrypt only makes each offline guess slower.
 
 export type SecretDomain = 'pin' | 'recovery';
 
@@ -50,7 +52,10 @@ export function isSecretRecord(value: unknown): value is SecretRecord {
 async function derive(domain: SecretDomain, secret: string, salt: Uint8Array, kdf: KdfParams): Promise<Uint8Array> {
   // The domain is part of the secret, so the two kinds of record can never be swapped.
   const input = utf8ToBytes(`productivitypet:${domain}:v1:${secret}`);
-  return scryptAsync(input, salt, { N: kdf.N, r: kdf.r, p: kdf.p, dkLen: kdf.dkLen, asyncTick: 10 });
+  const started = Date.now();
+  const key = await scryptAsync(input, salt, { N: kdf.N, r: kdf.r, p: kdf.p, dkLen: kdf.dkLen, asyncTick: 10 });
+  recordDeriveTime(Date.now() - started, kdf.N); // development-only timing of this step (never the secret), see pin-timing.ts
+  return key;
 }
 
 // Takes the same time however many leading bytes match.
@@ -82,25 +87,30 @@ export async function checkSecret(domain: SecretDomain, secret: string, record: 
 // ---------------------------------------------------------------------------------------------------------
 // PIN rules
 
-export const PIN_MIN_LENGTH = 6;
+export const PIN_MIN_LENGTH = 4;
 export const PIN_MAX_LENGTH = 8;
 
+// 'weak' is no longer returned (simple PINs are allowed, see isSimplePin); the member stays so existing callers still type-check.
 export type PinPolicyResult = { ok: true } | { ok: false; reason: 'format' | 'weak' };
 
-// A new PIN is 6 to 8 digits and not trivially guessable (all the same digit, a straight run up or down, or a short block
-// repeated, like 121212 or 123123).
+// A new PIN is 4 to 8 digits. Repeats (1111) and runs (1234) are ALLOWED: the screens show a non-blocking note instead.
 export function validateNewPin(pin: string): PinPolicyResult {
-  if (typeof pin !== 'string' || !/^\d{6,8}$/.test(pin)) return { ok: false, reason: 'format' };
-  const d = Array.from(pin, Number);
-  if (d.every((x) => x === d[0])) return { ok: false, reason: 'weak' };
-  const step = d[1] - d[0];
-  if ((step === 1 || step === -1) && d.every((x, i) => i === 0 || x - d[i - 1] === step)) return { ok: false, reason: 'weak' };
-  for (let block = 1; block <= 4; block += 1) {
-    if (pin.length % block === 0 && pin.length / block >= 2 && pin === pin.slice(0, block).repeat(pin.length / block)) {
-      return { ok: false, reason: 'weak' };
-    }
-  }
+  if (typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return { ok: false, reason: 'format' };
   return { ok: true };
+}
+
+// True for a PIN that is easy to guess: all the same digit, a straight run up or down, or a short block repeated (121212, 123123).
+// Only used to show a note; it never rejects a PIN.
+export function isSimplePin(pin: string): boolean {
+  if (typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return false;
+  const d = Array.from(pin, Number);
+  if (d.every((x) => x === d[0])) return true;
+  const step = d[1] - d[0];
+  if ((step === 1 || step === -1) && d.every((x, i) => i === 0 || x - d[i - 1] === step)) return true;
+  for (let block = 1; block <= 4; block += 1) {
+    if (pin.length % block === 0 && pin.length / block >= 2 && pin === pin.slice(0, block).repeat(pin.length / block)) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------------------------------------
