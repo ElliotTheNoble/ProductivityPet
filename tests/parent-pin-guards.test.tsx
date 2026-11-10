@@ -103,7 +103,7 @@ describe('the web (no secure storage)', () => {
     await AsyncStorage.clear();
     expect(startParentAuth({ enabled: true, platformOS: 'web', devPreview: true })).toBe(true);
     expect(isDevAuthPreview()).toBe(true);
-    const begun = await beginPinSetup('135792');
+    const begun = await beginPinSetup('1357');
     expect(begun.ok).toBe(true);
     expect(secureTest().sets).toEqual([]);
     expect([...secureTest().map.keys()]).toEqual([]);

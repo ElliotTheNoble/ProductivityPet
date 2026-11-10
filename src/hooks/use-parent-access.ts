@@ -23,7 +23,7 @@ export function useParentAccess(): ParentAccess {
       setAccess(next);
       if (timer) clearTimeout(timer);
       timer = null;
-      const wait = next.state === 'cooldown' ? next.remainingMs : next.state === 'unlocked' ? getSessionRemainingMs() : 0;
+      const wait = next.state === 'unlocked' ? getSessionRemainingMs() : 0;
       if (wait > 0) timer = setTimeout(() => void refresh(), Math.min(wait + 50, 60_000));
     };
     void refresh();

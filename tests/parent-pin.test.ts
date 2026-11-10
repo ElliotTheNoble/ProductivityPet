@@ -4,6 +4,11 @@ import { T0, fixture, freezeClock, loadApp, resetSecure, secureTest, setClock, u
 
 // Cheap scrypt settings keep the suite fast (the real settings are exercised in pin-crypto-real.test.ts).
 jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
+// The phone's own screen-lock check (used after five wrong PINs): it passes here.
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => 2),
+  authenticateAsync: jest.fn(async () => ({ success: true })),
+}));
 
 const fs = require('fs');
 const path = require('path');
@@ -15,9 +20,9 @@ const GATE_ATTEMPTS = `${P}parentGate`;
 const FAMILY = `${P}petFamily`;
 const RECORD = 'pp.parentAuth.v1';
 const ATTEMPTS = 'pp.parentAuth.attempts.v1';
-const PIN = '135792';
-const NEW_PIN = '864209';
-const OTHER_PIN = '472916';
+const PIN = '1357';
+const NEW_PIN = '8642';
+const OTHER_PIN = '4729';
 const SEC = 1000;
 
 beforeEach(() => {
@@ -39,7 +44,8 @@ async function everything(app: App) {
 }
 const record = () => JSON.parse(secureTest().map.get(RECORD)!);
 const compact = (code: string) => code.replace(/-/g, '');
-const CODE_FORMAT = /^[0-9A-HJKMNP-TV-Z]{5}(-[0-9A-HJKMNP-TV-Z]{5}){4}$/;
+const CODE_FORMAT = /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/; // a new recovery code: 10 characters
+const LEGACY_CODE_FORMAT = /^[0-9A-HJKMNP-TV-Z]{5}(-[0-9A-HJKMNP-TV-Z]{5}){4}$/; // earlier versions: 25
 
 // Both steps of setup (what the future setup screens do): show the code, then the parent types back the PIN and the code.
 async function activate(app: App, pin = PIN): Promise<string> {
@@ -202,7 +208,7 @@ describe('setting up a PIN: step 1 (pending) and step 2 (confirmed)', () => {
     Crypto.getRandomBytesAsync = async () => {
       throw new Error('no secure random');
     };
-    expect(await app.pin.beginPinSetup(PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.beginPinSetup(PIN)).toMatchObject({ ok: false, reason: 'unavailable' });
     expect(secureTest().map.size).toBe(0);
     expect((await app.dump()).has(MARKER)).toBe(false);
   });
@@ -247,7 +253,7 @@ describe('interrupted setup: an incomplete PIN is never switched on, nobody is l
   test('the app closes while the code is being generated or before anything is saved: nothing exists', async () => {
     const app = await boot();
     secureTest().failSet = true;
-    expect(await app.pin.beginPinSetup(PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.beginPinSetup(PIN)).toMatchObject({ ok: false, reason: 'unavailable' });
     secureTest().failSet = false;
     expect(secureTest().map.size).toBe(0);
     expect(await app.pin.getAuthState()).toMatchObject({ kind: 'none', pending: null });
@@ -262,7 +268,7 @@ describe('interrupted setup: an incomplete PIN is never switched on, nobody is l
     if (!begun.ok) throw new Error('begin');
     const before = await app.dump();
     const restore = failMarkerWrites(app);
-    expect(await app.pin.confirmPinSetup(PIN, begun.recoveryCode)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.confirmPinSetup(PIN, begun.recoveryCode)).toMatchObject({ ok: false, reason: 'unavailable' });
     restore();
     expect(record().phase).toBe('active'); // the secure record was saved...
     expect((await app.dump()).has(MARKER)).toBe(false); // ...but nothing refers to it
@@ -283,7 +289,7 @@ describe('interrupted setup: an incomplete PIN is never switched on, nobody is l
     const begun = await app.pin.beginPinSetup(PIN);
     if (!begun.ok) throw new Error('begin');
     secureTest().failKeys.add(RECORD);
-    expect(await app.pin.confirmPinSetup(PIN, begun.recoveryCode)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.confirmPinSetup(PIN, begun.recoveryCode)).toMatchObject({ ok: false, reason: 'unavailable' });
     secureTest().failKeys.delete(RECORD);
     expect((await app.dump()).has(MARKER)).toBe(false);
     expect(await app.gate.getParentAccess()).toEqual({ state: 'unprotected' });
@@ -330,21 +336,21 @@ describe('checking the PIN through the Parent Gate', () => {
   test('locked until the right PIN; wrong guesses are counted in SECURE storage, not ordinary storage', async () => {
     const { app } = await configured();
     expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' });
-    expect(await app.gate.unlockParentArea(OTHER_PIN)).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 2 });
+    expect(await app.gate.unlockParentArea(OTHER_PIN)).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 4 });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(1);
     expect((await app.dump()).has(GATE_ATTEMPTS)).toBe(false);
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
   });
 
-  test('three wrong PINs start a pause, and a restart does not clear it', async () => {
+  test('five wrong PINs call for the phone\'s screen-lock check (no waiting), and a restart does not skip it', async () => {
     const { app } = await configured();
-    for (const pin of ['000001', '000002', '000003']) await app.gate.unlockParentArea(pin);
-    expect((await app.gate.getParentAccess()).state).toBe('cooldown');
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
     const restarted = await boot({ storage: await app.dump() });
-    expect((await restarted.gate.getParentAccess()).state).toBe('cooldown');
-    expect(await restarted.gate.unlockParentArea(PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
-    setClock(T0 + 40 * SEC);
+    expect(await restarted.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(await restarted.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' }); // even the right PIN, until the check is passed
+    expect(await restarted.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('passed');
     expect(await restarted.gate.unlockParentArea(PIN)).toEqual({ ok: true });
   });
 
@@ -363,11 +369,11 @@ describe('checking the PIN through the Parent Gate', () => {
     expect((await app.gate.getParentAccess()).state).not.toBe('unlocked');
   });
 
-  test('a damaged guess counter in secure storage starts a pause instead of resetting the limits', async () => {
+  test('a damaged guess counter in secure storage counts as five wrong tries instead of resetting the limits', async () => {
     const { app } = await configured();
     secureTest().map.set(ATTEMPTS, '{ not json');
-    expect((await app.gate.getParentAccess()).state).toBe('cooldown');
-    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(3); // repaired, so the pause ends on time
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!)).toMatchObject({ failures: 5, lockedUntil: 0 }); // repaired, not left damaged
   });
 });
 
@@ -378,7 +384,7 @@ describe('recovery code', () => {
     const result = await app.pin.recoverWithCode(code, NEW_PIN);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.recoveryCode).toMatch(CODE_FORMAT);
+    expect(result.recoveryCode).toMatch(CODE_FORMAT); // the new code is the 10-character kind
     expect(result.recoveryCode).not.toBe(code);
     expect(record().recoveryGeneration).toBe(2);
     // the old PIN no longer works, the new one does
@@ -413,39 +419,42 @@ describe('recovery code', () => {
 
   test('a mistyped code (bad check character), a wrong length, or a badly formed new PIN are refused WITHOUT counting a guess', async () => {
     const { app, code } = await configured();
-    const mistyped = compact(code).slice(0, 24) + (compact(code)[24] === '0' ? '1' : '0');
-    expect(await app.pin.recoverWithCode(mistyped, NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' });
+    expect(await app.pin.recoverWithCode('ABCDE-FGHJU', NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' }); // U is not in the alphabet
     expect(await app.pin.recoverWithCode('ABC', NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' });
+    expect(await app.pin.recoverWithCode('A'.repeat(24), NEW_PIN)).toEqual({ ok: false, reason: 'invalid-code' });
     expect(await app.pin.recoverWithCode(code, '12')).toEqual({ ok: false, reason: 'format' });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
   });
 
-  test('a well-formed but wrong code is a counted guess; three start a pause; the pause survives a restart', async () => {
+  test('a well-formed but wrong code is refused, never counted and never held back: it is the way out for a parent who forgot the PIN', async () => {
     const { app, code } = await configured();
     const wrong = await generateRecoveryCode();
-    expect(await app.pin.recoverWithCode(wrong, NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 2 });
-    await app.pin.recoverWithCode(wrong, NEW_PIN);
-    expect(await app.pin.recoverWithCode(wrong, NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong', cooldownMs: 30 * SEC });
+    for (let i = 0; i < 8; i += 1) {
+      expect(await app.pin.recoverWithCode(wrong, NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong' });
+    }
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
     const restarted = await boot({ storage: await app.dump() });
-    expect(await restarted.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: false, reason: 'cooldown' }); // even the right code waits
-    setClock(T0 + 40 * SEC);
-    expect((await restarted.pin.recoverWithCode(code, NEW_PIN)).ok).toBe(true);
+    expect((await restarted.pin.recoverWithCode(code, NEW_PIN)).ok).toBe(true); // the right code still works at once
   });
 
-  test('PIN guesses and recovery-code guesses share ONE counter', async () => {
+  test('a recovery code does not use up the PIN tries; a right code clears the count of wrong PINs', async () => {
     const { app, code } = await configured();
     const wrong = await generateRecoveryCode();
-    await app.gate.unlockParentArea('000001');
-    await app.gate.unlockParentArea('000002');
-    await app.pin.recoverWithCode(wrong, NEW_PIN); // the third guess overall
-    expect((await app.gate.getParentAccess()).state).toBe('cooldown');
-    expect(await app.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
+    await app.gate.unlockParentArea('0001');
+    await app.gate.unlockParentArea('0002');
+    await app.pin.recoverWithCode(wrong, NEW_PIN);
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(2); // only the two PIN guesses
+    for (const pin of ['0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(await app.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: true }); // the right code is not held back by the screen-lock check
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
+    expect(await app.gate.unlockParentArea(NEW_PIN)).toEqual({ ok: true });
   });
 
   test('if the new record cannot be saved, NOTHING changes: the old PIN and the old code still work', async () => {
     const { app, code } = await configured();
     secureTest().failKeys.add(RECORD);
-    expect(await app.pin.recoverWithCode(code, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.recoverWithCode(code, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable', detail: 'follow-up-failed' });
     secureTest().failKeys.delete(RECORD);
     expect(record().recoveryGeneration).toBe(1);
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true }); // the old PIN
@@ -475,6 +484,11 @@ describe('recovery code', () => {
 
 // ---------------------------------------------------------------------------------------------------------
 describe('changing the PIN: the change is verified by reading the record back', () => {
+  let undo: (() => void) | null = null;
+  afterEach(() => {
+    undo?.(); // the patched storage is always put back, even when an assertion fails
+    undo = null;
+  });
   // Makes every write of the PIN record go through `onWrite(realSet, key, value)` instead of straight to storage.
   function interceptWrites(onWrite: (realSet: (k: string, v: string) => unknown, key: string, value: string) => void) {
     const secure = secureTest();
@@ -483,9 +497,11 @@ describe('changing the PIN: the change is verified by reading the record back', 
       onWrite(realSet, key, value);
       return secure.map;
     }) as typeof secure.map.set;
-    return () => {
+    const restore = () => {
       secure.map.set = realSet as typeof secure.map.set;
     };
+    undo = restore;
+    return restore;
   }
 
   test('a verified change stores the new PIN verifier and leaves the recovery code, its generation and its confirmed state exactly as they were', async () => {
@@ -504,7 +520,7 @@ describe('changing the PIN: the change is verified by reading the record back', 
   test('a write that fails is not a change: it says unavailable and the old PIN keeps working', async () => {
     const { app } = await configured();
     secureTest().failKeys.add(RECORD);
-    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable', detail: 'record-write' });
     secureTest().failKeys.delete(RECORD);
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
     expect(await app.gate.unlockParentArea(NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong' });
@@ -514,7 +530,7 @@ describe('changing the PIN: the change is verified by reading the record back', 
     const { app } = await configured();
     const old = secureTest().map.get(RECORD)!;
     const restore = interceptWrites((realSet, key, value) => realSet(key, key === RECORD ? old : value));
-    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified', detail: 'read-back-differs' });
     restore();
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true }); // the old PIN still works
     expect(await app.gate.unlockParentArea(NEW_PIN)).toMatchObject({ ok: false, reason: 'wrong' });
@@ -528,7 +544,7 @@ describe('changing the PIN: the change is verified by reading the record back', 
       resetSecure();
       const { app } = await configured();
       const restore = interceptWrites((realSet, key, value) => realSet(key, key === RECORD ? JSON.stringify(tamper(JSON.parse(value))) : value));
-      expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+      expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified', detail: 'read-back-differs' });
       restore();
     }
   });
@@ -539,7 +555,7 @@ describe('changing the PIN: the change is verified by reading the record back', 
       realSet(key, value);
       if (key === RECORD) secureTest().failGet = true; // the storage stops answering right after the write
     });
-    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified' });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'not-verified', detail: 'read-back' });
     restore();
     secureTest().failGet = false;
     expect(await app.gate.unlockParentArea(NEW_PIN)).toEqual({ ok: true }); // the write had in fact gone through
@@ -573,7 +589,7 @@ describe('changing the PIN', () => {
     expect(await app.pin.changePin(PIN, '12')).toEqual({ ok: false, reason: 'format' });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
     secureTest().failKeys.add(RECORD);
-    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toMatchObject({ ok: false, reason: 'unavailable' });
     secureTest().failKeys.delete(RECORD);
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
     expect(await app.gate.unlockParentArea(NEW_PIN)).toMatchObject({ ok: false });
@@ -732,12 +748,13 @@ describe('interrupted recovery: a new recovery code that was never acknowledged 
     const { app, code } = await configured();
     const recovered = await app.pin.recoverWithCode(code, NEW_PIN);
     if (!recovered.ok) throw new Error('recovery');
-    const c = compact(recovered.recoveryCode);
-    expect(await app.pin.confirmRecoveryCode(c.slice(0, 24) + (c[24] === '0' ? '1' : '0'))).toEqual({ ok: false, reason: 'invalid-code' });
+    expect(await app.pin.confirmRecoveryCode('ABCDE-FGHJU')).toEqual({ ok: false, reason: 'invalid-code' }); // U is not in the alphabet: not a guess
+    expect(await app.pin.confirmRecoveryCode('ABC')).toEqual({ ok: false, reason: 'invalid-code' });
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
-    expect(await app.pin.confirmRecoveryCode(await generateRecoveryCode())).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 2 });
+    expect(await app.pin.confirmRecoveryCode(await generateRecoveryCode())).toMatchObject({ ok: false, reason: 'wrong' }); // a wrong code: refused, never counted
+    expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(0);
     secureTest().failKeys.add(RECORD);
-    expect(await app.pin.confirmRecoveryCode(recovered.recoveryCode)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.pin.confirmRecoveryCode(recovered.recoveryCode)).toMatchObject({ ok: false, reason: 'unavailable' });
     secureTest().failKeys.delete(RECORD);
     expect(await app.pin.getRecoveryStatus()).toBe('unconfirmed'); // a failed save changes nothing
     expect(await app.pin.confirmRecoveryCode(recovered.recoveryCode.toLowerCase())).toEqual({ ok: true });
@@ -747,14 +764,14 @@ describe('interrupted recovery: a new recovery code that was never acknowledged 
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(failuresBefore);
   });
 
-  test('confirming shares the lockout counter and survives a restart', async () => {
+  test('confirming with a wrong code is never held back: the right code still confirms, after any number of wrong ones and a restart', async () => {
     const { app, code } = await configured();
     const recovered = await app.pin.recoverWithCode(code, NEW_PIN);
     if (!recovered.ok) throw new Error('recovery');
-    for (let i = 0; i < 3; i += 1) await app.pin.confirmRecoveryCode(await generateRecoveryCode());
+    for (let i = 0; i < 8; i += 1) await app.pin.confirmRecoveryCode(await generateRecoveryCode());
     const restarted = await boot({ storage: await app.dump() });
-    expect(await restarted.pin.confirmRecoveryCode(recovered.recoveryCode)).toMatchObject({ ok: false, reason: 'cooldown' });
-    expect((await restarted.gate.getParentAccess()).state).toBe('cooldown');
+    expect(await restarted.pin.confirmRecoveryCode(recovered.recoveryCode)).toEqual({ ok: true });
+    expect((await restarted.gate.getParentAccess()).state).toBe('locked'); // no waiting, and nothing owed
   });
 
   test('a regenerated code is unconfirmed too, and a PIN change leaves the confirmed state alone', async () => {
@@ -812,18 +829,24 @@ describe('security properties', () => {
     expect(second.code).not.toBe(first.code);
   });
 
-  test('PIN guesses, PIN changes, recovery-code guesses and confirmations all share ONE persistent counter', async () => {
+  test('every PIN guess (the gate, a PIN change, a new-code request) shares ONE persistent counter; after five the screen-lock check is owed', async () => {
     const { app, code } = await configured();
-    await app.gate.unlockParentArea('000001'); // 1: the gate
-    await app.pin.changePin('000002', NEW_PIN); // 2: a PIN change
-    await app.pin.recoverWithCode(await generateRecoveryCode(), NEW_PIN); // 3: a recovery attempt
+    await app.gate.unlockParentArea('0001'); // 1: the gate
+    await app.pin.changePin('0002', NEW_PIN); // 2: a PIN change (its current PIN is wrong)
+    await app.pin.regenerateRecoveryCode('0003'); // 3: a new-code request (wrong PIN)
+    await app.pin.recoverWithCode(await generateRecoveryCode(), NEW_PIN); // a wrong recovery code is NOT a PIN guess
     expect(JSON.parse(secureTest().map.get(ATTEMPTS)!).failures).toBe(3);
-    expect((await app.gate.getParentAccess()).state).toBe('cooldown');
-    expect(await app.pin.regenerateRecoveryCode(PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
-    expect(await app.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
+    await app.gate.unlockParentArea('0004'); // 4
+    await app.pin.changePin('0005', NEW_PIN); // 5
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    // from now on every PIN-based step says the same, and checks nothing
+    expect(await app.pin.regenerateRecoveryCode(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(await app.pin.changePin(PIN, NEW_PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
     const restarted = await boot({ storage: await app.dump() }); // the counter is persistent
-    expect(await restarted.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
-    expect((await app.dump()).has(GATE_ATTEMPTS)).toBe(false); // and it never lives in ordinary storage
+    expect(await restarted.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(await restarted.pin.recoverWithCode(code, NEW_PIN)).toMatchObject({ ok: true }); // the recovery code is the way out and is not held back
+    expect((await app.dump()).has(GATE_ATTEMPTS)).toBe(false); // and the counter never lives in ordinary storage
   });
 
   test('no PIN, recovery code or verifier is ever written to a log', async () => {
@@ -832,7 +855,7 @@ describe('security properties', () => {
     const begun = await app.pin.beginPinSetup(PIN);
     if (!begun.ok) throw new Error('begin');
     await app.pin.confirmPinSetup(PIN, begun.recoveryCode);
-    await app.gate.unlockParentArea('000001');
+    await app.gate.unlockParentArea('0001');
     await app.gate.unlockParentArea(PIN);
     await app.pin.changePin(PIN, NEW_PIN);
     const recovered = await app.pin.recoverWithCode(begun.recoveryCode, OTHER_PIN);

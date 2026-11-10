@@ -13,7 +13,6 @@ export const familyPickerEs: Table = {
 
   fpMain: 'Principal',
   fpMainSubProtected: 'Las mascotas de los padres. Pide el PIN de los padres.',
-  fpMainLocked: 'Bloqueado. Inténtalo de nuevo en {time}.',
   fpMainMissingShort: 'Falta el PIN de los padres. Los niños pueden seguir jugando.',
   fpMainNoPin: 'Principal sigue bloqueado hasta que un adulto cree el PIN de los padres. Los niños pueden seguir jugando.',
   fpMainUnconfirmed: 'La creación del PIN de los padres aún no está terminada, así que Principal sigue bloqueado. Los niños pueden seguir jugando.',

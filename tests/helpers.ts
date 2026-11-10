@@ -128,7 +128,7 @@ export type App = Awaited<ReturnType<typeof loadApp>>;
 // Sets the REAL Parent PIN up on a freshly loaded app (family mode on, a phone or tablet), the way a parent does: the setup claim is
 // granted first (a household that already has children needs it; see src/utils/family-claim.ts), then PIN, recovery code and
 // confirmation. Leaves the parent area locked, or unlocked with `unlocked: true`. `unconfirmed` leaves a new recovery code unconfirmed.
-export const TEST_PIN = '246813';
+export const TEST_PIN = '2468';
 export async function configurePin(app: App, options: { unlocked?: boolean; unconfirmed?: boolean } = {}) {
   app.pin.startParentAuth({ enabled: true, platformOS: 'ios' });
   const claim = require('@/utils/family-claim') as typeof import('@/utils/family-claim');
@@ -178,3 +178,32 @@ export function resetSecure() {
 
 export const fixture = (name: string): Record<string, unknown> =>
   JSON.parse(JSON.stringify(require(`./fixtures/${name}.json`)));
+
+// ---------------------------------------------------------------------------------------------------------
+// EARLIER (25-character) recovery codes. The app no longer MAKES them, but codes made before the 10-character change stay valid, so the tests
+// need to make some: 24 random characters (15 random bytes) plus a Luhn mod 32 check character, in five groups of five.
+const LEGACY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+export function makeLegacyRecoveryCode(bytes: Uint8Array = new Uint8Array(require('crypto').randomBytes(15))): string {
+  let bits = 0;
+  let value = 0;
+  let data = '';
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      data += LEGACY_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+    value &= (1 << bits) - 1;
+  }
+  let factor = 2;
+  let sum = 0;
+  for (let i = data.length - 1; i >= 0; i -= 1) {
+    let addend = factor * LEGACY_ALPHABET.indexOf(data[i]);
+    factor = factor === 2 ? 1 : 2;
+    addend = Math.floor(addend / 32) + (addend % 32);
+    sum += addend;
+  }
+  const full = data + LEGACY_ALPHABET[(32 - (sum % 32)) % 32];
+  return full.match(/.{5}/g)!.join('-');
+}

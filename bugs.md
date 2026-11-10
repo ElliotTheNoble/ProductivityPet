@@ -723,6 +723,13 @@ Fixed: BUG-058 (postcard mouse-swipe), BUG-059 (mailbox size), BUG-060 (mailbox 
 - **Not mitigated yet:** the lock screen is unverified on real devices (BUG-072 and BUG-074 also still apply to family mode).
 - **Related, still open:** BUG-064 (parent-assigned tasks do not reach children's real Tasks tab; deferred by decision), BUG-072 (inactive profiles still age; the picker needs a needs-care indicator and eventually family-wide alerts before real users).
 
+### [BUG-092] Parent PIN change goes back to the first step on a Samsung (OPEN, 2026-11-10)
+
+- **Seen:** on the physical Samsung, after "Finish" on Change PIN the screen returned to the first step, no "PIN updated successfully" card appeared, and the old PIN kept working. So the new PIN was not saved.
+- **Not reproducible off the phone:** the whole change was re-run with the production hashing cost (scrypt N=32768) and with the React Compiler on: correct. The remaining differences are the phone's Keystore-backed secure storage, the Hermes engine at full hashing cost, and real-world timing/interruptions.
+- **Added to find it:** failure banner at the top (no debug code on screen; the failing step is in the terminal trace), stronger verification (read-back, then the new PIN must match the saved verifier; in development builds the old PIN must not), a development-only `[pin-trace]` log in the Metro terminal, and the native secure-storage error CODE on a failed read or write (never the message or value). **Next step:** retry the change on the phone and send the `[pin-trace]` lines from the Metro terminal.
+- **Status:** OPEN until the cause is found.
+
 ### [BUG-091] Shorter Parent PINs and the recovery-code clipboard: known limits (documented, OPEN, 2026-11-09)
 
 - **A 4-digit PIN has only 10,000 possibilities.** Anyone who could read the stored verifier could guess it offline whatever the key-derivation settings; the protection is the native secure storage plus the pauses (3 free tries, then 30 s, 5, 15 and finally 60 minutes per try). Simple PINs (1111, 1234) are allowed on purpose; the screens only say they are easier to guess.

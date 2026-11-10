@@ -290,7 +290,7 @@ describe('a missing, unconfirmed, damaged or unavailable PIN is never replaced a
     expect(await claim.grantSetupClaim()).toBe(false); // a claim is only ever granted while no PIN exists
     const marker = await stored(app, MARKER);
     const secure = new Map(secureTest().map);
-    const result = await app.pin.beginPinSetup('135792');
+    const result = await app.pin.beginPinSetup('1357');
     expect(result.ok).toBe(false);
     expect(await stored(app, MARKER)).toBe(marker);
     expect([...secureTest().map]).toEqual([...secure]);
@@ -365,23 +365,23 @@ describe('the setup claim authorizes nothing else (final-review cases)', () => {
     const app = await boot({ seed: seeded(), pin: 'none' });
     const claim = require('@/utils/family-claim') as typeof import('@/utils/family-claim');
     await claim.grantSetupClaim();
-    expect((await app.pin.beginPinSetup('135792')).ok).toBe(true);
+    expect((await app.pin.beginPinSetup('1357')).ok).toBe(true);
     expect(claim.hasSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
   });
 
   test('finishing the PIN setup clears a claim granted meanwhile, and a PIN that exists is never replaced even with a claim', async () => {
     const app = await boot({ seed: seeded(), pin: 'none' });
     const claim = require('@/utils/family-claim') as typeof import('@/utils/family-claim');
     await claim.grantSetupClaim();
-    const begun = await app.pin.beginPinSetup('135792');
+    const begun = await app.pin.beginPinSetup('1357');
     if (!begun.ok) throw new Error('setup failed');
     await claim.grantSetupClaim(); // a second device check while the setup is open
     expect(claim.hasSetupClaim()).toBe(true);
-    expect(await app.pin.confirmPinSetup('135792', begun.recoveryCode)).toEqual({ ok: true });
+    expect(await app.pin.confirmPinSetup('1357', begun.recoveryCode)).toEqual({ ok: true });
     expect(claim.hasSetupClaim()).toBe(false); // the PIN exists: no claim is valid any more
     expect(await claim.grantSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('864209')).toMatchObject({ ok: false }); // never replaced
+    expect(await app.pin.beginPinSetup('8642')).toMatchObject({ ok: false }); // never replaced
   });
 
   test('no claim can be granted with family mode off', async () => {

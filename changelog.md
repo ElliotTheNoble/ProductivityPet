@@ -2,6 +2,23 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-10] — Stage 1 after the second Samsung test: PIN-change investigation, 4-digit PINs, no waiting periods, 10-character recovery codes
+
+### Investigated (the Parent PIN change that went back to the first step)
+- **What the code can do:** after "Finish" the Change PIN screen goes back to the first step in exactly two ways: a save that failed (it then said why only in a small line under the number pad, easy to miss), or the "app left the foreground" wipe while nothing was being saved. The change logic was re-run with the real production hashing cost (scrypt N=32768) and with the React Compiler switched on (the real app is built with it; Jest was not): the old PIN fails and the new one works, and the recovery code is untouched, in both. So the cause on the phone is still not established.
+- **What was added so the next try tells us:** a failed change now shows a prominent red banner at the TOP of the page ("The PIN change didn't finish") (the step that failed, for example `record-write`, `read-back-differs`, `new-pin-does-not-match` or `attempts-write`, goes to the Metro terminal trace only, never onto a screen); success is shown only after the saved record has been read back AND the saved verifier accepts the new PIN (and, in a development build, refuses the old one); a temporary development-only step-by-step trace is printed to the Metro terminal ("LOG [pin-trace] ..."). The trace can carry nothing secret: fixed event names, numbers, true/false and fixed words only (a test scans what is printed for a PIN, a recovery code, the stored hashes and salts).
+
+### Changed
+- **A new Parent PIN is exactly 4 digits** (setup, change PIN, forgotten-PIN recovery; English and Spanish text). PINs of 5 to 8 digits made earlier keep working everywhere a PIN is checked, until their owner changes them.
+- **No waiting periods.** The 30-second, 5-, 15- and 60-minute pauses and every "please wait" message are gone, and any pause already saved is ignored (so nobody stays locked after the update). Instead, after **5 wrong PINs in a row** the phone's own screen-lock check (PIN, pattern, password, fingerprint or face) is needed before more tries ("Use my phone's screen lock"). The count is kept in secure storage, so restarting the app does not skip it; a correct PIN or a passed check sets it back to zero. A phone with no screen lock (or a build that cannot do the check) gets no free tries: PIN tries stay stopped, the count is not set back, there is still no waiting period, and the message says to use the recovery code (or set a screen lock on the phone). A cancelled, failed or unavailable check changes nothing, and the recovery code stays reachable in every case, so nobody is locked out for good by a check that is only temporarily unavailable. Recovery-code tries are never counted or held back (the code is the way out for a parent who forgot the PIN). The check never opens the parent area or reveals a PIN; it only lifts the limit on further tries.
+- **New recovery codes are 10 characters, `XXXXX-XXXXX`, all random** (50 bits, from the operating system's random bytes; no I, L, O or U). Earlier 25-character codes stay valid until their owner replaces them; nothing is regenerated automatically, and a PIN change still keeps the existing code.
+
+### Removed
+- The temporary "DEV timing" line under the unlock screens and everything behind it.
+
+### Fixed / hardened
+- The save/verification failure reasons above; the Metro-guard-safe availability check is unchanged.
+
 ## [2026-11-09] — Stage 1 final fixes: PIN-change return, clearer Paste message, more pressed / hover feedback
 
 ### Changed

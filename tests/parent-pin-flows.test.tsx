@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 
 import { ParentGate } from '@/components/parent-gate';
@@ -13,6 +13,11 @@ import { resetSecure, secureTest } from './helpers';
 
 // Cheap scrypt settings keep the suite fast (the real settings are exercised in pin-crypto-real.test.ts).
 jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
+// The phone's own screen-lock check (asked after five wrong PINs in a row): it passes here.
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => 2),
+  authenticateAsync: jest.fn(async () => ({ success: true })),
+}));
 
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
@@ -21,8 +26,8 @@ jest.mock('expo-notifications', () => ({
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
 }));
 
-const PIN = '135792';
-const NEW_PIN = '864209';
+const PIN = '1357';
+const NEW_PIN = '8642';
 const en = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => translate('en', key, params);
 const es = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => translate('es', key, params);
 
@@ -96,7 +101,7 @@ describe('first setup', () => {
     expect(await getRecoveryStatus()).toBe('pending-setup');
     await press(en('rcReveal'));
     const code = shownCode();
-    expect(code).toMatch(/^[0-9A-Z]{5}(-[0-9A-Z]{5}){4}$/);
+    expect(code).toMatch(/^[0-9A-Z]{5}-[0-9A-Z]{5}$/); // a new recovery code: 10 characters
     await press(en('psCodeSaved'));
     await typeDigits(PIN);
     await fireEvent.changeText(screen.getByLabelText(en('rcFieldLabel')), code.toLowerCase().replace(/-/g, ' '));
@@ -171,7 +176,7 @@ describe('first setup', () => {
     const code = shownCode();
     await press(en('psCodeSaved'));
     await typeDigits(PIN);
-    await fireEvent.changeText(screen.getByLabelText(en('rcFieldLabel')), 'AAAAA-AAAAA-AAAAA-AAAAA-AAAAA');
+    await fireEvent.changeText(screen.getByLabelText(en('rcFieldLabel')), 'AAAAA-AAAAA');
     await press(en('psFinish'));
     await flush();
     expect(mockRouter.replace).not.toHaveBeenCalled();
@@ -264,7 +269,7 @@ describe('unlock', () => {
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
-  test('after the free tries, a cooldown with a countdown appears and the keypad action is disabled', async () => {
+  test('after five wrong PINs the phone\'s screen-lock check is asked for (there is no waiting), and passing it gives the tries back', async () => {
     await setUpPin();
     await render(
       <ParentGate>
@@ -272,13 +277,19 @@ describe('unlock', () => {
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       await typeDigits(NEW_PIN);
       await press(en('pgUnlock'));
       await flush();
     }
-    expect(await screen.findByText(/try again in|Inténtalo|30/i)).toBeTruthy();
+    expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
+    expect(screen.queryByText(/wait|espera/i)).toBeNull();
     expect(screen.queryByText('SECRET')).toBeNull();
+    await press(en('pgDeviceCheckButton'));
+    await waitFor(() => expect(screen.queryByText(en('pgDeviceCheck'))).toBeNull());
+    await typeDigits(PIN);
+    await press(en('pgUnlock'));
+    expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
   test('the Spanish unlock screen is fully translated', async () => {
@@ -336,13 +347,22 @@ describe('forgotten PIN', () => {
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
-  test('a wrong recovery code is refused, counted, and goes back to the code entry', async () => {
+  test('a code that cannot be right is not offered for checking; a wrong one is refused (never counted) and goes back to the code entry', async () => {
     await setUpPin();
     await toRecoveryScreen();
+    // an earlier-style (25-character) code that does not even pass its checksum cannot be offered for checking at all
     await fireEvent.changeText(screen.getByLabelText(en('rcFieldLabel')), '00000-00000-00000-00000-00001');
+    expect(screen.getByRole('button', { name: en('psNext') }).props.accessibilityState).toMatchObject({ disabled: true });
+    // a well-formed wrong code goes on to the new PIN, is refused at the end (and never counted), and the code entry is shown again
+    await fireEvent.changeText(screen.getByLabelText(en('rcFieldLabel')), '00000-00001');
     await press(en('psNext'));
-    // a code that does not even pass the checksum is caught before anything is tried
-    expect(await screen.findByText(en('peCodeFormat'))).toBeTruthy();
+    await typeDigits(NEW_PIN);
+    await press(en('psNext'));
+    await typeDigits(NEW_PIN);
+    await press(en('psNext'));
+    expect(await screen.findByText(en('peCodeWrong'))).toBeTruthy();
+    expect(screen.getByLabelText(en('rcFieldLabel'))).toBeTruthy();
+    expect(JSON.parse(secureTest().map.get('pp.parentAuth.attempts.v1')!).failures).toBe(0);
   });
 
   test('closing the app after the PIN was reset but before the replacement code was shown: unlocking with the new PIN leads to a confirm-your-code step, not to the dashboard', async () => {

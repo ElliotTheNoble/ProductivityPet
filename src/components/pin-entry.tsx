@@ -28,6 +28,8 @@ export const PIN_MAX_LENGTH = 8;
 const DOT_SLOTS = 4; // the shortest PIN; more dots appear as digits are added (up to 8)
 
 type Props = {
+  // The most digits this box takes. 8 by default (an EXISTING PIN can be 4 to 8 digits); the boxes that make a NEW PIN pass NEW_PIN_LENGTH (4).
+  maxLength?: number;
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
@@ -42,9 +44,9 @@ export function useShortLandscape(): boolean {
   return width > height && height < 560 && width >= 640;
 }
 
-const digitsOnly = (text: string) => text.replace(/\D/g, '').slice(0, PIN_MAX_LENGTH);
+const digitsOnly = (text: string, limit: number) => text.replace(/\D/g, '').slice(0, limit);
 
-export function PinEntry({ value, onChange, onSubmit, label, disabled, children }: Props) {
+export function PinEntry({ value, onChange, onSubmit, label, disabled, children, maxLength = PIN_MAX_LENGTH }: Props) {
   const { t, tn } = useT();
   const theme = useTheme();
   const sideBySide = useShortLandscape();
@@ -71,7 +73,7 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
   }, [chosen]);
 
   const add = (digit: string) => {
-    if (!disabled && value.length < PIN_MAX_LENGTH) onChange(value + digit);
+    if (!disabled && value.length < maxLength) onChange(value + digit);
   };
   const choose = (next: 'pad' | 'keyboard') => {
     setChosen(true);
@@ -95,13 +97,13 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
             testID="pin-keyboard-input"
             accessibilityLabel={label}
             value={value}
-            onChangeText={(text) => onChange(digitsOnly(text))}
+            onChangeText={(text) => onChange(digitsOnly(text, maxLength))}
             onSubmitEditing={onSubmit}
             editable={!disabled}
             secureTextEntry
             keyboardType="number-pad"
             inputMode="numeric"
-            maxLength={PIN_MAX_LENGTH}
+            maxLength={maxLength}
             autoComplete="off"
             importantForAutofill="noExcludeDescendants"
             textContentType="none"
@@ -129,7 +131,7 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children 
       testID="pin-hardware-input"
       ref={hiddenRef}
       value={value}
-      onChangeText={(text) => onChange(digitsOnly(text))}
+      onChangeText={(text) => onChange(digitsOnly(text, maxLength))}
       onSubmitEditing={onSubmit}
       editable={!disabled}
       autoFocus={Platform.OS === 'web'}

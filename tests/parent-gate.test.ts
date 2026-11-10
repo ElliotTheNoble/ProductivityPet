@@ -1,11 +1,28 @@
 import { DAY, T0, flush, freezeClock, loadApp, setClock, unfreezeClock, type App } from './helpers';
 
 const GATE_KEY = '@ProductivityPet:parentGate';
-const PIN = '246813';
+const PIN = '2468';
 const SEC = 1000;
 const MIN = 60 * SEC;
 
-beforeEach(() => freezeClock(T0));
+// The phone's own screen-lock check (expo-local-authentication), controlled by the tests: what the system answers, and how many times it was asked.
+const mockAuth: { level: number; result: unknown; throws: boolean; calls: number } = { level: 2, result: { success: true }, throws: false, calls: 0 };
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => mockAuth.level),
+  authenticateAsync: jest.fn(async () => {
+    mockAuth.calls += 1;
+    if (mockAuth.throws) throw new Error('system error');
+    return mockAuth.result;
+  }),
+}));
+
+beforeEach(() => {
+  freezeClock(T0);
+  mockAuth.level = 2;
+  mockAuth.result = { success: true };
+  mockAuth.throws = false;
+  mockAuth.calls = 0;
+});
 afterEach(() => unfreezeClock());
 
 // A stand-in for the real PIN storage (which does not exist yet): it only answers "is a PIN set" and "is this the PIN".
@@ -64,7 +81,7 @@ describe('with a PIN set', () => {
 
   test('a PIN that is not 4-8 digits is refused without counting or checking', async () => {
     const { app, verifier } = await boot();
-    for (const bad of ['', '1', '123', '123456789', 'abcdef', '12 345', '12.456', ' 246813']) {
+    for (const bad of ['', '1', '123', '123456789', 'abcdef', '12 345', '12.456', ' 2468']) {
       expect(await app.gate.unlockParentArea(bad)).toEqual({ ok: false, reason: 'invalid-format' });
     }
     expect(verifier.verify).not.toHaveBeenCalled();
@@ -72,102 +89,192 @@ describe('with a PIN set', () => {
   });
 });
 
-describe('wrong guesses and the pause', () => {
-  test('three tries, then a 30 second pause; nothing is checked during the pause', async () => {
+describe('wrong guesses: no waiting, and the phone\'s screen lock after five in a row', () => {
+  test('wrong PINs are answered at once, with the tries left; there is never a pause', async () => {
     const { app, verifier } = await boot();
-    expect(await app.gate.unlockParentArea('000000')).toEqual({ ok: false, reason: 'wrong', triesLeft: 2, cooldownMs: 0 });
-    expect(await app.gate.unlockParentArea('000001')).toEqual({ ok: false, reason: 'wrong', triesLeft: 1, cooldownMs: 0 });
-    expect(await app.gate.unlockParentArea('000002')).toEqual({ ok: false, reason: 'wrong', triesLeft: 0, cooldownMs: 30 * SEC });
-    expect(verifier.verify).toHaveBeenCalledTimes(3);
-    expect(await app.gate.getParentAccess()).toEqual({ state: 'cooldown', remainingMs: 30 * SEC });
+    for (const [i, pin] of ['0001', '0002', '0003', '0004', '0005'].entries()) {
+      expect(await app.gate.unlockParentArea(pin)).toEqual({ ok: false, reason: 'wrong', triesLeft: 4 - i });
+    }
+    expect(verifier.verify).toHaveBeenCalledTimes(5);
+    expect(await failures(app)).toBe(5);
+    // nothing in the access state or the answers mentions a wait
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(JSON.parse((await app.AsyncStorage.getItem(GATE_KEY))!).lockedUntil).toBe(0);
+    expect((app.gate as Record<string, unknown>).cooldownForFailures).toBeUndefined(); // the waiting periods are gone
+    expect((app.gate as Record<string, unknown>).formatRemaining).toBeUndefined();
+  });
 
-    const during = await app.gate.unlockParentArea(PIN); // even the CORRECT pin is refused during the pause
-    expect(during).toEqual({ ok: false, reason: 'cooldown', remainingMs: 30 * SEC });
-    expect(verifier.verify).toHaveBeenCalledTimes(3);
-
-    setClock(T0 + 31 * SEC);
+  test('before the fifth wrong PIN the area is plainly locked (no screen-lock check owed yet)', async () => {
+    const { app } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004']) await app.gate.unlockParentArea(pin);
     expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' });
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true }); // the right PIN still works
+  });
+
+  test('after five wrong PINs the next try, even the right PIN, needs the screen-lock check: nothing is checked or counted', async () => {
+    const { app, verifier } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    verifier.verify.mockClear();
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(await app.gate.unlockParentArea('0006')).toEqual({ ok: false, reason: 'device-check' });
+    expect(verifier.verify).not.toHaveBeenCalled();
+    expect(await failures(app)).toBe(5);
+  });
+
+  test('passing the phone\'s screen-lock check gives five more tries; the count starts again', async () => {
+    const { app } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    mockAuth.result = { success: true };
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('passed');
+    expect(mockAuth.calls).toBe(1);
+    expect(await failures(app)).toBe(0);
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' });
+    expect(await app.gate.unlockParentArea('0006')).toEqual({ ok: false, reason: 'wrong', triesLeft: 4 });
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
   });
 
-  test('the pauses grow: 30 s, 5 min, 15 min, 1 hour', async () => {
+  test.each([
+    ['cancelled', { success: false, error: 'user_cancel' }, 'cancelled'],
+    ['not passed', { success: false, error: 'authentication_failed' }, 'failed'],
+    ['locked out by the phone', { success: false, error: 'lockout' }, 'failed'],
+    ['not available', { success: false, error: 'not_available' }, 'unavailable'],
+    ['an unknown answer', { success: false }, 'failed'],
+    ['something that is not a success', { success: 'yes' }, 'failed'],
+  ])('a screen-lock check that is %s changes nothing: the tries stay held back', async (_name, answer, expected) => {
+    const { app, verifier } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    mockAuth.result = answer as never;
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe(expected);
+    expect(await failures(app)).toBe(5);
+    verifier.verify.mockClear();
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(verifier.verify).not.toHaveBeenCalled();
+  });
+
+  test('a screen-lock check that throws is "unavailable" and changes nothing', async () => {
     const { app } = await boot();
-    const expected: Record<number, number> = { 3: 30 * SEC, 4: 30 * SEC, 5: 5 * MIN, 6: 5 * MIN, 7: 15 * MIN, 8: 15 * MIN, 9: 60 * MIN, 10: 60 * MIN };
-    let clock = T0;
-    for (let n = 1; n <= 10; n += 1) {
-      const r = await app.gate.unlockParentArea('999999');
-      expect(r).toMatchObject({ ok: false, reason: 'wrong' });
-      if (expected[n]) {
-        expect((r as { cooldownMs: number }).cooldownMs).toBe(expected[n]);
-        clock += expected[n] + SEC;
-        setClock(clock);
-      }
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    mockAuth.throws = true;
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('unavailable');
+    expect(await failures(app)).toBe(5);
+  });
+
+  test('a phone with no screen lock: the PIN tries stay stopped (no waiting, no free tries), also after a restart, and the check can be tried again later', async () => {
+    const { app, verifier } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    mockAuth.level = 0;
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('no-device-lock');
+    expect(mockAuth.calls).toBe(0); // the system was never asked to authenticate
+    expect(await failures(app)).toBe(5); // the count is not set back
+    verifier.verify.mockClear();
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' }); // even the right PIN
+    expect(verifier.verify).not.toHaveBeenCalled();
+    const restarted = await boot({ storage: await app.dump() });
+    expect(await failures(restarted.app)).toBe(5); // a restart does not give the tries back
+    expect(await restarted.app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    // setting a screen lock on the phone later gives the way back
+    mockAuth.level = 2;
+    expect(await restarted.app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('passed');
+    expect(await restarted.app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
+  });
+
+  test('if the count cannot be set back after a passed check, the tries stay held back', async () => {
+    const { app } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    const real = app.AsyncStorage.setItem;
+    app.AsyncStorage.setItem = jest.fn(async () => {
+      throw new Error('disk full');
+    });
+    mockAuth.result = { success: true };
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('unavailable');
+    app.AsyncStorage.setItem = real;
+    expect(await failures(app)).toBe(5);
+  });
+
+  test('closing and reopening the app does not skip the check: the count is kept', async () => {
+    const first = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await first.app.gate.unlockParentArea(pin);
+    const second = await boot({ storage: await first.app.dump() });
+    expect(await second.app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(await second.app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    expect(second.verifier.verify).not.toHaveBeenCalled();
+    // and a half-way count survives too
+    const third = await boot();
+    for (const pin of ['0001', '0002']) await third.app.gate.unlockParentArea(pin);
+    const fourth = await boot({ storage: await third.app.dump() });
+    expect(await fourth.app.gate.unlockParentArea('0003')).toMatchObject({ reason: 'wrong', triesLeft: 2 });
+  });
+
+  test('the clock makes no difference (there is no waiting to shorten or skip)', async () => {
+    const { app } = await boot();
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    for (const moved of [T0 - 3 * DAY, T0 + 2 * DAY]) {
+      setClock(moved);
+      expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+      expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
     }
-    expect(app.gate.cooldownForFailures(2)).toBe(0);
-    expect(app.gate.cooldownForFailures(50)).toBe(60 * MIN);
   });
 
   test('a correct PIN starts the count again', async () => {
     const { app } = await boot();
-    await app.gate.unlockParentArea('000000');
-    await app.gate.unlockParentArea('000001');
+    await app.gate.unlockParentArea('0001');
+    await app.gate.unlockParentArea('0002');
     expect(await failures(app)).toBe(2);
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
     expect(await failures(app)).toBe(0);
     app.gate.lockParentArea();
-    expect(await app.gate.unlockParentArea('000000')).toMatchObject({ reason: 'wrong', triesLeft: 2 });
+    expect(await app.gate.unlockParentArea('0001')).toMatchObject({ reason: 'wrong', triesLeft: 4 });
   });
 
   test('two taps at once are counted one after the other (no lost count)', async () => {
     const { app, verifier } = await boot();
-    const [a, b] = await Promise.all([app.gate.unlockParentArea('111111'), app.gate.unlockParentArea('222222')]);
-    expect(a).toMatchObject({ reason: 'wrong', triesLeft: 2 });
-    expect(b).toMatchObject({ reason: 'wrong', triesLeft: 1 });
+    const [a, b] = await Promise.all([app.gate.unlockParentArea('1111'), app.gate.unlockParentArea('2222')]);
+    expect(a).toMatchObject({ reason: 'wrong', triesLeft: 4 });
+    expect(b).toMatchObject({ reason: 'wrong', triesLeft: 3 });
     expect(verifier.verify).toHaveBeenCalledTimes(2);
     expect(await failures(app)).toBe(2);
-  });
-});
-
-describe('the pause survives restarts and tampering with the clock', () => {
-  test('closing and reopening the app does not reset the count or the pause', async () => {
-    const first = await boot();
-    for (const pin of ['000000', '000001', '000002']) await first.app.gate.unlockParentArea(pin);
-    const second = await boot({ storage: await first.app.dump() });
-    expect(await second.app.gate.getParentAccess()).toMatchObject({ state: 'cooldown' });
-    expect(await second.app.gate.unlockParentArea(PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
-    expect(second.verifier.verify).not.toHaveBeenCalled();
-    // after the pause, the count is still 3: the next wrong guess is the 4th (30 s again), the 5th is 5 minutes
-    setClock(T0 + 40 * SEC);
-    expect(await second.app.gate.unlockParentArea('000003')).toMatchObject({ reason: 'wrong', cooldownMs: 30 * SEC });
-    const third = await boot({ storage: await second.app.dump() });
-    setClock(T0 + 80 * SEC);
-    expect(await third.app.gate.unlockParentArea('000004')).toMatchObject({ reason: 'wrong', cooldownMs: 5 * MIN });
   });
 
   test('closing the app in the middle of a check still counts that guess (counted before it is checked)', async () => {
     const { app, verifier } = await boot();
     verifier.verify.mockImplementation(() => new Promise<boolean>(() => {})); // the app is "killed" while checking
-    void app.gate.unlockParentArea('000000');
+    void app.gate.unlockParentArea('0001');
     await flush();
     expect(await failures(app)).toBe(1);
     const restarted = await boot({ storage: await app.dump() });
-    expect(await restarted.app.gate.unlockParentArea('000001')).toMatchObject({ reason: 'wrong', triesLeft: 1 }); // 2nd, not 1st
+    expect(await restarted.app.gate.unlockParentArea('0002')).toMatchObject({ reason: 'wrong', triesLeft: 3 }); // 2nd, not 1st
   });
 
-  test('a clock moved BACKWARDS does not shorten the pause', async () => {
+  test('recovery-code tries are never counted and never held back', async () => {
     const { app } = await boot();
-    for (const pin of ['000000', '000001', '000002']) await app.gate.unlockParentArea(pin);
-    setClock(T0 - 3 * DAY);
-    const access = await app.gate.getParentAccess();
-    expect(access.state).toBe('cooldown');
-    expect(await app.gate.unlockParentArea(PIN)).toMatchObject({ ok: false, reason: 'cooldown' });
+    for (const pin of ['0001', '0002', '0003', '0004', '0005']) await app.gate.unlockParentArea(pin);
+    const wrong = await app.gate.limitedAttempt(async () => false, undefined, 'code');
+    expect(wrong).toEqual({ kind: 'wrong', triesLeft: 0 });
+    expect(await failures(app)).toBe(5); // not counted
+    const right = await app.gate.limitedAttempt(async () => true, undefined, 'code');
+    expect(right).toEqual({ kind: 'ok' });
+    expect(await failures(app)).toBe(0); // a right code (the way out for a parent who forgot the PIN) clears the count
   });
 
-  test('KNOWN LIMIT: a clock moved FORWARDS ends a pause early (no trusted time source on the device)', async () => {
-    const { app } = await boot();
-    for (const pin of ['000000', '000001', '000002']) await app.gate.unlockParentArea(pin);
-    setClock(T0 + 2 * MIN);
-    expect((await app.gate.getParentAccess()).state).toBe('locked');
+  test('the waiting periods of earlier versions are gone: a saved pause is ignored, so nobody stays locked after the update', async () => {
+    const old = JSON.stringify({ version: 1, failures: 3, lockedUntil: T0 + 60 * MIN, lastSeen: T0 });
+    const { app, verifier } = await boot({ storage: new Map([[GATE_KEY, old]]) });
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked' }); // not "cooldown"
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
+    expect(verifier.verify).toHaveBeenCalledTimes(1);
+    // and the three wrong tries it had counted still count: two more, not five
+    const again = await boot({ storage: new Map([[GATE_KEY, old]]) });
+    expect(await again.app.gate.unlockParentArea('0001')).toMatchObject({ reason: 'wrong', triesLeft: 1 });
+    expect(JSON.parse((await again.app.AsyncStorage.getItem(GATE_KEY))!).lockedUntil).toBe(0);
+  });
+
+  test('PINs of 5 to 8 digits made by earlier versions are still checked', async () => {
+    for (const legacy of ['13579', '135792', '1357924', '13579246']) {
+      const app = await loadApp();
+      app.gate.registerPinVerifier(fakeVerifier(legacy));
+      expect(await app.gate.unlockParentArea(PIN)).toMatchObject({ ok: false, reason: 'wrong' });
+      expect(await app.gate.unlockParentArea(legacy)).toEqual({ ok: true });
+    }
   });
 });
 
@@ -178,7 +285,7 @@ describe('failing closed', () => {
     app.AsyncStorage.setItem = jest.fn(async () => {
       throw new Error('disk full');
     });
-    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable', detail: 'attempts-write' });
     app.AsyncStorage.setItem = real;
     expect(verifier.verify).not.toHaveBeenCalled();
     expect((await app.gate.getParentAccess()).state).toBe('locked');
@@ -190,26 +297,27 @@ describe('failing closed', () => {
     app.AsyncStorage.getItem = jest.fn(async () => {
       throw new Error('read error');
     });
-    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable', detail: 'attempts-read' });
     expect((await app.gate.getParentAccess()).state).toBe('locked');
     app.AsyncStorage.getItem = real;
     expect(verifier.verify).not.toHaveBeenCalled();
   });
 
-  test('a damaged count is never a free reset: it starts a pause', async () => {
+  test('a damaged count is never a free reset: it counts as five wrong tries, so the screen-lock check is needed', async () => {
     const storage = new Map([[GATE_KEY, '{ not json']]);
     const { app } = await boot({ storage });
-    expect((await app.gate.getParentAccess()).state).toBe('cooldown');
-    expect(JSON.parse((await app.AsyncStorage.getItem(GATE_KEY))!).failures).toBe(3); // repaired, not left damaged
-    setClock(T0 + 31 * SEC);
-    expect((await app.gate.getParentAccess()).state).toBe('locked'); // and the pause really ends
+    expect(await app.gate.getParentAccess()).toEqual({ state: 'locked', deviceCheck: true });
+    expect(JSON.parse((await app.AsyncStorage.getItem(GATE_KEY))!)).toMatchObject({ failures: 5, lockedUntil: 0 }); // repaired, not left damaged
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'device-check' });
+    mockAuth.result = { success: true };
+    expect(await app.gate.passDeviceCheck('Confirm', 'Cancel')).toBe('passed');
     expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: true });
   });
 
   test('a PIN check that fails by error is "unavailable" and the guess stays counted', async () => {
     const { app, verifier } = await boot();
     verifier.verify.mockRejectedValueOnce(new Error('keystore error'));
-    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await app.gate.unlockParentArea(PIN)).toEqual({ ok: false, reason: 'unavailable', detail: 'check-failed' });
     expect(await failures(app)).toBe(1);
     expect((await app.gate.getParentAccess()).state).toBe('locked');
   });
@@ -320,16 +428,5 @@ describe('actions outside the parent screens', () => {
     await app.gate.unlockParentArea(PIN);
     await app.onboarding.restartOnboarding();
     expect((await app.onboarding.ensureOnboardingLoaded()).status).toBe('pending');
-  });
-});
-
-describe('helpers', () => {
-  test('formatRemaining', async () => {
-    const { app } = await boot({ pin: false });
-    expect(app.gate.formatRemaining(30 * SEC)).toBe('0:30');
-    expect(app.gate.formatRemaining(29_001)).toBe('0:30');
-    expect(app.gate.formatRemaining(5 * MIN)).toBe('5:00');
-    expect(app.gate.formatRemaining(60 * MIN)).toBe('1:00:00');
-    expect(app.gate.formatRemaining(-5)).toBe('0:00');
   });
 });

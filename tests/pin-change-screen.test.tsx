@@ -22,8 +22,8 @@ jest.mock('expo-notifications', () => ({
 }));
 jest.mock('@/utils/native-available', () => ({ hasNativeModule: () => true }));
 
-const PIN = '135792';
-const NEW_PIN = '864209';
+const PIN = '1357';
+const NEW_PIN = '8642';
 const en = (key: Parameters<typeof translate>[1]) => translate('en', key);
 const press = (name: string) => fireEvent.press(screen.getByRole('button', { name }));
 const typeDigits = async (digits: string) => {
@@ -133,11 +133,11 @@ describe('the Change PIN screen: return to the dashboard, interruptions, one sav
   });
 
   test('a change that is not verified shows no success and no automatic return', async () => {
-    jest.spyOn(parentPin(), 'changePin').mockResolvedValue({ ok: false, reason: 'not-verified' });
+    jest.spyOn(parentPin(), 'changePin').mockResolvedValue({ ok: false, reason: 'not-verified', detail: 'read-back-differs' });
     fakeTimers();
     const { onDone } = await enterChange();
     await press(en('psFinish'));
-    expect(await screen.findByText(en('peNotVerified'))).toBeTruthy();
+    expect(await screen.findByText(en('peNotVerified'), { exact: false })).toBeTruthy();
     expect(screen.queryByText(en('pmChangedTitle'))).toBeNull();
     await act(async () => jest.advanceTimersByTime(PIN_UPDATED_RETURN_MS * 2));
     expect(onDone).not.toHaveBeenCalled();

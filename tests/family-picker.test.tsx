@@ -5,6 +5,11 @@ import * as RNTL from '@testing-library/react-native';
 import { HOUR, T0, freezeClock, iso, pet, resetSecure, secureTest, unfreezeClock } from './helpers';
 
 jest.mock('@/utils/kdf-params', () => ({ DEFAULT_KDF: { alg: 'scrypt', N: 1024, r: 8, p: 1, dkLen: 32 } }));
+// The phone's own screen-lock check (asked after five wrong PINs in a row): it passes here.
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => 2),
+  authenticateAsync: jest.fn(async () => ({ success: true })),
+}));
 
 // The visible family picker ("Who's playing today?", Stage 2). Each test starts from a fresh copy of every module over an
 // in-memory storage, renders the real FamilyGate with a small stand-in for the app shell, and checks what is on screen and what was
@@ -44,7 +49,7 @@ const P = '@ProductivityPet:';
 const REGISTRY = `${P}profiles`;
 const HOUSEHOLD = `${P}household`;
 const scoped = (id: string, name: string) => `${P}p:${id}:${name}`;
-const PIN = '246813';
+const PIN = '2468';
 
 const originalFamilyMode = process.env.EXPO_PUBLIC_FAMILY_MODE;
 beforeEach(() => {
@@ -340,24 +345,37 @@ describe('Main needs the Parent PIN', () => {
     expect(app.familyStore.peekFamily()).toBeNull();
   });
 
-  test('too many wrong PINs pause it (also for the correct PIN), and the Main card says it is locked; children still play', async () => {
+  test('five wrong PINs call for the phone\'s screen lock (no waiting, not even for the right PIN until it is passed); children still play', async () => {
     const app = await pinPrompt();
-    for (let i = 0; i < 3; i += 1) {
-      if (i > 0) await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pinKeyClear') }));
+    for (let i = 0; i < 5; i += 1) {
       await unlock(app, '111111');
-      if (i < 2) await app.screen.findByText(new RegExp(t(app, 'pgWrong')));
+      if (i < 4) await app.screen.findByText(new RegExp(t(app, 'pgWrong')));
     }
-    const pausedText = t(app, 'pgCooldown', { time: '@@' }).split('@@')[0];
-    expect(await app.screen.findByText(new RegExp(pausedText))).toBeTruthy();
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pinKeyClear') }));
+    expect(await app.screen.findByText(t(app, 'pgDeviceCheck'))).toBeTruthy();
+    expect(app.screen.getByRole('button', { name: t(app, 'pgDeviceCheckButton') })).toBeTruthy();
+    expect(app.screen.queryByText(/Please wait/)).toBeNull(); // there is no waiting period
+    // the number pad is held back, so the right PIN opens nothing
     await typePin(app, PIN);
     expect(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }).props.accessibilityState.disabled).toBe(true);
-    expect(app.screen.queryByText(/SHELL/)).toBeNull(); // the correct PIN opens nothing while it is paused
+    expect(app.screen.queryByText(/SHELL/)).toBeNull();
     expect(app.shellLoads).toEqual([]);
+    // leaving and coming back does not skip it
     await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'fpCancel') }));
-    expect(app.screen.getByText(new RegExp(t(app, 'fpMainLocked', { time: '@@' }).split('@@')[0]))).toBeTruthy();
+    await app.fireEvent.press(mainCard(app));
+    await app.screen.findByText(t(app, 'pgDeviceCheck'));
+    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'fpCancel') }));
     await app.fireEvent.press(card(app, /Mia/));
-    await app.screen.findByText(/SHELL kid-mia/);
+    await app.screen.findByText(/SHELL kid-mia/); // children still play
+  });
+
+  test('passing the screen-lock check gives the tries back, and the right PIN then opens Main', async () => {
+    const app = await pinPrompt();
+    for (let i = 0; i < 5; i += 1) await unlock(app, '111111');
+    await app.fireEvent.press(await app.screen.findByRole('button', { name: t(app, 'pgDeviceCheckButton') }));
+    await app.waitFor(() => expect(app.screen.queryByText(t(app, 'pgDeviceCheck'))).toBeNull());
+    await unlock(app, PIN);
+    await app.screen.findByText(/SHELL main/);
+    expect(app.profiles.getActiveProfileId()).toBe('main');
   });
 
   test('Back leaves the prompt without opening anything', async () => {
@@ -698,7 +716,7 @@ describe('Main fails closed (security review)', () => {
     const { mainEntry } = require('@/utils/family-picker-model') as typeof import('@/utils/family-picker-model');
     const auth = (state: string, recovery = 'confirmed', loading = false) => ({ loading, state, recovery }) as never;
     expect(mainEntry({ state: 'locked' }, auth('ready'))).toBe('allowed');
-    expect(mainEntry({ state: 'cooldown', remainingMs: 5 }, auth('ready'))).toBe('allowed');
+    expect(mainEntry({ state: 'locked', deviceCheck: true }, auth('ready'))).toBe('allowed');
     expect(mainEntry({ state: 'unlocked' }, auth('ready'))).toBe('allowed');
     expect(mainEntry({ state: 'checking' }, auth('ready'))).toBe('checking');
     expect(mainEntry({ state: 'locked' }, auth('ready', 'confirmed', true))).toBe('checking');

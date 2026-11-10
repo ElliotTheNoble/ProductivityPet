@@ -47,7 +47,7 @@ function FamilyModeCardContent() {
   const hasParent = !!household?.parent;
   // With a parent PIN set and the parent area locked, this card (which anyone can reach from Pet Care) only offers to
   // unlock it; Start setup and the dashboard shortcut stay out of reach.
-  if (access.state === 'locked' || access.state === 'cooldown') {
+  if (access.state === 'locked') {
     return (
       <Card title={t('familyModeTitle')}>
         <ThemedText type="small" themeColor="textSecondary">

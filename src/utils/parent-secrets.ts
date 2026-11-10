@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import { errorCodeOf, pinTrace } from '@/utils/pin-trace';
+
 // Native secure storage for the parent's authentication records (Keychain on iOS; Android Keystore-encrypted storage on
 // Android), through expo-secure-store. Used instead of AsyncStorage because AsyncStorage is a plain file/database that
 // other tools and backups can read.
@@ -43,7 +45,8 @@ export async function readSecret(key: string): Promise<SecureRead> {
   if (!store) return { ok: false };
   try {
     return { ok: true, value: await store.getItemAsync(key) };
-  } catch {
+  } catch (error) {
+    pinTrace('secure:read-failed', {}, errorCodeOf(error)); // development builds only; the error CODE, never the message or the value
     return { ok: false };
   }
 }
@@ -54,7 +57,8 @@ export async function writeSecret(key: string, value: string): Promise<boolean> 
   try {
     await store.setItemAsync(key, value, { keychainAccessible: store.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
     return true;
-  } catch {
+  } catch (error) {
+    pinTrace('secure:write-failed', {}, errorCodeOf(error)); // development builds only; the error CODE, never the message or the value
     return false;
   }
 }

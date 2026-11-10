@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { DevPinTiming } from '@/components/dev-pin-timing';
+import { DeviceCheckPanel } from '@/components/device-check-panel';
 import { Button, Card, FAMILY_BACKGROUND, PageShell } from '@/components/family-ui';
 import { PinEntry, useShortLandscape } from '@/components/pin-entry';
 import { ThemedText } from '@/components/themed-text';
@@ -10,12 +10,10 @@ import { Spacing } from '@/constants/theme';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
 import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
-import { recordCheckTime } from '@/utils/pin-timing';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
 import {
   PIN_FORMAT,
-  formatRemaining,
   hasPinVerifier,
   lockParentArea,
   touchParentSession,
@@ -80,7 +78,8 @@ export function ParentGate({ children }: { children: ReactNode }) {
 type Feedback =
   | { kind: 'wrong'; triesLeft: number }
   | { kind: 'format' }
-  | { kind: 'unavailable' }
+  | { kind: 'unavailable'; detail?: string }
+  | { kind: 'device-check' }
   | null;
 
 export function ParentLockScreen({ access }: { access: ParentAccess }) {
@@ -89,8 +88,6 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const [localUntil, setLocalUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
   const [recovering, setRecovering] = useState(false);
   const sideBySide = useShortLandscape();
 
@@ -99,19 +96,11 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
   const clearPin = useCallback(() => setPin(''), []);
   useSensitiveScreen(clearPin, 'parent-pin', { blockCapture: false });
 
-  const accessUntil = useMemo(() => (access.state === 'cooldown' ? Date.now() + access.remainingMs : 0), [access]);
-  const until = Math.max(accessUntil, localUntil);
-  const remaining = until - now;
-  const paused = remaining > 0;
-
-  useEffect(() => {
-    if (!paused) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [paused]);
+  // Five wrong PINs in a row (kept across restarts): the phone's screen-lock check is needed before more tries. No waiting period.
+  const needsDeviceCheck = (access.state === 'locked' && access.deviceCheck === true) || feedback?.kind === 'device-check';
 
   async function submit() {
-    if (busy || paused) return;
+    if (busy || needsDeviceCheck) return;
     if (!PIN_FORMAT.test(pin)) {
       setFeedback({ kind: 'format' });
       return;
@@ -122,19 +111,13 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
     setPin('');
     setBusy(true);
     setFeedback(null);
-    const started = Date.now();
     const result = await unlockParentArea(attempt);
-    recordCheckTime(Date.now() - started);
     setBusy(false);
     if (result.ok) return; // the gate re-renders with the content
-    const at = Date.now();
-    setNow(at);
-    if (result.reason === 'cooldown') setLocalUntil(at + result.remainingMs);
-    else if (result.reason === 'wrong') {
-      if (result.cooldownMs > 0) setLocalUntil(at + result.cooldownMs);
-      setFeedback({ kind: 'wrong', triesLeft: result.triesLeft });
-    } else if (result.reason === 'invalid-format') setFeedback({ kind: 'format' });
-    else setFeedback({ kind: 'unavailable' });
+    if (result.reason === 'wrong') setFeedback({ kind: 'wrong', triesLeft: result.triesLeft });
+    else if (result.reason === 'device-check') setFeedback({ kind: 'device-check' });
+    else if (result.reason === 'invalid-format') setFeedback({ kind: 'format' });
+    else setFeedback({ kind: 'unavailable', detail: result.reason === 'unavailable' ? result.detail : undefined });
   }
 
   if (access.state === 'locked' && access.reason === 'verifier-missing') {
@@ -174,31 +157,33 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
   );
   const pinCard = (
     <Card>
-      <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void submit()} disabled={busy || paused}>
-        {paused ? (
-          <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
-            {t('pgCooldown', { time: formatRemaining(remaining) })}
-          </ThemedText>
+      <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void submit()} disabled={busy || needsDeviceCheck}>
+        {needsDeviceCheck ? (
+          <>
+            <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
+              {t('pgDeviceCheck')}
+            </ThemedText>
+            <DeviceCheckPanel onPassed={() => setFeedback(null)} />
+          </>
         ) : null}
-        {!paused && feedback?.kind === 'wrong' ? (
+        {!needsDeviceCheck && feedback?.kind === 'wrong' ? (
           <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
             {t('pgWrong')}
             {feedback.triesLeft > 0 ? ` ${tn('pgTriesLeft', feedback.triesLeft)}` : ''}
           </ThemedText>
         ) : null}
-        {!paused && feedback?.kind === 'format' ? (
+        {feedback?.kind === 'format' ? (
           <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
             {t('pgFormat')}
           </ThemedText>
         ) : null}
-        {!paused && feedback?.kind === 'unavailable' ? (
+        {feedback?.kind === 'unavailable' ? (
           <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
             {t('pgUnavailable')}
           </ThemedText>
         ) : null}
-        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < PIN_MIN_LENGTH} />
+        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length < PIN_MIN_LENGTH} />
         <Button tone="soft" label={t('pgBackHome')} onPress={() => router.replace('/')} />
-        <DevPinTiming />
       </PinEntry>
     </Card>
   );

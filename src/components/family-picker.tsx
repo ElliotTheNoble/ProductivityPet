@@ -9,7 +9,7 @@ import { Spacing } from '@/constants/theme';
 import { hoverLift } from '@/constants/hover';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { useParentAuthStatus } from '@/hooks/use-parent-auth-status';
-import { DevPinTiming } from '@/components/dev-pin-timing';
+import { DeviceCheckPanel } from '@/components/device-check-panel';
 import { useKeyboardAvoidance } from '@/hooks/use-keyboard-avoidance';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
@@ -30,9 +30,8 @@ import {
 } from '@/utils/family-picker-model';
 import { markProfileChosen } from '@/utils/family-session';
 import type { ChildProfile } from '@/utils/household';
-import { PIN_FORMAT, formatRemaining, openParentSession, unlockParentArea } from '@/utils/parent-gate';
+import { PIN_FORMAT, openParentSession, unlockParentArea } from '@/utils/parent-gate';
 import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
-import { recordCheckTime } from '@/utils/pin-timing';
 import { MAIN_PROFILE_ID, retryProfileInitialization, switchProfile } from '@/utils/profiles';
 
 // "Who's playing today?" (family mode only; see @/components/family-gate.tsx). It is shown INSTEAD of the app on a cold start, so no
@@ -203,9 +202,7 @@ export function FamilyPicker({ decision, onRetry }: { decision: Extract<PickerDe
   const mainBlocked = entry !== 'allowed' && entry !== 'checking';
   const mainSub = mainBlocked
     ? t(MAIN_BLOCKED_TEXT[entry as Exclude<MainEntry, 'allowed' | 'checking'>])
-    : access.state === 'cooldown'
-      ? t('fpMainLocked', { time: formatRemaining(access.remainingMs) })
-      : t('fpMainSubProtected');
+    : t('fpMainSubProtected');
   const addDisabled = entry !== 'allowed';
   const addHint = mainBlocked ? t(ADD_BLOCKED_TEXT[entry as Exclude<MainEntry, 'allowed' | 'checking'>]) : t('fpAddChildSub');
 
@@ -448,25 +445,17 @@ function PinPrompt({
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<
-    { kind: 'wrong'; triesLeft: number } | { kind: 'format' } | { kind: 'unavailable' } | null
+    { kind: 'wrong'; triesLeft: number } | { kind: 'format' } | { kind: 'unavailable'; detail?: string } | { kind: 'device-check' } | null
   >(null);
-  const [localUntil, setLocalUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
   const clearPin = useCallback(() => setPin(''), []);
   const keyboard = useKeyboardAvoidance();
   useSensitiveScreen(clearPin, 'parent-pin', { blockCapture: false }); // the digits are wiped when the app goes to the background; only dots are shown, so screenshots are allowed
 
-  const accessUntil = useMemo(() => (access.state === 'cooldown' ? Date.now() + access.remainingMs : 0), [access]);
-  const remaining = Math.max(accessUntil, localUntil) - now;
-  const paused = remaining > 0;
-  useEffect(() => {
-    if (!paused) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [paused]);
+  // Five wrong PINs in a row (kept across restarts): the phone's screen-lock check is needed before more tries. No waiting period.
+  const needsDeviceCheck = (access.state === 'locked' && access.deviceCheck === true) || feedback?.kind === 'device-check';
 
   async function submit() {
-    if (busy || paused) return;
+    if (busy || needsDeviceCheck) return;
     if (!PIN_FORMAT.test(pin)) {
       setFeedback({ kind: 'format' });
       return;
@@ -476,9 +465,7 @@ function PinPrompt({
     setPin('');
     setBusy(true);
     setFeedback(null);
-    const started = Date.now();
     const result = await unlockParentArea(attempt);
-    recordCheckTime(Date.now() - started);
     setBusy(false);
     if (result.ok) {
       // "ok" must come from a PIN that was really verified (a gate with no PIN also says ok): check the session itself.
@@ -486,14 +473,10 @@ function PinPrompt({
       else setFeedback({ kind: 'unavailable' });
       return;
     }
-    const at = Date.now();
-    setNow(at);
-    if (result.reason === 'cooldown') setLocalUntil(at + result.remainingMs);
-    else if (result.reason === 'wrong') {
-      if (result.cooldownMs > 0) setLocalUntil(at + result.cooldownMs);
-      setFeedback({ kind: 'wrong', triesLeft: result.triesLeft });
-    } else if (result.reason === 'invalid-format') setFeedback({ kind: 'format' });
-    else setFeedback({ kind: 'unavailable' });
+    if (result.reason === 'wrong') setFeedback({ kind: 'wrong', triesLeft: result.triesLeft });
+    else if (result.reason === 'device-check') setFeedback({ kind: 'device-check' });
+    else if (result.reason === 'invalid-format') setFeedback({ kind: 'format' });
+    else setFeedback({ kind: 'unavailable', detail: result.reason === 'unavailable' ? result.detail : undefined });
   }
 
   return (
@@ -518,31 +501,33 @@ function PinPrompt({
               </ThemedText>
             </View>
             <Card>
-              <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void submit()} disabled={busy || paused}>
-                {paused ? (
-                  <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
-                    {t('pgCooldown', { time: formatRemaining(remaining) })}
-                  </ThemedText>
+              <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void submit()} disabled={busy || needsDeviceCheck}>
+                {needsDeviceCheck ? (
+                  <>
+                    <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
+                      {t('pgDeviceCheck')}
+                    </ThemedText>
+                    <DeviceCheckPanel onPassed={() => setFeedback(null)} />
+                  </>
                 ) : null}
-                {!paused && feedback?.kind === 'wrong' ? (
+                {!needsDeviceCheck && feedback?.kind === 'wrong' ? (
                   <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
                     {t('pgWrong')}
                     {feedback.triesLeft > 0 ? ` ${tn('pgTriesLeft', feedback.triesLeft)}` : ''}
                   </ThemedText>
                 ) : null}
-                {!paused && feedback?.kind === 'format' ? (
+                {feedback?.kind === 'format' ? (
                   <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
                     {t('pgFormat')}
                   </ThemedText>
                 ) : null}
-                {!paused && feedback?.kind === 'unavailable' ? (
+                {feedback?.kind === 'unavailable' ? (
                   <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
                     {t('pgUnavailable')}
                   </ThemedText>
                 ) : null}
-                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || paused || pin.length < PIN_MIN_LENGTH} />
+                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length < PIN_MIN_LENGTH} />
                 <Button tone="soft" label={t('fpCancel')} onPress={onCancel} />
-                <DevPinTiming />
               </PinEntry>
             </Card>
             <View style={styles.forgot}>

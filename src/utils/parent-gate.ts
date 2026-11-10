@@ -4,14 +4,14 @@ import { AppState } from 'react-native';
 import { subscribeToActiveProfile } from '@/utils/profiles';
 
 // Parent Gate (M2 Stage 2A-0): the access barrier in front of the parent-only areas (the Parent Dashboard and the
-// onboarding / family set-up flow). It decides whether the parent area is OPEN, LOCKED or in a COOLDOWN, limits wrong
-// guesses (also across app restarts), and locks again when the app goes to the background, when the profile changes
-// and after a period without use.
+// onboarding / family set-up flow). It decides whether the parent area is OPEN or LOCKED, limits wrong PIN guesses (also
+// across app restarts: after five wrong PINs in a row the phone's own screen-lock check is needed before more tries; there is
+// NO waiting period), and locks again when the app goes to the background, when the profile changes and after a period without use.
 //
 // WHAT THIS IS, AND IS NOT. It is a temporary access barrier that keeps children out of the parent area by normal
 // navigation on a shared device. It is NOT verified parental identity and NOT full security: it cannot tell who is
-// holding the device, the attempt limits depend on the device clock and on data stored on the device, and nothing here
-// can protect against someone who can read or change the app's storage. Never describe it as secure to a user.
+// holding the device, the attempt limit depends on data stored on the device, and nothing here can protect against someone
+// who can read or change the app's storage. Never describe it as secure to a user.
 //
 // THE PIN ITSELF IS NOT STORED HERE. Checking a PIN is delegated to a PinVerifier (see @/utils/parent-pin.ts, which
 // keeps it in native secure storage). A verifier is only registered when family mode is enabled (FAMILY_MODE_ENABLED in
@@ -51,22 +51,25 @@ export type AttemptStore = {
 
 const ATTEMPTS_KEY = '@ProductivityPet:parentGate';
 const FRESH: Attempts = { version: 1, failures: 0, lockedUntil: 0, lastSeen: 0 };
-export const FREE_TRIES = 3;
+// Wrong PINs in a row before the phone's own screen-lock check is needed. There is no waiting period: the fifth wrong PIN does not
+// start a pause, it just means the next try has to be preceded by the check (see passDeviceCheck). The count is kept in secure
+// storage, so closing and reopening the app does not reset it; only a correct PIN or a passed check does.
+export const PIN_TRIES_BEFORE_DEVICE_CHECK = 5;
 
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
-// Reads/parses a stored counter. A damaged record is NEVER a free reset: it becomes a pause, and the replacement is saved
-// so the pause ends on time instead of being renewed on every read.
+// Reads/parses a stored counter. `lockedUntil` is a leftover of the old waiting periods: it is read but IGNORED (and written as 0),
+// so nobody stays locked after the update. A damaged record is NEVER a free reset: it counts as five wrong tries (the screen-lock
+// check is needed), and the replacement is saved.
 export async function parseAttempts(raw: string | null, save: (a: Attempts) => Promise<boolean>): Promise<Attempts> {
   if (raw === null) return { ...FRESH };
   try {
     const r = JSON.parse(raw) as Record<string, unknown>;
-    return { version: 1, failures: Math.floor(num(r.failures)), lockedUntil: num(r.lockedUntil), lastSeen: num(r.lastSeen) };
+    return { version: 1, failures: Math.floor(num(r.failures)), lockedUntil: 0, lastSeen: num(r.lastSeen) };
   } catch {
-    const now = Date.now();
-    const replacement: Attempts = { version: 1, failures: FREE_TRIES, lockedUntil: now + cooldownForFailures(FREE_TRIES), lastSeen: now };
+    const replacement: Attempts = { version: 1, failures: PIN_TRIES_BEFORE_DEVICE_CHECK, lockedUntil: 0, lastSeen: Date.now() };
     await save(replacement);
     return replacement;
   }
@@ -105,70 +108,60 @@ export function registerPinVerifier(next: PinVerifier, options: { attemptStore?:
 export const PARENT_IDLE_LOCK_MS = 5 * 60 * 1000;
 export const PARENT_MAX_SESSION_MS = 30 * 60 * 1000;
 
-// Wrong guesses in a row -> pause before the next try. Persisted, so closing and reopening the app does not reset it.
-export function cooldownForFailures(failures: number): number {
-  if (failures >= 9) return 60 * 60 * 1000;
-  if (failures >= 7) return 15 * 60 * 1000;
-  if (failures >= 5) return 5 * 60 * 1000;
-  if (failures >= 3) return 30 * 1000;
-  return 0;
-}
-
-// A clock moved BACKWARDS never shortens a pause: time is measured from the latest moment ever seen. (A clock moved
-// forwards still shortens it; that cannot be prevented without a trusted time source.)
-function effectiveNow(attempts: Attempts): number {
-  return Math.max(Date.now(), attempts.lastSeen);
-}
-
 // ---------------------------------------------------------------------------------------------------------
 // guess limiting (shared by PIN checks and recovery-code checks)
 
+// Why a guess could not be checked. Plain constants (never anything about a PIN or code): they are shown in the error message and in the
+// development trace, so a failure on a phone can be told apart from another one.
+export type AttemptFailureDetail = 'attempts-read' | 'attempts-write' | 'check-failed' | 'follow-up-failed';
+
 export type AttemptOutcome =
   | { kind: 'ok' }
-  | { kind: 'unavailable' }
-  | { kind: 'cooldown'; remainingMs: number }
-  | { kind: 'wrong'; triesLeft: number; cooldownMs: number };
+  | { kind: 'unavailable'; detail: AttemptFailureDetail }
+  // Five wrong PINs in a row: nothing was checked or counted; the phone's screen-lock check (passDeviceCheck) is needed first.
+  | { kind: 'device-check' }
+  | { kind: 'wrong'; triesLeft: number };
+
+// 'pin': a Parent PIN guess (counted; the sixth in a row needs the device check). 'code': a recovery-code guess (never counted and never
+// held back: the code has 50 bits or more, so guessing it is not a practical way in, and it is the way out for a parent who forgot the PIN).
+export type AttemptKind = 'pin' | 'code';
 
 let attemptChain: Promise<unknown> = Promise.resolve();
 
-// Runs one guess under the limits. The guess is COUNTED AND SAVED BEFORE it is checked, so closing the app in the middle
-// of a check gives no free guess; if the counter cannot be saved or read, nothing is checked at all. Guesses (a double
-// tap, or a PIN and a recovery code at once) are handled one after another and share one counter. A correct guess
-// resets the counter. `afterOk` runs only for a correct guess, still inside the queue.
-export function limitedAttempt(check: () => Promise<boolean>, afterOk?: () => Promise<boolean>): Promise<AttemptOutcome> {
-  const run = () => doLimitedAttempt(check, afterOk);
+// Runs one guess under the limit. A PIN guess is COUNTED AND SAVED BEFORE it is checked, so closing the app in the middle of a check
+// gives no free guess; if the counter cannot be saved or read, nothing is checked at all. Guesses (a double tap, or a PIN and a
+// recovery code at once) are handled one after another and share one counter. A correct guess resets the counter. `afterOk` runs only
+// for a correct guess, still inside the queue.
+export function limitedAttempt(
+  check: () => Promise<boolean>,
+  afterOk?: () => Promise<boolean>,
+  kind: AttemptKind = 'pin'
+): Promise<AttemptOutcome> {
+  const run = () => doLimitedAttempt(check, afterOk, kind);
   const next = attemptChain.then(run, run);
   attemptChain = next.catch(() => {});
   return next;
 }
 
-async function doLimitedAttempt(check: () => Promise<boolean>, afterOk?: () => Promise<boolean>): Promise<AttemptOutcome> {
+async function doLimitedAttempt(check: () => Promise<boolean>, afterOk: (() => Promise<boolean>) | undefined, kind: AttemptKind): Promise<AttemptOutcome> {
   const attempts = await attemptStore.read();
-  if (!attempts) return { kind: 'unavailable' };
-  const now = effectiveNow(attempts);
-  if (attempts.lockedUntil > now) return { kind: 'cooldown', remainingMs: attempts.lockedUntil - now };
+  if (!attempts) return { kind: 'unavailable', detail: 'attempts-read' };
+  const now = Math.max(Date.now(), attempts.lastSeen);
 
-  const counted: Attempts = {
-    version: 1,
-    failures: attempts.failures + 1,
-    lockedUntil: now + cooldownForFailures(attempts.failures + 1),
-    lastSeen: now,
-  };
-  if (!(await attemptStore.write(counted))) return { kind: 'unavailable' };
+  let failures = attempts.failures;
+  if (kind === 'pin') {
+    if (failures >= PIN_TRIES_BEFORE_DEVICE_CHECK) return { kind: 'device-check' };
+    failures += 1;
+    if (!(await attemptStore.write({ version: 1, failures, lockedUntil: 0, lastSeen: now }))) return { kind: 'unavailable', detail: 'attempts-write' };
+  }
 
   let correct = false;
   try {
     correct = await check();
   } catch {
-    return { kind: 'unavailable' }; // the guess stays counted
+    return { kind: 'unavailable', detail: 'check-failed' }; // a PIN guess stays counted
   }
-  if (!correct) {
-    return {
-      kind: 'wrong',
-      triesLeft: Math.max(0, FREE_TRIES - counted.failures),
-      cooldownMs: cooldownForFailures(counted.failures),
-    };
-  }
+  if (!correct) return { kind: 'wrong', triesLeft: kind === 'pin' ? Math.max(0, PIN_TRIES_BEFORE_DEVICE_CHECK - failures) : 0 };
   if (afterOk) {
     let finished = false;
     try {
@@ -176,10 +169,39 @@ async function doLimitedAttempt(check: () => Promise<boolean>, afterOk?: () => P
     } catch {
       finished = false;
     }
-    if (!finished) return { kind: 'unavailable' }; // a correct guess whose follow-up could not be saved changes nothing
+    if (!finished) return { kind: 'unavailable', detail: 'follow-up-failed' }; // a correct guess whose follow-up could not be saved changes nothing
   }
   await attemptStore.write({ version: 1, failures: 0, lockedUntil: 0, lastSeen: now }); // best effort; the safe direction if it fails
   return { kind: 'ok' };
+}
+
+export type DeviceCheckResult = 'passed' | 'no-device-lock' | 'cancelled' | 'failed' | 'unavailable';
+
+// After five wrong PINs: asks the operating system to confirm the phone's own screen lock (PIN, pattern, password, fingerprint or face),
+// and only then lets the next PIN tries happen (the counter is set back to zero). Fails closed: a cancelled or failed check, or a check that
+// could not be opened, changes nothing. A phone with NO screen lock (or one that cannot do the check) has nothing to ask, so there the PIN
+// tries stay stopped ('no-device-lock'): no waiting period and no reset of the counter. The way on is the recovery code, which is never
+// counted or held back and sets a new PIN (which resets the counter). The count lives in secure storage, so restarting the app does not
+// skip the check. This never opens the parent area and never replaces or reveals a PIN: it only lifts the limit on further tries.
+export async function passDeviceCheck(promptMessage: string, cancelLabel: string): Promise<DeviceCheckResult> {
+  let outcome: DeviceCheckResult;
+  try {
+    const { authenticateDevice } = require('@/utils/device-auth') as typeof import('@/utils/device-auth');
+    const result = await authenticateDevice(promptMessage, cancelLabel);
+    if (result.ok) outcome = 'passed';
+    else if (result.reason === 'not-secured' || result.reason === 'unsupported') outcome = 'no-device-lock';
+    else if (result.reason === 'cancelled') outcome = 'cancelled';
+    else if (result.reason === 'unavailable') outcome = 'unavailable';
+    else outcome = 'failed';
+  } catch {
+    outcome = 'unavailable';
+  }
+  if (outcome === 'passed') {
+    const ok = await attemptStore.write({ version: 1, failures: 0, lockedUntil: 0, lastSeen: Date.now() });
+    if (!ok) return 'unavailable'; // the counter could not be reset: the tries stay held back
+    notify();
+  }
+  return outcome;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -255,8 +277,8 @@ export type ParentAccess =
   | { state: 'checking' }
   // No PIN exists, so nothing protects the parent area (today's behavior for every user).
   | { state: 'unprotected' }
-  | { state: 'locked'; reason?: ParentAuthIssue }
-  | { state: 'cooldown'; remainingMs: number }
+  // `deviceCheck`: five wrong PINs in a row, so the phone's screen-lock check is needed before the next try.
+  | { state: 'locked'; reason?: ParentAuthIssue; deviceCheck?: boolean }
   | { state: 'unlocked' };
 
 async function currentIssue(): Promise<ParentAuthIssue | null> {
@@ -277,8 +299,7 @@ export async function getParentAccess(): Promise<ParentAccess> {
   }
   const attempts = await attemptStore.read();
   if (!attempts) return { state: 'locked' };
-  const remaining = attempts.lockedUntil - effectiveNow(attempts);
-  return remaining > 0 ? { state: 'cooldown', remainingMs: remaining } : { state: 'locked' };
+  return attempts.failures >= PIN_TRIES_BEFORE_DEVICE_CHECK ? { state: 'locked', deviceCheck: true } : { state: 'locked' };
 }
 
 // True when the parent area may be used right now (open, or there is no PIN). Used to guard actions that live outside
@@ -290,9 +311,9 @@ export async function isParentAccessAllowed(): Promise<boolean> {
 
 export type UnlockResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid-format' | 'unavailable' | 'verifier-missing' }
-  | { ok: false; reason: 'cooldown'; remainingMs: number }
-  | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
+  | { ok: false; reason: 'invalid-format' | 'verifier-missing' | 'device-check' }
+  | { ok: false; reason: 'unavailable'; detail: AttemptFailureDetail }
+  | { ok: false; reason: 'wrong'; triesLeft: number };
 
 // A PIN must be 4 to 8 digits (see @/utils/parent-pin.ts); entering anything else is refused without a guess.
 export const PIN_FORMAT = /^\d{4,8}$/;
@@ -310,22 +331,13 @@ export async function unlockParentArea(pin: string): Promise<UnlockResult> {
       notify();
       return { ok: true };
     }
-    case 'cooldown':
-      return { ok: false, reason: 'cooldown', remainingMs: outcome.remainingMs };
+    case 'device-check':
+      notify();
+      return { ok: false, reason: 'device-check' };
     case 'unavailable':
-      return { ok: false, reason: 'unavailable' };
+      return { ok: false, reason: 'unavailable', detail: outcome.detail };
     default:
       notify();
-      return { ok: false, reason: 'wrong', triesLeft: outcome.triesLeft, cooldownMs: outcome.cooldownMs };
+      return { ok: false, reason: 'wrong', triesLeft: outcome.triesLeft };
   }
-}
-
-// "0:30", "5:00", "1:00:00" for a pause message.
-export function formatRemaining(ms: number): string {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const two = (n: number) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
 }

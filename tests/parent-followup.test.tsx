@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { BackHandler, StyleSheet, Text } from 'react-native';
 
 import { ConfirmModal } from '@/components/confirm-modal';
@@ -10,7 +10,6 @@ import { PinEntry } from '@/components/pin-entry';
 import { setCurrentLanguage, translate } from '@/i18n';
 import { lockParentArea } from '@/utils/parent-gate';
 import { startParentAuth } from '@/utils/parent-pin';
-import { getPinTiming, resetPinTimingForTests } from '@/utils/pin-timing';
 
 import { resetSecure, secureTest } from './helpers';
 
@@ -25,9 +24,15 @@ jest.mock('expo-notifications', () => ({
   dismissAllNotificationsAsync: jest.fn(async () => undefined),
 }));
 jest.mock('@/utils/native-available', () => ({ hasNativeModule: () => true }));
+// The phone's own screen-lock check (asked after five wrong PINs in a row): it passes unless a test changes the answer.
+const mockAuth: { result: unknown } = { result: { success: true } };
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => 2),
+  authenticateAsync: jest.fn(async () => mockAuth.result),
+}));
 
-const PIN = '135792';
-const NEW_PIN = '864209';
+const PIN = '1357';
+const NEW_PIN = '8642';
 const RECORD_KEY = 'pp.parentAuth.v1';
 const en = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => translate('en', key, params);
 const press = (name: string) => fireEvent.press(screen.getByRole('button', { name }));
@@ -78,9 +83,9 @@ beforeEach(async () => {
   resetSecure();
   await AsyncStorage.clear();
   jest.restoreAllMocks();
+  mockAuth.result = { success: true };
   mockRouter.push.mockClear();
   mockRouter.replace.mockClear();
-  resetPinTimingForTests();
   setCurrentLanguage('en');
   lockParentArea();
   expect(startParentAuth({ enabled: true })).toBe(true);
@@ -153,7 +158,7 @@ describe('an ordinary wrong PIN', () => {
     const gate = require('@/utils/parent-gate') as typeof import('@/utils/parent-gate');
     let answer!: () => void;
     jest.spyOn(gate, 'unlockParentArea').mockImplementationOnce(
-      () => new Promise((resolve) => { answer = () => resolve({ ok: false, reason: 'wrong', triesLeft: 2, cooldownMs: 0 }); })
+      () => new Promise((resolve) => { answer = () => resolve({ ok: false, reason: 'wrong', triesLeft: 4 }); })
     );
     await typeDigits('1111');
     expect(screen.getByText(/4 digits entered/)).toBeTruthy();
@@ -164,31 +169,42 @@ describe('an ordinary wrong PIN', () => {
     expect(screen.queryByText(en('pgWrong'), { exact: false })).toBeNull();
 
     await act(async () => answer());
-    expect(await screen.findByText(new RegExp(`${en('pgWrong')} 2 tries left`))).toBeTruthy();
+    expect(await screen.findByText(new RegExp(`${en('pgWrong')} 4 tries left`))).toBeTruthy();
     expect(screen.getByRole('button', { name: en('pgUnlock') })).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
-  test('the first two wrong tries have no pause; the third starts the 30 second pause with a countdown (thresholds unchanged)', async () => {
+  test('wrong tries are answered at once, with no pause at all; the fifth calls for the phone\'s screen lock, and passing it gives the tries back', async () => {
     await lockedGate();
-    for (const wrong of ['1111', '2222']) {
+    for (const [i, wrong] of ['1111', '2222', '3333', '4444', '5555'].entries()) {
       await typeDigits(wrong);
       await press(en('pgUnlock'));
-      expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
-      expect(screen.queryByText(/Please wait/)).toBeNull();
+      if (i < 4) expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
+      expect(screen.queryByText(/Please wait/)).toBeNull(); // never a waiting period
     }
-    await typeDigits('3333');
-    await press(en('pgUnlock'));
-    expect(await screen.findByText(/Too many tries\. Please wait 0:30/)).toBeTruthy();
+    expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: en('pgDeviceCheckButton') })).toBeTruthy();
     expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.queryByText('SECRET')).toBeNull();
+    await press(en('pgDeviceCheckButton'));
+    await waitFor(() => expect(screen.queryByText(en('pgDeviceCheck'))).toBeNull());
+    await typeDigits(PIN);
+    await press(en('pgUnlock'));
+    expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
-  test('no check time is recorded outside a development build with family mode on', async () => {
+  test('a screen-lock check that is cancelled keeps the tries held back and says so', async () => {
     await lockedGate();
-    await typeDigits('1111');
-    await press(en('pgUnlock'));
-    await flush();
-    expect(getPinTiming()).toEqual({ totalMs: null, deriveMs: null, n: null, checks: 0 });
+    for (const wrong of ['1111', '2222', '3333', '4444', '5555']) {
+      await typeDigits(wrong);
+      await press(en('pgUnlock'));
+    }
+    await screen.findByText(en('pgDeviceCheck'));
+    mockAuth.result = { success: false, error: 'user_cancel' };
+    await press(en('pgDeviceCheckButton'));
+    expect(await screen.findByText(en('pgDeviceCheckCancelled'))).toBeTruthy();
+    expect(screen.getByText(en('pgDeviceCheck'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: true });
   });
 });
 
@@ -320,7 +336,7 @@ describe('saving a changed PIN', () => {
     const realSet = secure.map.set.bind(secure.map);
     secure.map.set = ((key: string, value: string) => realSet(key, key === RECORD_KEY ? old : value)) as typeof secure.map.set; // the write is silently lost
     await press(en('psFinish'));
-    expect(await screen.findByText(en('peNotVerified'))).toBeTruthy();
+    expect(await screen.findByText(en('peNotVerified'), { exact: false })).toBeTruthy();
     expect(screen.queryByText(en('pmChangedBody'))).toBeNull();
     expect(screen.queryByText(en('pmChangedTitle'))).toBeNull();
     expect(screen.getByText(en('pmCurrentPin'))).toBeTruthy(); // back at the first step
@@ -333,7 +349,8 @@ describe('saving a changed PIN', () => {
     await readyToFinish();
     secureTest().failKeys.add(RECORD_KEY);
     await press(en('psFinish'));
-    expect(await screen.findByText(en('peUnavailable'))).toBeTruthy();
+    expect(await screen.findByText(en('peUnavailable'), { exact: false })).toBeTruthy();
+    expect(screen.queryByText(/record-write/, { exact: false })).toBeNull(); // the failing step goes to the Metro terminal only, never onto the screen
     expect(screen.queryByText(en('pmChangedBody'))).toBeNull();
     secureTest().failKeys.delete(RECORD_KEY);
   });

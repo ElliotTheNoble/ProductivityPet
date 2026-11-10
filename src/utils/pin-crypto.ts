@@ -2,7 +2,6 @@ import { scryptAsync } from '@noble/hashes/scrypt';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 
 import { DEFAULT_KDF, type KdfParams } from '@/utils/kdf-params';
-import { recordDeriveTime } from '@/utils/pin-timing';
 import { secureRandomBytes, type RandomBytes } from '@/utils/secure-random';
 
 // PIN and recovery-code verification primitives. Nothing here stores anything.
@@ -12,10 +11,10 @@ import { secureRandomBytes, type RandomBytes } from '@/utils/secure-random';
 // widely used library); no hash or key-derivation function is written here. PIN and recovery code use different
 // "domains", so a record made for one can never be used to check the other.
 //
-// Honest limit: a 4-8 digit PIN has few possibilities (a 4-digit one only 10,000), so ANY stored verifier that someone can read can
-// be guessed offline, whatever the settings. The protection comes from keeping the record in native secure storage (where an app
-// user cannot read it) plus the attempt limits in parent-gate.ts (3 free tries, then 30 seconds, 5, 15 and finally 60 minutes per
-// try); scrypt only makes each offline guess slower.
+// Honest limit: a 4-digit PIN has only 10,000 possibilities, so ANY stored verifier that someone can read can be guessed offline,
+// whatever the settings. The protection comes from keeping the record in native secure storage (where an app user cannot read it)
+// plus the limit in parent-gate.ts (after five wrong PINs in a row the phone's own screen-lock check is needed; there is no waiting
+// period); scrypt only makes each offline guess slower.
 
 export type SecretDomain = 'pin' | 'recovery';
 
@@ -52,10 +51,7 @@ export function isSecretRecord(value: unknown): value is SecretRecord {
 async function derive(domain: SecretDomain, secret: string, salt: Uint8Array, kdf: KdfParams): Promise<Uint8Array> {
   // The domain is part of the secret, so the two kinds of record can never be swapped.
   const input = utf8ToBytes(`productivitypet:${domain}:v1:${secret}`);
-  const started = Date.now();
-  const key = await scryptAsync(input, salt, { N: kdf.N, r: kdf.r, p: kdf.p, dkLen: kdf.dkLen, asyncTick: 10 });
-  recordDeriveTime(Date.now() - started, kdf.N); // development-only timing of this step (never the secret), see pin-timing.ts
-  return key;
+  return scryptAsync(input, salt, { N: kdf.N, r: kdf.r, p: kdf.p, dkLen: kdf.dkLen, asyncTick: 10 });
 }
 
 // Takes the same time however many leading bytes match.
@@ -87,15 +83,18 @@ export async function checkSecret(domain: SecretDomain, secret: string, record: 
 // ---------------------------------------------------------------------------------------------------------
 // PIN rules
 
+// A NEW PIN is exactly 4 digits. PINs of 4 to 8 digits that were made earlier keep working until their owner changes them, so every place
+// that CHECKS an existing PIN still accepts 4 to 8 digits (PIN_MIN_LENGTH to PIN_MAX_LENGTH); only the places that CREATE one use NEW_PIN_LENGTH.
+export const NEW_PIN_LENGTH = 4;
 export const PIN_MIN_LENGTH = 4;
 export const PIN_MAX_LENGTH = 8;
 
 // 'weak' is no longer returned (simple PINs are allowed, see isSimplePin); the member stays so existing callers still type-check.
 export type PinPolicyResult = { ok: true } | { ok: false; reason: 'format' | 'weak' };
 
-// A new PIN is 4 to 8 digits. Repeats (1111) and runs (1234) are ALLOWED: the screens show a non-blocking note instead.
+// A new PIN is exactly 4 digits. Repeats (1111) and runs (1234) are ALLOWED: the screens show a non-blocking note instead.
 export function validateNewPin(pin: string): PinPolicyResult {
-  if (typeof pin !== 'string' || !/^\d{4,8}$/.test(pin)) return { ok: false, reason: 'format' };
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) return { ok: false, reason: 'format' };
   return { ok: true };
 }
 
@@ -114,12 +113,15 @@ export function isSimplePin(pin: string): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// recovery code: 120 random bits as 24 characters (Crockford base32: no I, L, O or U) plus one check character, shown in
-// five groups of five. The check character (Luhn mod 32) catches a mistyped character without counting as a wrong guess.
+// recovery code. NEW codes are 10 characters in two groups of five ("XXXXX-XXXXX"), every one of them random (Crockford base32: no I, L, O or U, so
+// 5 bits each, 50 bits in all): 7 random bytes from the operating system, of which the first 50 bits become the 10 characters. EARLIER codes
+// (25 characters: 24 random plus a Luhn mod 32 check character, in five groups) stay valid until their owner replaces them; they are only
+// ever recognised and checked here, never made again. A code is recognised by its length once dashes and spaces are removed.
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-export const RECOVERY_CODE_BYTES = 15;
-const DATA_CHARS = 24;
+export const RECOVERY_CODE_BYTES = 7;
+export const NEW_CODE_CHARS = 10;
+const LEGACY_DATA_CHARS = 24;
 
 function checkChar(data: string): string {
   let factor = 2;
@@ -150,21 +152,21 @@ function toBase32(bytes: Uint8Array): string {
   return out;
 }
 
-// A new recovery code in its display form: "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX". Shown to the parent once and never stored.
+// A new recovery code in its display form: "XXXXX-XXXXX". Shown to the parent once and never stored.
 export async function generateRecoveryCode(random: RandomBytes = secureRandomBytes): Promise<string> {
   const bytes = await random(RECOVERY_CODE_BYTES);
   if (bytes.length !== RECOVERY_CODE_BYTES) throw new Error('secure random bytes unavailable');
-  const data = toBase32(bytes); // 15 bytes = 120 bits = exactly 24 characters
-  const full = data + checkChar(data);
-  return full.match(/.{5}/g)!.join('-');
+  const chars = toBase32(bytes).slice(0, NEW_CODE_CHARS); // 7 bytes = 56 bits = 11 characters; the first 10 (50 bits) are used
+  return chars.match(/.{5}/g)!.join('-');
 }
 
-// The canonical form of a typed code (upper case, no spaces or dashes, O->0 and I/L->1), or null when it cannot be a valid
-// code (wrong length, a character outside the alphabet, or a wrong check character).
+// The canonical form of a typed code (upper case, no spaces or dashes, O->0 and I/L->1), or null when it cannot be a valid code: a new 10-character
+// code (every character in the alphabet) or an earlier 25-character one (alphabet and a correct check character).
 export function normalizeRecoveryCode(input: string): string | null {
   if (typeof input !== 'string') return null;
   const cleaned = input.toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
-  if (cleaned.length !== DATA_CHARS + 1) return null;
+  if (cleaned.length !== NEW_CODE_CHARS && cleaned.length !== LEGACY_DATA_CHARS + 1) return null;
   for (const ch of cleaned) if (ALPHABET.indexOf(ch) < 0) return null;
-  return checkChar(cleaned.slice(0, DATA_CHARS)) === cleaned[DATA_CHARS] ? cleaned : null;
+  if (cleaned.length === NEW_CODE_CHARS) return cleaned;
+  return checkChar(cleaned.slice(0, LEGACY_DATA_CHARS)) === cleaned[LEGACY_DATA_CHARS] ? cleaned : null;
 }

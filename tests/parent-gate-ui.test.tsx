@@ -16,6 +16,16 @@ import {
 } from '@/utils/parent-gate';
 import { ensureProfilesReady, registerChildProfile, switchProfile } from '@/utils/profiles';
 
+// The phone's own screen-lock check: the security level it reports (0 = no screen lock) and whether the system can be reached at all.
+const mockLock: { level: number; broken: boolean } = { level: 2, broken: false };
+jest.mock('expo-local-authentication', () => ({
+  getEnrolledLevelAsync: jest.fn(async () => {
+    if (mockLock.broken) throw new Error('system error');
+    return mockLock.level;
+  }),
+  authenticateAsync: jest.fn(async () => ({ success: true })),
+}));
+
 const mockRouter = { push: jest.fn(), replace: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 // These tests are about the Parent Gate on the parent-only screens and the Pet Care card, which exist only with family mode on (without it
@@ -41,7 +51,7 @@ jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
 }));
 
-const PIN = '246813';
+const PIN = '2468';
 const en = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => translate('en', key, params);
 const es = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => translate('es', key, params);
 
@@ -120,7 +130,7 @@ describe('ParentGate', () => {
     await screen.findByText(en('pgTitle'));
     await enterPin('000000');
     expect(await screen.findByText(new RegExp(en('pgWrong').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeTruthy();
-    expect(screen.getByText(/2 tries left/)).toBeTruthy();
+    expect(screen.getByText(/4 tries left/)).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
@@ -140,7 +150,7 @@ describe('ParentGate', () => {
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
-  test('three wrong PINs start a pause: a message with the time, the button is disabled, and the content stays hidden', async () => {
+  test('five wrong PINs call for your phone screen lock (no waiting): the button is disabled and the content stays hidden', async () => {
     setPin();
     await render(
       <ParentGate>
@@ -148,24 +158,45 @@ describe('ParentGate', () => {
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    for (const pin of ['000000', '000001', '000002']) {
+    for (const pin of ['0000', '0001', '0002', '0003', '0004']) {
       await enterPin(pin);
       await act(async () => {});
     }
-    expect(await screen.findByText(/Too many tries/)).toBeTruthy();
+    expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
     expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
-  test('after an app restart the pause is still shown (it was saved)', async () => {
+  test.each([
+    ['has no screen lock', () => { mockLock.level = 0; }, 'pgDeviceCheckNoLock'],
+    ['cannot reach the screen-lock check right now', () => { mockLock.broken = true; }, 'pgDeviceCheckUnavailable'],
+  ] as const)('a phone that %s: the PIN stays stopped with an explanation, and the recovery way stays open', async (_name, setup, messageKey) => {
+    mockLock.level = 2;
+    mockLock.broken = false;
+    setup();
     setPin();
-    for (const pin of ['000000', '000001', '000002']) await unlockParentArea(pin); // three wrong guesses in an earlier "run"
+    for (const pin of ['0000', '0001', '0002', '0003', '0004']) await unlockParentArea(pin);
     await render(
       <ParentGate>
         <Text>SECRET</Text>
       </ParentGate>
     );
-    expect(await screen.findByText(/Too many tries/)).toBeTruthy();
+    await fireEvent.press(await screen.findByRole('button', { name: en('pgDeviceCheckButton') }));
+    expect(await screen.findByText(en(messageKey))).toBeTruthy();
+    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: en('prStart') })).toBeTruthy(); // the recovery code is still the way on
+    expect(screen.queryByText('SECRET')).toBeNull();
+  });
+
+  test('after an app restart the screen-lock requirement is still shown (it was saved)', async () => {
+    setPin();
+    for (const pin of ['0000', '0001', '0002', '0003', '0004']) await unlockParentArea(pin); // five wrong guesses in an earlier "run"
+    await render(
+      <ParentGate>
+        <Text>SECRET</Text>
+      </ParentGate>
+    );
+    expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
@@ -210,7 +241,7 @@ describe('ParentGate', () => {
     expect(screen.getByText(es('pgForgotText'))).toBeTruthy();
     for (const digit of '000000') await fireEvent.press(screen.getByRole('button', { name: digit }));
     await fireEvent.press(screen.getByRole('button', { name: es('pgUnlock') }));
-    expect(await screen.findByText(/Quedan 2 intentos/)).toBeTruthy();
+    expect(await screen.findByText(/Te quedan 4 intentos/)).toBeTruthy();
     expect(screen.queryByText(en('pgTitle'))).toBeNull();
   });
 });

@@ -68,7 +68,7 @@ beforeEach(async () => {
 });
 
 describe('4-digit PINs', () => {
-  test('a 4-digit PIN with repeated digits sets up and unlocks, and the pause rules are unchanged', async () => {
+  test('a 4-digit PIN with repeated digits sets up and unlocks, and five wrong PINs call for the phone\'s screen lock', async () => {
     await toCodeScreen('1111');
     await press(en('rcReveal'));
     const code = shownCode();
@@ -80,10 +80,10 @@ describe('4-digit PINs', () => {
     expect(mockRouter.replace).toHaveBeenCalledWith('/parent');
     lockParentArea();
     const gate = require('@/utils/parent-gate') as typeof import('@/utils/parent-gate');
-    expect(await gate.unlockParentArea('1112')).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 2 });
-    expect(await gate.unlockParentArea('1113')).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 1 });
-    expect(await gate.unlockParentArea('1114')).toMatchObject({ ok: false, reason: 'wrong', triesLeft: 0, cooldownMs: 30000 });
-    expect(await gate.unlockParentArea('1111')).toMatchObject({ ok: false, reason: 'cooldown' }); // even the right PIN waits
+    for (const [i, wrong] of ['1112', '1113', '1114', '1115', '1116'].entries()) {
+      expect(await gate.unlockParentArea(wrong)).toEqual({ ok: false, reason: 'wrong', triesLeft: 4 - i }); // answered at once, no waiting
+    }
+    expect(await gate.unlockParentArea('1111')).toEqual({ ok: false, reason: 'device-check' }); // after five, the phone's screen lock is owed first
   });
 });
 
@@ -247,14 +247,17 @@ describe('leaving a recovery screen', () => {
 
 describe('wording', () => {
   test('the PIN length messages say 4 to 8 digits in both languages, and nothing still says 6 to 8', () => {
-    expect(translate('en', 'pgFormat')).toBe('Enter 4 to 8 digits.');
-    expect(translate('es', 'pgFormat')).toBe('Escribe de 4 a 8 dígitos.');
+    expect(translate('en', 'pgFormat')).toBe('Enter your Parent PIN.');
+    expect(translate('es', 'pgFormat')).toBe('Escribe tu PIN de padres.');
+    // the boxes that MAKE a PIN say exactly 4 digits (earlier 5 to 8 digit PINs are still accepted where a PIN is only checked)
     for (const lang of ['en', 'es'] as const) {
-      for (const key of ['pgFormat', 'pgPinPlaceholder', 'pePinFormat', 'psCreateBody'] as const) {
+      for (const key of ['pePinFormat', 'psCreateBody'] as const) {
         expect(translate(lang, key)).toContain('4');
-        expect(translate(lang, key)).not.toContain('6');
+        expect(translate(lang, key)).not.toMatch(/[5-8]/);
       }
     }
+    expect(translate('en', 'pePinFormat')).toBe('A PIN needs exactly 4 digits.');
+    expect(translate('es', 'pePinFormat')).toBe('Un PIN necesita exactamente 4 dígitos.');
   });
 });
 

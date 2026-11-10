@@ -9,9 +9,11 @@ import {
   parseAttempts,
   refreshParentAccess,
   registerPinVerifier,
+  type AttemptFailureDetail,
   type AttemptStore,
   type PinVerifier,
 } from '@/utils/parent-gate';
+import { pinTrace, type TraceWord } from '@/utils/pin-trace';
 import { getAuthBackend, isSecureStorageAvailable, readSecret, setAuthBackend, writeSecret } from '@/utils/parent-auth-backend';
 import { ATTEMPTS_KEY, RECORD_KEY } from '@/utils/parent-secrets';
 import {
@@ -190,25 +192,43 @@ export type ConfirmSetupResult =
   | { ok: true }
   | { ok: false; reason: 'format' | 'invalid-code' | 'not-pending' | 'already-configured' | 'verifier-missing' | 'wrong' | 'unavailable' };
 
+// Why a Parent PIN change (or a recovery step) could not be done, as plain constants: they are shown in the error message and in the development
+// trace, so a failure on a phone can be told apart from another one. Never anything about a PIN or code.
+export type PinFailureDetail =
+  | AttemptFailureDetail
+  | 'record-read'
+  | 'hash-new'
+  | 'record-write'
+  | 'read-back'
+  | 'read-back-differs'
+  | 'new-pin-does-not-match'
+  | 'old-pin-still-works';
+
+// A guess that was not accepted: a wrong PIN / code (with the PIN tries left before the phone's screen-lock check), or the screen-lock
+// check being needed first (five wrong PINs in a row). There is no waiting period.
+type GuessFailure = { ok: false; reason: 'device-check' } | { ok: false; reason: 'wrong'; triesLeft: number };
+type Unavailable = { ok: false; reason: 'unavailable'; detail: PinFailureDetail };
+
 export type PinChangeResult =
   | { ok: true }
-  // 'not-verified': the new record was written but reading it back did not show what was written (or could not be read), so the PIN may not
-  // have changed. The change is NOT reported as done.
-  | { ok: false; reason: 'format' | 'weak' | 'not-configured' | 'verifier-missing' | 'unavailable' | 'not-verified' }
-  | { ok: false; reason: 'cooldown'; remainingMs: number }
-  | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
+  | { ok: false; reason: 'format' | 'weak' | 'not-configured' | 'verifier-missing' }
+  // 'not-verified': the new record was written but reading it back (or trying the new PIN on it) did not give what was expected, so the PIN
+  // may not have changed. The change is NOT reported as done.
+  | { ok: false; reason: 'not-verified'; detail: PinFailureDetail }
+  | Unavailable
+  | GuessFailure;
 
 export type RecoveryResult =
   | { ok: true; recoveryCode: string }
-  | { ok: false; reason: 'format' | 'weak' | 'invalid-code' | 'not-configured' | 'verifier-missing' | 'unavailable' }
-  | { ok: false; reason: 'cooldown'; remainingMs: number }
-  | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
+  | { ok: false; reason: 'format' | 'weak' | 'invalid-code' | 'not-configured' | 'verifier-missing' }
+  | Unavailable
+  | GuessFailure;
 
 export type ConfirmRecoveryResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid-code' | 'not-configured' | 'verifier-missing' | 'unavailable' }
-  | { ok: false; reason: 'cooldown'; remainingMs: number }
-  | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number };
+  | { ok: false; reason: 'invalid-code' | 'not-configured' | 'verifier-missing' }
+  | Unavailable
+  | GuessFailure;
 
 // What the setup / recovery screens need to know about the recovery code.
 //  'none'          no PIN and no unfinished setup
@@ -355,36 +375,85 @@ function sameSecretRecord(a: SecretRecord, b: SecretRecord): boolean {
 
 // Changes the PIN. The current PIN is a counted guess. The recovery code stays valid (and keeps its confirmed state).
 //
-// The change counts as done only when it has been VERIFIED: after the write the record is read back from storage and must hold exactly
-// the new PIN verifier that was written AND the same recovery code, generation and confirmed state as before. Anything else (the write
-// failed, the read-back failed, or showed something different) is not reported as a success.
+// The change counts as done only when it has been VERIFIED, step by step, after the write:
+//   1. the record is read back and holds exactly the new PIN verifier AND the same recovery code, generation and confirmed state as before;
+//   2. the saved verifier ACCEPTS the new PIN (the new PIN is hashed again and compared with it);
+//   3. in a development build, the saved verifier REFUSES the old PIN (unless the "new" PIN is the same as the old one).
+// Anything else (a failed write or read, or an unexpected answer) is reported with the step that failed, never as a success.
 export async function changePin(currentPin: string, newPin: string): Promise<PinChangeResult> {
+  pinTrace('change:start');
   const policy = validateNewPin(newPin);
   if (!policy.ok) return policy;
   const state = await getAuthState();
   if (state.kind !== 'ready') return { ok: false, reason: reasonFor(state) };
-  let notVerified = false;
+  let failure: { detail: PinFailureDetail; verification: boolean } | null = null;
+  const fail = (detail: PinFailureDetail, verification = false) => {
+    failure = { detail, verification };
+    pinTrace('change:finished', { ok: false, detail: detail as TraceWord });
+    return false;
+  };
   const outcome = await limitedAttempt(
-    () => pinMatches(currentPin),
+    async () => {
+      const started = Date.now();
+      const matches = await pinMatches(currentPin);
+      pinTrace('change:current-pin-checked', { matches, ms: Date.now() - started });
+      return matches;
+    },
     async () => {
       const current = await readyRecord();
-      if (!current) return false;
-      const next: AuthRecord = { ...current, updatedAt: new Date().toISOString(), pin: await makeSecretRecord('pin', newPin) };
-      if (!(await saveRecord(next))) return false;
+      if (!current) return fail('record-read');
+      let hashed: SecretRecord;
+      const hashStarted = Date.now();
+      try {
+        hashed = await makeSecretRecord('pin', newPin);
+      } catch {
+        return fail('hash-new');
+      }
+      pinTrace('change:new-pin-hashed', { ms: Date.now() - hashStarted });
+      const next: AuthRecord = { ...current, updatedAt: new Date().toISOString(), pin: hashed };
+      if (!(await saveRecord(next))) return fail('record-write');
+      pinTrace('change:record-written');
       const back = await readyRecord();
-      const verified =
-        !!back &&
-        sameSecretRecord(back.pin, next.pin) &&
+      if (!back) return fail('read-back', true);
+      const sameVerifier = sameSecretRecord(back.pin, next.pin);
+      const sameRecovery =
         sameSecretRecord(back.recovery, current.recovery) &&
         back.recoveryGeneration === current.recoveryGeneration &&
         back.recoveryConfirmed === current.recoveryConfirmed;
-      if (!verified) notVerified = true;
-      return verified;
-    }
+      pinTrace('change:read-back', { sameVerifier, sameRecovery });
+      if (!sameVerifier || !sameRecovery) return fail('read-back-differs', true);
+      let accepts = false;
+      try {
+        accepts = await checkSecret('pin', newPin, back.pin);
+      } catch {
+        accepts = false;
+      }
+      pinTrace('change:new-pin-verified', { accepted: accepts });
+      if (!accepts) return fail('new-pin-does-not-match', true);
+      if (__DEV__ && FAMILY_MODE_ENABLED && newPin !== currentPin) {
+        let oldAccepted = false;
+        try {
+          oldAccepted = await checkSecret('pin', currentPin, back.pin);
+        } catch {
+          oldAccepted = false;
+        }
+        pinTrace('change:old-pin-checked', { oldStillAccepted: oldAccepted });
+        if (oldAccepted) return fail('old-pin-still-works', true);
+      }
+      return true;
+    },
+    'pin'
   );
   const changed = mapOutcome(outcome);
-  if (changed.ok) refreshParentAccess();
-  else if (notVerified && changed.reason === 'unavailable') return { ok: false, reason: 'not-verified' };
+  if (changed.ok) {
+    pinTrace('change:finished', { ok: true });
+    refreshParentAccess();
+    return changed;
+  }
+  const lost = failure as { detail: PinFailureDetail; verification: boolean } | null;
+  if (lost && changed.reason === 'unavailable') return { ok: false, reason: lost.verification ? 'not-verified' : 'unavailable', detail: lost.detail };
+  if (changed.reason !== 'unavailable') pinTrace('change:finished', { ok: false, detail: changed.reason as TraceWord });
+  else pinTrace('change:finished', { ok: false, detail: changed.detail as TraceWord });
   return changed;
 }
 
@@ -419,7 +488,8 @@ export async function recoverWithCode(code: string, newPin: string): Promise<Rec
         recovery: await makeSecretRecord('recovery', normalizeRecoveryCode(newCode)!),
       };
       return saveRecord(next);
-    }
+    },
+    'code'
   );
   const mapped = mapOutcome(outcome);
   if (mapped.ok) {
@@ -473,25 +543,24 @@ export async function confirmRecoveryCode(code: string): Promise<ConfirmRecovery
       const current = await readyRecord();
       if (!current) return false;
       return saveRecord({ ...current, recoveryConfirmed: true, updatedAt: new Date().toISOString() });
-    }
+    },
+    'code'
   );
   const confirmed = mapOutcome(outcome);
   if (confirmed.ok) refreshParentAccess();
   return confirmed;
 }
 
-function mapOutcome(
-  outcome: Awaited<ReturnType<typeof limitedAttempt>>
-): { ok: true } | { ok: false; reason: 'unavailable' } | { ok: false; reason: 'cooldown'; remainingMs: number } | { ok: false; reason: 'wrong'; triesLeft: number; cooldownMs: number } {
+function mapOutcome(outcome: Awaited<ReturnType<typeof limitedAttempt>>): { ok: true } | Unavailable | GuessFailure {
   switch (outcome.kind) {
     case 'ok':
       return { ok: true };
-    case 'cooldown':
-      return { ok: false, reason: 'cooldown', remainingMs: outcome.remainingMs };
+    case 'device-check':
+      return { ok: false, reason: 'device-check' };
     case 'wrong':
-      return { ok: false, reason: 'wrong', triesLeft: outcome.triesLeft, cooldownMs: outcome.cooldownMs };
+      return { ok: false, reason: 'wrong', triesLeft: outcome.triesLeft };
     default:
-      return { ok: false, reason: 'unavailable' };
+      return { ok: false, reason: 'unavailable', detail: outcome.detail };
   }
 }
 

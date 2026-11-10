@@ -11,7 +11,6 @@ export const familyPickerEn = {
   // Main / parent
   fpMain: 'Main',
   fpMainSubProtected: "A parent's own pets. Needs the parent PIN.",
-  fpMainLocked: 'Locked. Try again in {time}.',
   fpMainMissingShort: 'Parent PIN missing. Children can still play.',
   fpMainNoPin: 'Main stays locked until a parent sets up the parent PIN. Children can still play.',
   fpMainUnconfirmed: "The parent PIN setup isn't finished yet, so Main stays locked. Children can still play.",

@@ -212,14 +212,14 @@ describe('a household with children and no PIN: parent-only screens fail closed'
 describe('the device security check, then the existing setup', () => {
   test('success: the claim is granted and the EXISTING setup starts; before it the PIN could not be created', async () => {
     const app = await boot({ seed: withKids(), pin: 'none' });
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
     const view = await renderGate(app);
     await view.findByText(t(app, 'pkTitle'));
     await app.rntl.fireEvent.press(view.getByRole('button', { name: t(app, 'pkCheck') }));
     await view.findByText(t(app, 'psIntroTitle')); // the unchanged first-setup screen
     expect(g.__la.calls).toBe(1);
     expect(app.claim.hasSetupClaim()).toBe(true);
-    const begun = await app.pin.beginPinSetup('135792');
+    const begun = await app.pin.beginPinSetup('1357');
     expect(begun.ok).toBe(true); // creates only a PENDING record: nothing is protected until it is confirmed
     expect(await app.gate.isParentAccessAllowed()).toBe(true); // still no PIN
   });
@@ -231,7 +231,7 @@ describe('the device security check, then the existing setup', () => {
     await view.findByText(t(app, 'psIntroTitle'));
     await view.unmount();
     expect(app.claim.hasSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
     const again = await renderGate(app); // "back" to the same address: the check is asked again
     await again.findByText(t(app, 'pkTitle'));
     expect(again.queryByText(t(app, 'psIntroTitle'))).toBeNull();
@@ -244,7 +244,7 @@ describe('the device security check, then the existing setup', () => {
     expect(app.claim.hasSetupClaim()).toBe(true);
     setClock(T0 + 11 * 60 * 1000);
     expect(app.claim.hasSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
 
     setClock(T0);
     expect(await app.claim.grantSetupClaim()).toBe(true);
@@ -265,7 +265,7 @@ describe('the device security check, then the existing setup', () => {
 
   test('the claim needs no check in a household with no child, and is never needed with family mode off', async () => {
     const empty = await boot({ seed: {}, pin: 'none' });
-    expect((await empty.pin.beginPinSetup('135792')).ok).toBe(true);
+    expect((await empty.pin.beginPinSetup('1357')).ok).toBe(true);
     const off = await boot({ family: false, seed: withKids() });
     expect(await off.claim.setupClaimSatisfied()).toBe(true);
     expect(await off.claim.grantSetupClaim()).toBe(false); // nothing to grant, nothing to need
@@ -297,7 +297,7 @@ describe('every other outcome of the device check changes nothing', () => {
     expect(view.queryByText(t(app, 'psIntroTitle'))).toBeNull();
     expect(view.queryByText('SECRET-CONTENT')).toBeNull();
     expect(app.claim.hasSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
     expect(secureTest().sets.length).toBe(secureBefore);
     expect(await mainKeys(app)).toEqual(before);
     if (key === 'pkNotSecured' && la.level === 0) expect(g.__la.calls).toBe(0); // no fallback: the prompt was never shown
@@ -325,7 +325,7 @@ describe('every other outcome of the device check changes nothing', () => {
     expect(view.queryByText('SECRET-CONTENT')).toBeNull();
     expect(g.__la.calls).toBe(0);
     expect(await app.claim.grantSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toMatchObject({ ok: false });
+    expect(await app.pin.beginPinSetup('1357')).toMatchObject({ ok: false });
     os.restore();
   });
 });
@@ -347,7 +347,7 @@ describe('an existing PIN is never replaced, reset or bypassed (including by the
     expect(route.queryByText(t(app, 'psIntroTitle'))).toBeNull();
     expect(g.__la.calls).toBe(0);
     expect(await app.claim.grantSetupClaim()).toBe(false);
-    expect((await app.pin.beginPinSetup('135792')).ok).toBe(false);
+    expect((await app.pin.beginPinSetup('1357')).ok).toBe(false);
     expect([...secureTest().map]).toEqual(secureBefore);
     expect(await app.AsyncStorage.getItem(`${P}parentAuth`)).toBe(marker);
   });
@@ -441,7 +441,7 @@ describe('the claim lifecycle (final-review cases)', () => {
     expect(app.claim.hasSetupClaim()).toBe(true); // coming back to the foreground is not an end
     listener('background');
     expect(app.claim.hasSetupClaim()).toBe(false);
-    expect(await app.pin.beginPinSetup('135792')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('1357')).toEqual({ ok: false, reason: 'claim-required' });
     spy.mockRestore();
   });
 
@@ -450,12 +450,12 @@ describe('the claim lifecycle (final-review cases)', () => {
     const view = await renderGate(app);
     await app.rntl.fireEvent.press(await view.findByRole('button', { name: t(app, 'pkCheck') }));
     await view.findByText(t(app, 'psIntroTitle'));
-    expect((await app.pin.beginPinSetup('135792')).ok).toBe(true); // spends the claim
+    expect((await app.pin.beginPinSetup('1357')).ok).toBe(true); // spends the claim
     expect(app.claim.hasSetupClaim()).toBe(false);
     await app.rntl.act(async () => undefined);
     expect(view.queryByText(t(app, 'pkCheck'))).toBeNull(); // the screen did not fall back to the device check mid-setup
     expect(view.getByText(t(app, 'psIntroTitle'))).toBeTruthy();
-    expect(await app.pin.beginPinSetup('864209')).toEqual({ ok: false, reason: 'claim-required' });
+    expect(await app.pin.beginPinSetup('8642')).toEqual({ ok: false, reason: 'claim-required' });
   });
 
   test('a granted claim shows only the setup, never the parent screen (it opens nothing)', async () => {

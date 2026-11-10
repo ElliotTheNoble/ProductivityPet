@@ -144,9 +144,16 @@ describe('where it may be used', () => {
     expect(native).toEqual(['src/utils/device-auth.ts']);
   });
 
-  test('it never unlocks anything: the parent gate, the PIN module and the picker do not use it', () => {
-    for (const f of ['src/utils/parent-gate.ts', 'src/utils/parent-pin.ts', 'src/utils/parent-session.ts', 'src/components/family-picker.tsx']) {
+  test('it never unlocks anything: the PIN module, the session checks and the picker do not use it; the gate uses it only to lift the limit on more PIN tries', () => {
+    for (const f of ['src/utils/parent-pin.ts', 'src/utils/parent-session.ts', 'src/components/family-picker.tsx']) {
       expect(read(f)).not.toMatch(/device-auth|authenticateDevice|expo-local-authentication/);
     }
+    // the gate asks the operating system in exactly one place (passDeviceCheck), which only ever writes the guess counter, never a session
+    const gate = read('src/utils/parent-gate.ts').replace(/\/\/.*$/gm, '');
+    expect(gate.match(/authenticateDevice\(/g)).toHaveLength(1);
+    const start = gate.indexOf('export async function passDeviceCheck');
+    const passDeviceCheck = gate.slice(start, gate.indexOf('\n}\n', start));
+    expect(passDeviceCheck).not.toMatch(/session\s*=|openParentSession|unlockParentArea/);
+    expect(passDeviceCheck).toMatch(/failures: 0/);
   });
 });
