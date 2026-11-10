@@ -20,15 +20,20 @@ import { PieChart, type PieSlice } from '@/components/pie-chart';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useActiveProfileId } from '@/hooks/use-active-profile';
 import { useTheme } from '@/hooks/use-theme';
+import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import {
   MAX_REFLECTION_LENGTH,
   deleteReflection,
   getReflections,
+  isShared,
   saveReflection,
+  setReflectionVisibility,
   subscribeToJournal,
   type Reflection,
 } from '@/utils/journal';
+import { getProfilesStatus } from '@/utils/profiles';
 import { MOODS, moodName, type Mood } from '@/utils/mood';
 import { getMoodLog, subscribeToMoodLog, type MoodEntry } from '@/utils/mood-log';
 import {
@@ -84,8 +89,15 @@ export function MoodJourneyScreen() {
   const [entries, setEntries] = useState<MoodEntry[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [draft, setDraft] = useState('');
-  // 'saved' only after a save really reached storage; 'error' if it didn't.
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  // Only a CHILD profile in family mode can share an entry with a parent. Main (and a later Adult Profile) never gets the choice: its
+  // journal stays personal.
+  const profileId = useActiveProfileId();
+  const canShare = FAMILY_MODE_ENABLED && getProfilesStatus().profiles.some((p) => p.id === profileId && p.kind === 'child');
+  // The choice shown in the editor. A day's entry starts as stored (private unless shared); picking Shared only takes effect at Save.
+  const [shareChoice, setShareChoice] = useState(false);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
+  // 'saved' only after a save really reached storage; 'error' if it didn't. 'private' = an entry was made private and that was confirmed.
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error' | 'private' | 'privacy-error'>('idle');
   const selectedDateRef = useRef(selectedDate);
 
   // Load once, then stay live: a check-in made on Home or a reflection saved
@@ -108,7 +120,8 @@ export function MoodJourneyScreen() {
 
   selectedDateRef.current = selectedDate;
   // A reflection with changes that were not saved is unfinished.
-  useUnfinishedWork('journal', draft.trim() !== (reflectionForDay?.text ?? '').trim());
+  const storedShared = reflectionForDay ? isShared(reflectionForDay) : false;
+  useUnfinishedWork('journal', draft.trim() !== (reflectionForDay?.text ?? '').trim() || (canShare && shareChoice && !storedShared));
 
   // Showing a different day clears any old status message. (This used to be
   // one effect that ALSO depended on the saved text, so saving — which changes
@@ -122,6 +135,12 @@ export function MoodJourneyScreen() {
   useEffect(() => {
     setDraft(reflectionForDay?.text ?? '');
   }, [selectedDate, reflectionForDay?.text]);
+
+  // The choice follows what is stored for the day (on a day change, and when the stored setting changes). A Shared pick that was not
+  // saved yet is not overwritten by unrelated updates, because the stored setting has not changed.
+  useEffect(() => {
+    setShareChoice(storedShared);
+  }, [selectedDate, storedShared]);
 
   const topMood = mostFrequentMood(entries);
   const dayByDate = latestMoodByDate(entries);
@@ -140,11 +159,30 @@ export function MoodJourneyScreen() {
   async function handleSave() {
     const date = selectedDate;
     const hasText = draft.trim().length > 0;
-    const ok = await saveReflection(date, draft);
+    // Only a child who can share passes a choice; otherwise the entry keeps the setting it has (private for a new one).
+    const ok = await saveReflection(date, draft, canShare ? (shareChoice ? 'shared' : 'private') : undefined);
     // Ignore the result if the player has since moved to another day.
     if (selectedDateRef.current !== date) return;
     // Saving empty text just clears the day, so there is nothing to confirm.
     setSaveStatus(!ok ? 'error' : hasText ? 'saved' : 'idle');
+  }
+  // Shared -> Private for an entry that is already shared: saved at once and confirmed against what is stored. ONLY the setting changes:
+  // the text in the editor (saved or not) is left exactly as it is, and nothing is saved or discarded. Private -> Shared is just a pick
+  // until Save.
+  async function handleShareToggle() {
+    if (privacyBusy) return;
+    if (shareChoice && storedShared && reflectionForDay) {
+      const date = selectedDate;
+      setPrivacyBusy(true);
+      const ok = await setReflectionVisibility(date, 'private');
+      setPrivacyBusy(false);
+      if (selectedDateRef.current !== date) return;
+      if (ok) setShareChoice(false);
+      setSaveStatus(ok ? 'private' : 'privacy-error');
+      return;
+    }
+    setShareChoice(!shareChoice);
+    setSaveStatus('idle');
   }
   async function handleDelete() {
     const date = selectedDate;
@@ -313,6 +351,25 @@ export function MoodJourneyScreen() {
                 { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background },
               ]}
             />
+            {canShare ? (
+              <View style={styles.shareBox}>
+                <Pressable
+                  onPress={() => void handleShareToggle()}
+                  disabled={privacyBusy}
+                  accessibilityRole="switch"
+                  accessibilityLabel={t('mjShareLabel')}
+                  accessibilityState={{ checked: shareChoice, disabled: privacyBusy }}
+                  style={({ pressed }) => [styles.shareRow, pressed && styles.pressed]}>
+                  <ThemedText type="smallBold">{shareChoice ? t('mjShared') : t('mjPrivate')}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {shareChoice ? t('mjSwitchToPrivate') : t('mjSwitchToShared')}
+                  </ThemedText>
+                </Pressable>
+                <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+                  {shareChoice ? (storedShared ? t('mjSharedExplain') : t('mjShareNeedsSave')) : t('mjPrivateExplain')}
+                </ThemedText>
+              </View>
+            ) : null}
             <View style={styles.buttonRow}>
               <Pressable onPress={handleSave} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
                 <ThemedView type="accent" style={[styles.actionButton, styles.pointer]}>
@@ -331,6 +388,16 @@ export function MoodJourneyScreen() {
               {saveStatus === 'saved' ? (
                 <ThemedText type="small" themeColor="textSecondary">
                   {t('mjSaved')}
+                </ThemedText>
+              ) : null}
+              {saveStatus === 'private' ? (
+                <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+                  {t('mjNowPrivate')}
+                </ThemedText>
+              ) : null}
+              {saveStatus === 'privacy-error' ? (
+                <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
+                  {t('mjPrivacyFailed')}
                 </ThemedText>
               ) : null}
               {saveStatus === 'error' ? (
@@ -360,6 +427,11 @@ export function MoodJourneyScreen() {
                     onPress={() => setSelectedDate(r.dateISO)}
                     style={({ pressed }) => [styles.historyRow, { borderColor: theme.backgroundSelected }, pressed && styles.pressed]}>
                     <ThemedText type="smallBold">{formatFullDate(r.dateISO)}</ThemedText>
+                    {canShare ? (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {isShared(r) ? t('mjShared') : t('mjPrivate')}
+                      </ThemedText>
+                    ) : null}
                     <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
                       {r.text}
                     </ThemedText>
@@ -561,6 +633,8 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
   actionButton: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one, borderRadius: Spacing.five },
   actionButtonText: { color: '#FFFFFF' },
+  shareBox: { gap: Spacing.one },
+  shareRow: { minHeight: 44, justifyContent: 'center', gap: 2 },
   historyRow: { paddingVertical: Spacing.two, borderBottomWidth: 1, gap: 2 },
   weekdayRow: { flexDirection: 'row' },
   weekdayCell: { width: '14.2857%', textAlign: 'center' },

@@ -2,6 +2,14 @@
 
 Track notable changes to the project here. Newest entries at the top.
 
+## [2026-11-11] — Family Mode Phase 1: journal privacy (private by default, shared only by choice)
+
+- **Every journal entry is private unless its owner shares it.** A reflection has an optional `visibility`; only the exact value `'shared'` means shared. A missing field (all existing entries), a typo or any other value is private. Loading never rewrites anything: old entries stay byte for byte as stored until their owner saves or changes them.
+- **Private / Shared choice (child profiles in family mode only):** on My Mood Journey a child sees who can read the entry, with the explanation that a parent can read a shared one. Sharing takes effect only after Save. Making a shared entry private again is saved at once and confirmed by reading the journal back; the text in the editor (saved or not) is not saved or discarded by that change; a failed change still shows Shared and says so. Main, a later Adult Profile, and everyone with family mode off get no choice.
+- **One filtered reader for parents (`src/utils/journal-sharing.ts`):** `readSharedJournal(childId)` needs an open verified parent session, reads only a registered, NON-archived child profile (never Main; an archived child is not readable while archived, their journal is kept untouched, and restoring the child makes their shared entries readable again), reads one stored record, writes nothing, caches nothing, and returns only the shared entries (id, date, text, updated time). Nothing else reads another profile's journal; source-scan tests enforce it.
+- **Safer writes:** journal changes now run one after another (a privacy change and a text save cannot overwrite each other); a change from shared to private is shown only once it is confirmed in storage.
+- **Tests:** `tests/journal-privacy.test.ts`, `tests/journal-privacy-ui.test.tsx`. No Parent Dashboard view exists yet (a later phase). Stage 1 PIN security, Stage 4.5e notifications and Stage 2 layouts were not touched.
+
 ## [2026-11-10] — Stage 1 after the second Samsung test: PIN-change investigation, 4-digit PINs, no waiting periods, 10-character recovery codes
 
 ### Investigated (the Parent PIN change that went back to the first step)

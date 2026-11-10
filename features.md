@@ -1158,3 +1158,11 @@ Track planned and in-progress features here. Copy the template for each new feat
 - **Recovery code:** `generateRecoveryCode` makes 10 characters from 7 random bytes (`RECOVERY_CODE_BYTES = 7`); `normalizeRecoveryCode` accepts a new 10-character code (every character in the alphabet) or an earlier 25-character one (alphabet and check character). The "complete" test on the code field is now "is this a valid code" instead of "29 characters long".
 - **PIN-change diagnostics:** `changePin` returns `unavailable` / `not-verified` with a `detail` code; the Change PIN screen shows a banner at the top (`FailureBanner`) and prints a trace in development builds (`src/utils/pin-trace.ts`, remove after the investigation). See the changelog entry of 2026-11-10 for what was and was not found.
 - **Real-device checks still required:** the screen-lock check on the Samsung (prompt appears, cancel / fail / pass, restart in between), and a PIN change (the banner and codes if it fails, the `[pin-trace]` lines in the Metro terminal).
+
+### FEATURE-106: Family Mode journal privacy (Phase 1)
+
+- **Model:** `Reflection.visibility?: 'private' | 'shared'` in `src/utils/journal.ts`; `isShared()` is the only test (exact `'shared'`). Absent or unclear = private. No migration and no rewrite on load.
+- **Writes:** `saveReflection(date, text, visibility?)` (omitted = keep the existing setting, new = private); `setReflectionVisibility(date, visibility)` changes only the setting. All journal changes are serialized. Shared to private (by either function) is written, read back and only then shown (`commitVerified`).
+- **Screen:** `src/components/mood-journey-screen.tsx` shows the switch only when `FAMILY_MODE_ENABLED` and the active profile is a registered child. Shared needs Save; Private is saved at once; the unsaved draft is untouched; unsaved Shared counts as unfinished work.
+- **Parent reads:** `src/utils/journal-sharing.ts` `readSharedJournal(childId)` (`checkParentAction('children')`, registered, non-archived child only (an archived child is refused and their journal is not even read; restoring brings shared entries back), read-only, filters before returning). Audit tests in `tests/journal-privacy.test.ts` check that nothing else imports the journal module or names its key.
+- **Not built yet:** any Parent Dashboard view, Adult Profiles, weekly mood view.
