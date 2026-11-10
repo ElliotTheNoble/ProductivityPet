@@ -31,7 +31,7 @@ import {
 import { markProfileChosen } from '@/utils/family-session';
 import type { ChildProfile } from '@/utils/household';
 import { PIN_FORMAT, openParentSession, unlockParentArea } from '@/utils/parent-gate';
-import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
+import { NEW_PIN_LENGTH } from '@/utils/pin-crypto';
 import { MAIN_PROFILE_ID, retryProfileInitialization, switchProfile } from '@/utils/profiles';
 
 // "Who's playing today?" (family mode only; see @/components/family-gate.tsx). It is shown INSTEAD of the app on a cold start, so no
@@ -526,7 +526,7 @@ function PinPrompt({
                     {t('pgUnavailable')}
                   </ThemedText>
                 ) : null}
-                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length < PIN_MIN_LENGTH} />
+                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length !== NEW_PIN_LENGTH} />
                 <Button tone="soft" label={t('fpCancel')} onPress={onCancel} />
               </PinEntry>
             </Card>

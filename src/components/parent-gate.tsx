@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
-import { PIN_MIN_LENGTH } from '@/utils/pin-crypto';
+import { NEW_PIN_LENGTH } from '@/utils/pin-crypto';
 import { useSensitiveScreen } from '@/hooks/use-sensitive-screen';
 import { useT } from '@/i18n';
 import {
@@ -182,7 +182,7 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
             {t('pgUnavailable')}
           </ThemedText>
         ) : null}
-        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length < PIN_MIN_LENGTH} />
+        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length !== NEW_PIN_LENGTH} />
         <Button tone="soft" label={t('pgBackHome')} onPress={() => router.replace('/')} />
       </PinEntry>
     </Card>

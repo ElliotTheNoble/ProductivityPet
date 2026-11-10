@@ -49,7 +49,7 @@ describe('the on-screen number pad', () => {
     expect(screen.getByLabelText(en('pinPadLabel'))).toBeTruthy();
   });
 
-  test('typing, deleting and clearing change the value; it stops at 8 digits', async () => {
+  test('typing, deleting and clearing change the value; it stops at 4 digits', async () => {
     const seen: string[] = [];
     await render(<Host onValue={(v) => seen.push(v)} />);
     await typePad('1234');
@@ -59,7 +59,7 @@ describe('the on-screen number pad', () => {
     await press(en('pinKeyClear'));
     expect(seen.at(-1)).toBe('');
     await typePad('123456789');
-    expect(seen.at(-1)).toBe('12345678');
+    expect(seen.at(-1)).toBe('1234');
   });
 
   test('digits are only ever shown as dots: the screen reader hears a count, never the digits', async () => {
@@ -98,7 +98,7 @@ describe('the on-screen number pad', () => {
 });
 
 describe('a physical keyboard', () => {
-  test('types into a hidden field that assistive technology cannot reach, keeps digits only and stops at 8', async () => {
+  test('types into a hidden field that assistive technology cannot reach, keeps digits only and stops at 4', async () => {
     const seen: string[] = [];
     await render(<Host onValue={(v) => seen.push(v)} />);
     const hidden = screen.getByTestId('pin-hardware-input', { includeHiddenElements: true });
@@ -107,7 +107,7 @@ describe('a physical keyboard', () => {
     await fireEvent.changeText(hidden, '12ab34');
     expect(seen.at(-1)).toBe('1234');
     await fireEvent.changeText(hidden, '123456789012');
-    expect(seen.at(-1)).toBe('12345678');
+    expect(seen.at(-1)).toBe('1234');
   });
 
   test('the hidden field is masked and has autofill, suggestions and the context menu off', async () => {
@@ -144,7 +144,7 @@ describe('the device-keyboard fallback (for assistive technology and for anyone 
       secureTextEntry: true,
       keyboardType: 'number-pad',
       inputMode: 'numeric',
-      maxLength: 8,
+      maxLength: 4,
       autoComplete: 'off',
       importantForAutofill: 'noExcludeDescendants',
       textContentType: 'none',
@@ -153,7 +153,7 @@ describe('the device-keyboard fallback (for assistive technology and for anyone 
       contextMenuHidden: true,
     });
     await fireEvent.changeText(input, '98a7654321');
-    expect(seen.at(-1)).toBe('98765432');
+    expect(seen.at(-1)).toBe('9876');
     expect(screen.queryByRole('button', { name: '1' })).toBeNull(); // the pad is gone
     await press(en('pinUsePad'));
     expect(screen.getByRole('button', { name: '1' })).toBeTruthy();

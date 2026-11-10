@@ -378,6 +378,26 @@ describe('Main needs the Parent PIN', () => {
     expect(app.profiles.getActiveProfileId()).toBe('main');
   });
 
+  test('the Main profile PIN prompt takes exactly 4 digits: pad, physical keyboard and device keyboard; Unlock enables only at 4', async () => {
+    const app = await pinPrompt();
+    const unlockButton = () => app.screen.getByRole('button', { name: t(app, 'pgUnlock') });
+    await typePin(app, '135');
+    expect(unlockButton().props.accessibilityState.disabled).toBe(true);
+    await typePin(app, '79246'); // only the first of these five counts
+    expect(app.screen.getByText(/^4 digits entered$/)).toBeTruthy();
+    expect(unlockButton().props.accessibilityState.disabled).toBe(false);
+    const hardware = app.screen.getByTestId('pin-hardware-input', { hidden: true });
+    expect(hardware.props.maxLength).toBe(4);
+    await app.fireEvent.changeText(hardware, '123456789');
+    expect(app.screen.getByText(/^4 digits entered$/)).toBeTruthy();
+    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pinUseKeyboard') }));
+    const keyboard = app.screen.getByTestId('pin-keyboard-input');
+    expect(keyboard.props.maxLength).toBe(4);
+    await app.fireEvent.changeText(keyboard, '98765432');
+    expect(app.screen.getByTestId('pin-keyboard-input').props.value).toBe('9876');
+    expect(app.screen.queryByText(/longer than 4/i)).toBeNull();
+  });
+
   test('Back leaves the prompt without opening anything', async () => {
     const app = await pinPrompt();
     await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'fpCancel') }));

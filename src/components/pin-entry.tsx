@@ -6,6 +6,7 @@ import { Spacing } from '@/constants/theme';
 import { hoverLift } from '@/constants/hover';
 import { useTheme } from '@/hooks/use-theme';
 import { useT } from '@/i18n';
+import { NEW_PIN_LENGTH } from '@/utils/pin-crypto';
 
 // PIN entry with a custom on-screen number pad. Digits are only ever shown as dots, and nothing about the digits is ever
 // announced or logged: a screen reader hears "3 digits entered", never the digits. Why a custom pad and not the system
@@ -24,11 +25,10 @@ import { useT } from '@/i18n';
 // `value` is controlled and lives in the caller's state only (never stored); the caller clears it when the screen is left,
 // the app goes to the background or the profile changes.
 
-export const PIN_MAX_LENGTH = 8;
-const DOT_SLOTS = 4; // the shortest PIN; more dots appear as digits are added (up to 8)
+const DOT_SLOTS = NEW_PIN_LENGTH; // a Parent PIN is exactly 4 digits: four dots
 
 type Props = {
-  // The most digits this box takes. 8 by default (an EXISTING PIN can be 4 to 8 digits); the boxes that make a NEW PIN pass NEW_PIN_LENGTH (4).
+  // The most digits this box takes: exactly 4 (NEW_PIN_LENGTH) on every Parent PIN screen, creating or checking.
   maxLength?: number;
   value: string;
   onChange: (value: string) => void;
@@ -46,7 +46,7 @@ export function useShortLandscape(): boolean {
 
 const digitsOnly = (text: string, limit: number) => text.replace(/\D/g, '').slice(0, limit);
 
-export function PinEntry({ value, onChange, onSubmit, label, disabled, children, maxLength = PIN_MAX_LENGTH }: Props) {
+export function PinEntry({ value, onChange, onSubmit, label, disabled, children, maxLength = NEW_PIN_LENGTH }: Props) {
   const { t, tn } = useT();
   const theme = useTheme();
   const sideBySide = useShortLandscape();

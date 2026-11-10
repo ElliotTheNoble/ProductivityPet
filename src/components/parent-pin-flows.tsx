@@ -22,7 +22,7 @@ import {
   recoverWithCode,
   regenerateRecoveryCode,
 } from '@/utils/parent-pin';
-import { NEW_PIN_LENGTH, PIN_MIN_LENGTH, isSimplePin, normalizeRecoveryCode, validateNewPin } from '@/utils/pin-crypto';
+import { NEW_PIN_LENGTH, isSimplePin, normalizeRecoveryCode, validateNewPin } from '@/utils/pin-crypto';
 
 // The Parent PIN screens. Every flow here only calls the existing authentication APIs (@/utils/parent-pin.ts and
 // parent-gate.ts); there is no second authentication system. State that holds a PIN or a recovery code lives ONLY in React
@@ -527,7 +527,7 @@ export function ReplacementCodeFlow({
             <Card>
               <PinEntry label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={() => void issue()} disabled={busy || feedback.paused}>
                 <FeedbackLine feedback={feedback} />
-                <Button label={t('psNext')} onPress={() => void issue()} disabled={busy || feedback.paused || pin.length < PIN_MIN_LENGTH} />
+                <Button label={t('psNext')} onPress={() => void issue()} disabled={busy || feedback.paused || pin.length !== NEW_PIN_LENGTH} />
                 {onCancel ? <Button tone="soft" label={t('psCancel')} onPress={onCancel} /> : null}
               </PinEntry>
             </Card>
@@ -660,9 +660,9 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
       {stage === 'current' ? <FailureBanner feedback={failure} title={t('pmChangeFailedTitle')} /> : null}
       <Card color={stage === 'done' ? '#E6F7EF' : undefined}>
         {stage === 'current' ? (
-          <PinEntry label={t('pgPinLabel')} value={current} onChange={setCurrent} onSubmit={() => current.length >= PIN_MIN_LENGTH && setStage('new')} disabled={feedback.paused || failure.paused}>
+          <PinEntry label={t('pgPinLabel')} value={current} onChange={setCurrent} onSubmit={() => current.length === NEW_PIN_LENGTH && setStage('new')} disabled={feedback.paused || failure.paused}>
             <FeedbackLine feedback={feedback} />
-            <Button label={t('psNext')} onPress={() => { feedback.clear(); failure.clear(); setStage('new'); }} disabled={feedback.paused || failure.paused || current.length < PIN_MIN_LENGTH} />
+            <Button label={t('psNext')} onPress={() => { feedback.clear(); failure.clear(); setStage('new'); }} disabled={feedback.paused || failure.paused || current.length !== NEW_PIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}

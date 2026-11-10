@@ -171,8 +171,8 @@ describe('a new Parent PIN is exactly 4 digits on every creation screen', () => 
   });
 });
 
-describe('an existing PIN of 5 to 8 digits is not cut short where it is only checked', () => {
-  test('the unlock screen takes up to 8 digits', async () => {
+describe('every box that CHECKS the PIN takes exactly 4 digits too (no way to type a longer one)', () => {
+  test('Parent area lock screen', async () => {
     await setUpPin();
     await render(
       <ParentGate>
@@ -180,9 +180,43 @@ describe('an existing PIN of 5 to 8 digits is not cut short where it is only che
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    await typeDigits('123456789');
-    expect(screen.getByText(en('pinDigitsEntered_other', { count: 8 }))).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: false });
-    expect(screen.getByTestId('pin-hardware-input', { hidden: true }).props.maxLength).toBe(8);
+    await expectBoxStopsAtFour(en('pgUnlock'));
+    expect(screen.queryByText(/longer than 4/i)).toBeNull(); // no option for a longer PIN
+  });
+
+  test('Change PIN, the current PIN step', async () => {
+    await setUpPin();
+    await render(<ParentSecurityScreen />);
+    await screen.findByText(en('pgTitle'));
+    await typeDigits(PIN);
+    await press(en('pgUnlock'));
+    await screen.findByText(en('pmTitle'));
+    await press(en('pmChange'));
+    await expectBoxStopsAtFour(en('psNext'));
+  });
+
+  test('Get a new recovery code, the PIN step', async () => {
+    await setUpPin();
+    await render(<ParentSecurityScreen />);
+    await screen.findByText(en('pgTitle'));
+    await typeDigits(PIN);
+    await press(en('pgUnlock'));
+    await screen.findByText(en('pmTitle'));
+    await press(en('pmNewCode'));
+    await expectBoxStopsAtFour(en('psNext'));
+  });
+
+  test('the words are the same in Spanish', async () => {
+    await setUpPin();
+    setCurrentLanguage('es');
+    await render(
+      <ParentGate>
+        <Text>SECRET</Text>
+      </ParentGate>
+    );
+    await screen.findByText(es('pgTitle'));
+    await typeDigits('123456');
+    expect(screen.getByText(es('pinDigitsEntered_other', { count: 4 }))).toBeTruthy();
+    expect(screen.getByRole('button', { name: es('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: false });
   });
 });
