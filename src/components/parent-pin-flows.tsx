@@ -363,7 +363,7 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
         <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={next}>
           <SimplePinNote pin={pin} />
           <FeedbackLine feedback={feedback} />
-          <Button label={t('psNext')} onPress={next} disabled={pin.length < PIN_MIN_LENGTH} />
+          <Button label={t('psNext')} onPress={next} disabled={pin.length !== NEW_PIN_LENGTH} />
           <Button tone="soft" label={t('psCancel')} onPress={leave} />
         </PinEntry>
       </Card>
@@ -375,7 +375,7 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
       <Card>
         <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={again} onChange={setAgain} onSubmit={() => void begin()} disabled={busy}>
           <FeedbackLine feedback={feedback} />
-          <Button label={t('psNext')} onPress={() => void begin()} disabled={busy || again.length < PIN_MIN_LENGTH} />
+          <Button label={t('psNext')} onPress={() => void begin()} disabled={busy || again.length !== NEW_PIN_LENGTH} />
           <Button
             tone="soft"
             label={t('psBack')}
@@ -396,10 +396,10 @@ export function SetupFlow({ pending, onLeave, onFinished }: { pending: boolean; 
     blurb = t('psFinishBody');
     body = (
       <Card>
-        <PinEntry label={t('pgPinLabel')} value={typedPin} onChange={setTypedPin} disabled={busy || feedback.paused}>
+        <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={typedPin} onChange={setTypedPin} disabled={busy || feedback.paused}>
           <RecoveryCodeField value={typedCode} onChange={setTypedCode} onSubmit={() => void finish()} disabled={busy} />
           <FeedbackLine feedback={feedback} />
-          <Button label={t('psFinish')} onPress={() => void finish()} disabled={busy || typedPin.length < PIN_MIN_LENGTH || !normalizeRecoveryCode(typedCode)} />
+          <Button label={t('psFinish')} onPress={() => void finish()} disabled={busy || typedPin.length !== NEW_PIN_LENGTH || !normalizeRecoveryCode(typedCode)} />
           {code ? <Button tone="soft" label={t('psBack')} onPress={() => setStage('code')} /> : null}
           <Button tone="soft" label={t('psCancel')} onPress={cancel} />
         </PinEntry>
@@ -670,7 +670,7 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
           <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={fresh} onChange={setFresh} onSubmit={toAgain}>
             <SimplePinNote pin={fresh} />
             <FeedbackLine feedback={feedback} />
-            <Button label={t('psNext')} onPress={toAgain} disabled={fresh.length < PIN_MIN_LENGTH} />
+            <Button label={t('psNext')} onPress={toAgain} disabled={fresh.length !== NEW_PIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}
@@ -682,7 +682,7 @@ export function ChangePinFlow({ onDone, onCancel }: { onDone: () => void; onCanc
                 {t('pmSavingNote')}
               </ThemedText>
             ) : null}
-            <Button label={busy ? t('pmSaving') : t('psFinish')} onPress={() => void save()} disabled={busy || again.length < PIN_MIN_LENGTH} />
+            <Button label={busy ? t('pmSaving') : t('psFinish')} onPress={() => void save()} disabled={busy || again.length !== NEW_PIN_LENGTH} />
             {cancelButton}
           </PinEntry>
         ) : null}
@@ -805,7 +805,7 @@ export function RecoveryFlow({ onBack }: { onBack: () => void }) {
         <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={pin} onChange={setPin} onSubmit={toAgain}>
           <SimplePinNote pin={pin} />
           <FeedbackLine feedback={feedback} />
-          <Button label={t('psNext')} onPress={toAgain} disabled={pin.length < PIN_MIN_LENGTH} />
+          <Button label={t('psNext')} onPress={toAgain} disabled={pin.length !== NEW_PIN_LENGTH} />
           <Button tone="soft" label={t('psBack')} onPress={() => { feedback.clear(); setStage('code'); }} />
         </PinEntry>
       </Card>
@@ -817,7 +817,7 @@ export function RecoveryFlow({ onBack }: { onBack: () => void }) {
       <Card>
         <PinEntry maxLength={NEW_PIN_LENGTH} label={t('pgPinLabel')} value={again} onChange={setAgain} onSubmit={() => void recover()} disabled={busy}>
           <FeedbackLine feedback={feedback} />
-          <Button label={t('psNext')} onPress={() => void recover()} disabled={busy || again.length < PIN_MIN_LENGTH} />
+          <Button label={t('psNext')} onPress={() => void recover()} disabled={busy || again.length !== NEW_PIN_LENGTH} />
         </PinEntry>
       </Card>
     );

@@ -138,6 +138,7 @@ export function PinEntry({ value, onChange, onSubmit, label, disabled, children,
       secureTextEntry
       keyboardType="number-pad"
       inputMode="numeric"
+      maxLength={maxLength}
       showSoftInputOnFocus={false}
       caretHidden
       autoComplete="off"
