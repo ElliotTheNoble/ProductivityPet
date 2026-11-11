@@ -46,7 +46,7 @@ export const familyEn = {
   nameRequired: 'Please enter a name or nickname.',
 
   // dashboard
-  dashboardTitle: 'Parent Dashboard',
+  dashboardTitle: 'Family Settings',
   dashboardFor: 'Family',
   localProfileNote: 'Profiles are saved on this device only. They are not secure online accounts.',
   children: 'Children',
@@ -108,7 +108,7 @@ export const familyEn = {
   // entry point for existing users
   familyModeTitle: 'Family & Parent mode',
   familyModeText: 'Set up a Parent / Guardian profile, add children and review their tasks. Your pets, tasks and tokens are not changed.',
-  openDashboard: 'Open Parent Dashboard',
+  openDashboard: 'Open Family Settings',
   startSetup: 'Set up Parent / Guardian mode',
 };
 

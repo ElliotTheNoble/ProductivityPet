@@ -43,7 +43,7 @@ export const familyEs: FamilyStrings = {
   finishSetup: 'Terminar',
   nameRequired: 'Escribe un nombre o apodo.',
 
-  dashboardTitle: 'Panel familiar',
+  dashboardTitle: 'Ajustes de la familia',
   dashboardFor: 'Familia',
   localProfileNote: 'Los perfiles se guardan solo en este dispositivo. No son cuentas seguras en línea.',
   children: 'Niños',
@@ -105,6 +105,6 @@ export const familyEs: FamilyStrings = {
 
   familyModeTitle: 'Modo familiar',
   familyModeText: 'Configura un perfil de madre / padre / tutor, añade niños y revisa sus tareas. Tus mascotas, tareas y fichas no cambian.',
-  openDashboard: 'Abrir el Panel familiar',
+  openDashboard: 'Abrir Ajustes de la familia',
   startSetup: 'Configurar el modo familiar',
 };

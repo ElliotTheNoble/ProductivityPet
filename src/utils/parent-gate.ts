@@ -96,6 +96,11 @@ const asyncStorageAttempts: AttemptStore = {
 };
 let attemptStore: AttemptStore = asyncStorageAttempts;
 
+// The checker that is registered right now (used to tell whether it is still the one a caller registered earlier).
+export function getRegisteredPinVerifier(): PinVerifier {
+  return verifier;
+}
+
 // Called by whatever module implements PIN storage. Locks the parent area. `attemptStore` is where the guess counter lives.
 export function registerPinVerifier(next: PinVerifier, options: { attemptStore?: AttemptStore } = {}): void {
   verifier = next;

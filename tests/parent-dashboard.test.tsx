@@ -252,9 +252,10 @@ describe('the child overview', () => {
     await openBilly();
     expect(await RNTL.screen.findByText(text('phReadOnly'))).toBeTruthy();
     expect(await RNTL.screen.findByText('Biscuit')).toBeTruthy();
-    for (const key of ['phTasks', 'phAchievements', 'phJournals', 'phProgress']) expect(RNTL.screen.getByText(text(key))).toBeTruthy();
-    expect(RNTL.screen.getAllByText(text('phSoon'))).toHaveLength(4);
-    expect(RNTL.screen.getAllByText(text('phSoonNote'))).toHaveLength(4);
+    // Tasks, Achievements and Activity history are real sections now (see parent-activity.test.tsx); only Shared Journals is still "coming soon"
+    for (const key of ['phTasks', 'phAchievements', 'phJournals', 'paActTitle']) expect(await RNTL.screen.findByText(text(key))).toBeTruthy();
+    expect(RNTL.screen.getAllByText(text('phSoon'))).toHaveLength(1);
+    expect(RNTL.screen.getAllByText(text('phSoonNote'))).toHaveLength(1);
     // nothing numeric is invented: not one number appears in the overview's words
     const strings: string[] = [];
     const walk = (node: unknown) => {
@@ -268,16 +269,17 @@ describe('the child overview', () => {
     const tree = RNTL.screen.toJSON();
     for (const root of Array.isArray(tree) ? tree : [tree]) walk(root);
     expect(strings.length).toBeGreaterThan(8);
-    expect(strings.filter((s) => /\d/.test(s))).toEqual([]);
+    // this child has no tasks, tokens or history, so no count of anything is shown (dates and the 30-day window are the only digits)
+    expect(strings.filter((s) => /\d+\s+(tasks?|Paw Tokens?|done|completed|earned|items?)/i.test(s))).toEqual([]);
   });
 
   test('there is nothing to edit: only Back, the header and the profile switch are buttons', async () => {
     await openBilly();
     await RNTL.screen.findByText('Biscuit');
     const names = RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel ?? ''));
-    // exactly: the profile switch, the two header pills, the parent area's own "Lock now", and Back. Nothing that changes anything.
+    // exactly: the profile switch, the two header pills, and Back. Nothing that changes anything.
     expect([...names].sort()).toEqual(
-      [`Switch player. Playing as Main.`, text('phNavDashboard'), text('phSettings'), 'Lock now', `‹ ${text('phBack')}`].sort()
+      [`Switch player. Playing as Main.`, text('phNavDashboard'), text('phSettings'), `‹ ${text('phBack')}`].sort()
     );
     expect(RNTL.screen.queryByPlaceholderText(/./)).toBeNull(); // no text field at all
     expect(RNTL.screen.getByRole('button', { name: `‹ ${text('phBack')}` })).toBeTruthy();
@@ -316,7 +318,7 @@ describe('the child overview', () => {
     await RNTL.screen.findByText('Billy');
     await press(textEs('phOpenChild').replace('{name}', 'Billy'));
     expect(await RNTL.screen.findByText(textEs('phReadOnly'))).toBeTruthy();
-    expect(RNTL.screen.getAllByText(textEs('phSoon'))).toHaveLength(4);
+    expect(RNTL.screen.getAllByText(textEs('phSoon'))).toHaveLength(1);
   });
 });
 

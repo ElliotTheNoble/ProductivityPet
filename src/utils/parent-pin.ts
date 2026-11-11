@@ -8,6 +8,7 @@ import {
   openParentSession,
   parseAttempts,
   refreshParentAccess,
+  getRegisteredPinVerifier,
   registerPinVerifier,
   type AttemptFailureDetail,
   type AttemptStore,
@@ -584,15 +585,28 @@ export function createPinVerifier(): PinVerifier {
 // The web is never supported for real use (no secure storage): there it registers only when `devPreview` is true, which by
 // default means FAMILY_MODE_ENABLED (and therefore __DEV__), and then the authentication records live in the non-persistent
 // in-memory preview backend. Returns whether it registered.
+//
+// It is safe to call again (the app shell can be mounted again, for example when the navigator rebuilds it while a parent is moving
+// from the family picker to the Parent Dashboard): when the checker it registered earlier is still the registered one and nothing about
+// the setup differs, it does nothing. Registering a checker clears the open parent session, so a repeated call used to throw away a
+// session that had just been opened with the PIN. A checker that really is different (another platform setup, another checker
+// registered in the meantime) is still registered, and that still clears the session.
+let startedAuth: { setup: string; verifier: ReturnType<typeof createPinVerifier> } | null = null;
+
 export function startParentAuth(options: { enabled?: boolean; platformOS?: string; devPreview?: boolean } = {}): boolean {
   const enabled = options.enabled ?? FAMILY_MODE_ENABLED;
   const os = options.platformOS ?? Platform.OS;
   if (!enabled) return false;
+  let setup: string = os;
   if (os === 'web') {
     const preview = options.devPreview ?? FAMILY_MODE_ENABLED;
     if (!preview) return false;
-    setAuthBackend((require('@/utils/parent-auth-preview') as typeof import('@/utils/parent-auth-preview')).createPreviewBackend());
+    setup = 'web-preview';
   }
-  registerPinVerifier(createPinVerifier(), { attemptStore: secureAttemptStore });
+  if (startedAuth && startedAuth.setup === setup && getRegisteredPinVerifier() === startedAuth.verifier) return true; // already registered: keep the session
+  if (os === 'web') setAuthBackend((require('@/utils/parent-auth-preview') as typeof import('@/utils/parent-auth-preview')).createPreviewBackend());
+  const created = createPinVerifier();
+  registerPinVerifier(created, { attemptStore: secureAttemptStore });
+  startedAuth = { setup, verifier: created };
   return true;
 }

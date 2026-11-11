@@ -3,6 +3,7 @@ import { ActivityIndicator, AppState, Platform, Pressable, ScrollView, StyleShee
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, FAMILY_BACKGROUND } from '@/components/family-ui';
+import { LockIcon } from '@/components/lock-icon';
 import { PinEntry } from '@/components/pin-entry';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -395,9 +396,7 @@ export function ProfileCard({
           <View style={styles.nameRow}>
             <ThemedText style={styles.name}>{name}</ThemedText>
             {lock ? (
-              <ThemedText style={styles.lockIcon} accessibilityElementsHidden importantForAccessibility="no">
-                🔒
-              </ThemedText>
+              <LockIcon size={18} testID="picker-main-lock-icon" />
             ) : null}
           </View>
           {sub ? (
@@ -492,7 +491,7 @@ function PinPrompt({
           showsVerticalScrollIndicator={false}>
           <View style={[styles.column, styles.pinColumn]}>
             <View style={styles.heading}>
-              <ThemedText style={styles.paw}>🔒</ThemedText>
+              <LockIcon />
               <ThemedText type="subtitle" accessibilityRole="header" style={styles.center}>
                 {t('fpPinTitle')}
               </ThemedText>
@@ -542,6 +541,7 @@ function PinPrompt({
 }
 
 const styles = StyleSheet.create({
+  paw: { fontSize: 40, lineHeight: 48 },
   page: { flex: 1, backgroundColor: FAMILY_BACKGROUND },
   centered: { alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   safe: { flex: 1 },
@@ -550,7 +550,6 @@ const styles = StyleSheet.create({
   column: { width: '100%', maxWidth: 960, gap: Spacing.three },
   pinColumn: { maxWidth: 520 },
   heading: { alignItems: 'center', gap: Spacing.one, paddingTop: Spacing.two },
-  paw: { fontSize: 40, lineHeight: 48 },
   center: { textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, justifyContent: 'center' },
   // minWidth 0: on the narrowest screen with the largest text a card must shrink to the screen, never push past its edge.
@@ -574,7 +573,6 @@ const styles = StyleSheet.create({
   cardText: { flex: 1, minWidth: 0, gap: Spacing.one, alignItems: 'flex-start' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, alignSelf: 'stretch' },
   name: { flexShrink: 1, fontSize: 21, lineHeight: 27, fontWeight: '800' },
-  lockIcon: { fontSize: 16, lineHeight: 22 },
   avatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   avatarEmoji: { fontSize: 34, lineHeight: 42, textAlign: 'center' },
   badge: {

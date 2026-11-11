@@ -3,10 +3,12 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DeviceCheckPanel } from '@/components/device-check-panel';
+import { LockIcon } from '@/components/lock-icon';
 import { Button, Card, FAMILY_BACKGROUND, PageShell } from '@/components/family-ui';
 import { PinEntry, useShortLandscape } from '@/components/pin-entry';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useInParentShell } from '@/hooks/use-in-parent-shell';
 import { useParentAccess } from '@/hooks/use-parent-access';
 import { getHouseholdIntegrity, hasAnyChildRecord, useHousehold } from '@/utils/household';
 import { NEW_PIN_LENGTH } from '@/utils/pin-crypto';
@@ -40,6 +42,7 @@ function UnprotectedGate({ children }: { children: ReactNode }) {
 
 export function ParentGate({ children }: { children: ReactNode }) {
   const access = useParentAccess();
+  const inParentShell = useInParentShell();
   const { t } = useT();
   if (access.state === 'checking') return <View style={styles.blank} />; // never shows the content while checking
   if (access.state === 'unprotected') {
@@ -62,12 +65,17 @@ export function ParentGate({ children }: { children: ReactNode }) {
           touchParentSession();
           return false;
         }}>
-        <View style={styles.bar}>
-          <ThemedText type="small" style={styles.barText}>
-            🔓 {t('pgUnlockedBar')}
-          </ThemedText>
-          <Button tone="soft" label={t('pgLockNow')} onPress={lockParentArea} />
-        </View>
+        {inParentShell ? null : (
+          <View style={styles.bar}>
+            <View style={styles.barLabel}>
+              <LockIcon open size={18} testID="parent-pin-unlocked-icon" />
+              <ThemedText type="small" style={styles.barText}>
+                {t('pgUnlockedBar')}
+              </ThemedText>
+            </View>
+            <Button tone="soft" label={t('pgLockNow')} onPress={lockParentArea} />
+          </View>
+        )}
         {guarded}
       </View>
     );
@@ -125,7 +133,7 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
     return (
       <PageShell maxWidth={480}>
         <View style={styles.header}>
-          <ThemedText style={styles.lockIcon}>🔒</ThemedText>
+          <LockIcon />
           <ThemedText type="subtitle" style={styles.center}>
             {t('pgTitle')}
           </ThemedText>
@@ -146,7 +154,7 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
 
   const heading = (
     <View style={[styles.header, sideBySide && styles.headerSide]}>
-      <ThemedText style={styles.lockIcon}>🔒</ThemedText>
+      <LockIcon />
       <ThemedText type="subtitle" accessibilityRole="header" style={styles.center}>
         {t('pgTitle')}
       </ThemedText>
@@ -239,12 +247,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
   },
+  barLabel: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, flexShrink: 1 },
   barText: { flexShrink: 1 },
   header: { alignItems: 'center', gap: Spacing.one, paddingTop: Spacing.four },
   headerSide: { paddingTop: Spacing.one },
   sideBySide: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
   sideLeft: { flex: 2, minWidth: 0, gap: Spacing.two },
   sideRight: { flex: 3, minWidth: 0 },
-  lockIcon: { fontSize: 40, lineHeight: 48 },
   center: { textAlign: 'center' },
 });

@@ -2,11 +2,13 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ChildAccomplishmentsSection, ChildActivitySection, ChildTasksSection } from '@/components/child-activity-sections';
 import { Button, Card, PageShell } from '@/components/family-ui';
 import { ThemedText } from '@/components/themed-text';
 import { hoverLift } from '@/constants/hover';
 import { Spacing } from '@/constants/theme';
 import { useT, type StringKey } from '@/i18n';
+import { readChildActivity, type ChildActivityResult } from '@/utils/child-activity';
 import {
   readChildOverview,
   readDashboardChildren,
@@ -163,23 +165,20 @@ function ChildCard({ child, summary, onOpen }: { child: DashboardChild; summary:
 function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: () => void }) {
   const { t } = useT();
   const [overview, setOverview] = useState<ChildOverview | null>(null);
+  const [activity, setActivity] = useState<ChildActivityResult | null>(null);
   useEffect(() => {
     let cancelled = false;
     void readChildOverview(child.id).then((result) => {
       if (!cancelled) setOverview(result);
+    });
+    void readChildActivity(child.id).then((result) => {
+      if (!cancelled) setActivity(result);
     });
     return () => {
       cancelled = true;
     };
   }, [child.id]);
   const avatar = avatarFor(child.id);
-
-  const soon: { title: StringKey; text: StringKey }[] = [
-    { title: 'phTasks', text: 'phTasksText' },
-    { title: 'phAchievements', text: 'phAchievementsText' },
-    { title: 'phJournals', text: 'phJournalsText' },
-    { title: 'phProgress', text: 'phProgressText' },
-  ];
 
   return (
     <PageShell maxWidth={820} scrollKey={child.id}>
@@ -220,21 +219,38 @@ function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: (
           : null}
       </Card>
 
-      {soon.map((section) => (
-        <Card key={section.title} title={t(section.title)} color="rgba(255,255,255,0.7)">
-          <ThemedText type="small" themeColor="textSecondary">
-            {t(section.text)}
-          </ThemedText>
-          <View style={styles.soonPill}>
-            <ThemedText type="smallBold" style={styles.soonText}>
-              {t('phSoon')}
-            </ThemedText>
-          </View>
-          <ThemedText type="small" themeColor="textSecondary">
-            {t('phSoonNote')}
-          </ThemedText>
+      {activity === null ? (
+        <Card>
+          <ThemedText type="small">{t('phLoading')}</ThemedText>
         </Card>
-      ))}
+      ) : null}
+      {activity !== null && activity.status !== 'ok' ? (
+        <Card>
+          <ThemedText type="small">{activity.status === 'not-allowed' ? t('phNotAllowed') : activity.status === 'not-a-child' ? t('phNotAChild') : t('paUnavailable')}</ThemedText>
+        </Card>
+      ) : null}
+      {activity?.status === 'ok' ? (
+        <>
+          <ChildTasksSection activity={activity} />
+          <ChildAccomplishmentsSection activity={activity} />
+          <ChildActivitySection activity={activity} />
+        </>
+      ) : null}
+
+      {/* Shared Journals is not built yet: nothing of any journal is read or shown here. */}
+      <Card title={t('phJournals')} color="rgba(255,255,255,0.7)">
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('phJournalsText')}
+        </ThemedText>
+        <View style={styles.soonPill}>
+          <ThemedText type="smallBold" style={styles.soonText}>
+            {t('phSoon')}
+          </ThemedText>
+        </View>
+        <ThemedText type="small" themeColor="textSecondary">
+          {t('phSoonNote')}
+        </ThemedText>
+      </Card>
     </PageShell>
   );
 }

@@ -125,6 +125,7 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
     'src/utils/family-profiles.ts', // reads another profile's record, read-only, and holds no cache
     'src/utils/family-care-input.ts', // reads other profiles' pets and alert setting, read-only (getItem only), and holds no cache
     'src/utils/family-management.ts', // lists storage keys to report leftovers, read-only, and holds no cache
+    'src/utils/child-activity.ts', // reads four of an ACTIVE child's own records for the Parent Dashboard's task, accomplishment and activity sections, read-only (getItem only), no cache
     'src/utils/child-overview.ts', // reads each ACTIVE child's pet record for the Parent Dashboard, read-only (getItem only), and holds no cache
     'src/utils/journal-sharing.ts', // reads a CHILD's shared journal entries for a parent, read-only (getItem only), filters before returning, holds no cache
     'src/utils/native-notifications.ts', // the lazily loaded expo-notifications package itself (or the error from loading it): nothing of any profile

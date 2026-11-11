@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FAMILY_BACKGROUND } from '@/components/family-ui';
+import { InParentShellContext } from '@/hooks/use-in-parent-shell';
 import { ProfileChip } from '@/components/profile-chip';
 import { ThemedText } from '@/components/themed-text';
 import { hoverLift } from '@/constants/hover';
@@ -46,10 +47,12 @@ export function ParentShell() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={styles.root}>
-        <ParentHeader pathname={pathname} />
-        {allowed ? <Slot /> : <View style={styles.blank} />}
-      </View>
+      <InParentShellContext.Provider value>
+        <View style={styles.root}>
+          <ParentHeader pathname={pathname} />
+          {allowed ? <Slot /> : <View style={styles.blank} />}
+        </View>
+      </InParentShellContext.Provider>
     </ThemeProvider>
   );
 }
