@@ -802,7 +802,10 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.five,
     padding: Spacing.four,
     gap: Spacing.two,
-    height: '100%',
+    // flexGrow, not height: '100%'. A percentage height inside the content-sized column and scroll area is not reliable on Android's layout
+    // engine (the browser reads it as "auto"). The side-by-side row still gets equal-height cards because the row stretches its columns and
+    // the cards grow to fill them.
+    flexGrow: 1,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.75)',
   },

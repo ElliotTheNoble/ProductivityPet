@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+
 import { getLocale, useT } from '@/i18n';
 import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { useEffect, useRef, useState } from 'react';
@@ -78,6 +80,75 @@ function formatTime(iso: string): string {
 function moodSlices(entries: MoodEntry[]): PieSlice[] {
   const counts = countByMood(entries);
   return MOODS.map((mood) => ({ key: mood, label: moodName(mood), value: counts[mood], color: MOOD_COLORS[mood] }));
+}
+
+// The two privacy buttons: big, rounded, pastel. The chosen one keeps a clear border, a deeper fill and a checkmark; hovering (mouse, web)
+// gets the shared soft glow from HoverPressable; pressing (touch) shrinks and dims it a little so a tap is always visible.
+const CHOICE_COLORS = {
+  private: { fill: '#EFE9FA', fillSelected: '#E2D6F7', border: '#A78BDB', icon: '#7B5CB8' },
+  shared: { fill: '#FCEEF1', fillSelected: '#F9D9E4', border: '#F28DAE', icon: '#D9578A' },
+} as const;
+
+// The two privacy icons: simple outline icons of one size and weight (a lock, and two people), used on the buttons and in the history.
+const CHOICE_ICON_NAME = { private: 'lock-closed-outline', shared: 'people-outline' } as const;
+const CHOICE_ICON_SIZE = 28;
+const MARKER_ICON_SIZE = 16;
+
+function PrivacyChoiceButton({
+  kind,
+  label,
+  hint,
+  selected,
+  disabled,
+  colors,
+  onPress,
+}: {
+  kind: 'private' | 'shared';
+  label: string;
+  hint: string;
+  selected: boolean;
+  disabled: boolean;
+  colors: { fill: string; fillSelected: string; border: string; icon: string };
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityLabel={`${label}. ${hint}`}
+      accessibilityState={{ checked: selected, selected, disabled }}
+      style={({ pressed }) => [
+        styles.choiceButton,
+        { backgroundColor: selected ? colors.fillSelected : colors.fill, borderColor: selected ? colors.border : 'rgba(255, 255, 255, 0.85)' },
+        pressed && styles.choicePressed,
+        disabled && styles.choiceDisabled,
+      ]}>
+      <View style={styles.choiceIcon}>
+        <Ionicons
+          testID={`privacy-icon-${kind}`}
+          name={CHOICE_ICON_NAME[kind]}
+          size={CHOICE_ICON_SIZE}
+          color={colors.icon}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
+      </View>
+      <View style={styles.choiceText}>
+        <ThemedText type="smallBold" style={styles.choiceLabel}>
+          {label}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {hint}
+        </ThemedText>
+      </View>
+      {selected ? (
+        <View style={[styles.choiceCheck, { backgroundColor: colors.border }]}>
+          <ThemedText style={styles.choiceCheckMark}>✓</ThemedText>
+        </View>
+      ) : null}
+    </Pressable>
+  );
 }
 
 export function MoodJourneyScreen() {
@@ -353,18 +424,30 @@ export function MoodJourneyScreen() {
             />
             {canShare ? (
               <View style={styles.shareBox}>
-                <Pressable
-                  onPress={() => void handleShareToggle()}
-                  disabled={privacyBusy}
-                  accessibilityRole="switch"
-                  accessibilityLabel={t('mjShareLabel')}
-                  accessibilityState={{ checked: shareChoice, disabled: privacyBusy }}
-                  style={({ pressed }) => [styles.shareRow, pressed && styles.pressed]}>
-                  <ThemedText type="smallBold">{shareChoice ? t('mjShared') : t('mjPrivate')}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {shareChoice ? t('mjSwitchToPrivate') : t('mjSwitchToShared')}
-                  </ThemedText>
-                </Pressable>
+                <View accessibilityRole="radiogroup" accessibilityLabel={t('mjShareLabel')} style={styles.choiceRow}>
+                  <PrivacyChoiceButton
+                    kind="private"
+                    label={t('mjJustMe')}
+                    hint={t('mjJustMeHint')}
+                    selected={!shareChoice}
+                    disabled={privacyBusy}
+                    colors={CHOICE_COLORS.private}
+                    onPress={() => {
+                      if (shareChoice) void handleShareToggle();
+                    }}
+                  />
+                  <PrivacyChoiceButton
+                    kind="shared"
+                    label={t('mjShareParent')}
+                    hint={t('mjShareParentHint')}
+                    selected={shareChoice}
+                    disabled={privacyBusy}
+                    colors={CHOICE_COLORS.shared}
+                    onPress={() => {
+                      if (!shareChoice) void handleShareToggle();
+                    }}
+                  />
+                </View>
                 <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
                   {shareChoice ? (storedShared ? t('mjSharedExplain') : t('mjShareNeedsSave')) : t('mjPrivateExplain')}
                 </ThemedText>
@@ -428,9 +511,19 @@ export function MoodJourneyScreen() {
                     style={({ pressed }) => [styles.historyRow, { borderColor: theme.backgroundSelected }, pressed && styles.pressed]}>
                     <ThemedText type="smallBold">{formatFullDate(r.dateISO)}</ThemedText>
                     {canShare ? (
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {isShared(r) ? t('mjShared') : t('mjPrivate')}
-                      </ThemedText>
+                      <View style={styles.marker}>
+                        <Ionicons
+                          testID={`history-icon-${isShared(r) ? 'shared' : 'private'}`}
+                          name={CHOICE_ICON_NAME[isShared(r) ? 'shared' : 'private']}
+                          size={MARKER_ICON_SIZE}
+                          color={CHOICE_COLORS[isShared(r) ? 'shared' : 'private'].icon}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no"
+                        />
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {isShared(r) ? t('mjShareParent') : t('mjJustMe')}
+                        </ThemedText>
+                      </View>
                     ) : null}
                     <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
                       {r.text}
@@ -633,8 +726,30 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
   actionButton: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one, borderRadius: Spacing.five },
   actionButtonText: { color: '#FFFFFF' },
-  shareBox: { gap: Spacing.one },
-  shareRow: { minHeight: 44, justifyContent: 'center', gap: 2 },
+  shareBox: { gap: Spacing.two },
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  // At least 72 px tall and 150 px wide: comfortable for a child's thumb on a phone, and two fit side by side on a tablet.
+  choiceButton: {
+    flexGrow: 1,
+    flexBasis: 150,
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 20,
+    borderWidth: 3,
+    cursor: 'pointer',
+  },
+  choicePressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
+  choiceDisabled: { opacity: 0.6 },
+  choiceIcon: { width: CHOICE_ICON_SIZE, height: CHOICE_ICON_SIZE, alignItems: 'center', justifyContent: 'center' },
+  marker: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  choiceText: { flex: 1, gap: 2 },
+  choiceLabel: { fontSize: 16, lineHeight: 21 },
+  choiceCheck: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  choiceCheckMark: { color: '#FFFFFF', fontSize: 15, lineHeight: 18, fontWeight: '800' },
   historyRow: { paddingVertical: Spacing.two, borderBottomWidth: 1, gap: 2 },
   weekdayRow: { flexDirection: 'row' },
   weekdayCell: { width: '14.2857%', textAlign: 'center' },
