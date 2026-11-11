@@ -128,9 +128,10 @@ function RootLayoutContent({ gated = false }: { gated?: boolean }) {
   // Family mode (development only, never in a release build): the family picker comes first. Until someone has chosen a profile
   // the app shell is not rendered, so no game store loads and nothing is scheduled (see @/components/family-gate.tsx).
   const { FamilyGate } = require('@/components/family-gate') as typeof import('@/components/family-gate');
+  const { ShellChooser } = require('@/components/shell-chooser') as typeof import('@/components/shell-chooser');
   return (
     <FamilyGate>
-      <AppShell key={profileId} />
+      <ShellChooser key={profileId} renderGame={() => <AppShell key={profileId} />} />
     </FamilyGate>
   );
 }

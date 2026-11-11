@@ -26,7 +26,7 @@ describe('route protection: every route is classified', () => {
   // address directly cannot skip the PIN screen.
   const PARENT_ONLY = ['src/app/parent.tsx', 'src/app/welcome.tsx'];
   // Shows nothing at all unless family mode is on, and then wraps its screen in the same gate.
-  const FAMILY_ONLY_PARENT_ROUTES = ['src/app/parent-security.tsx'];
+  const FAMILY_ONLY_PARENT_ROUTES = ['src/app/dashboard.tsx', 'src/app/parent-security.tsx'];
   // A child may open these in their own profile: they show and change only the active profile's own data.
   const CHILD_SAFE = [
     'src/app/index.tsx',
@@ -65,6 +65,11 @@ describe('route protection: every route is classified', () => {
     // the dashboard route too: without family mode there is no household to manage, so it never reaches the gate or the dashboard
     expect(read('src/app/parent.tsx')).toMatch(/if \(!FAMILY_MODE_ENABLED\) return <Redirect href="\/" \/>;/);
     expect(read('src/app/parent.tsx')).not.toMatch(/^import .*(parent-dashboard|parent-gate)/m);
+    // the Parent Dashboard (Main in family mode): the same, and it belongs to Main only
+    const dashboard = read('src/app/dashboard.tsx');
+    expect(dashboard).toMatch(/if \(!FAMILY_MODE_ENABLED \|\| profileId !== MAIN_PROFILE_ID\) return <Redirect href="\/" \/>;/);
+    expect(dashboard).toMatch(/<ParentGate>\s*<ParentHome \/>\s*<\/ParentGate>/);
+    expect(dashboard).not.toMatch(/^import .*(parent-home|parent-gate)/m);
   });
 
   test('child-safe routes never import the parent-only modules (household, parent PIN, parent dashboard)', () => {
@@ -120,6 +125,7 @@ describe('profile reset audit: everything that holds a profile\'s data clears it
     'src/utils/family-profiles.ts', // reads another profile's record, read-only, and holds no cache
     'src/utils/family-care-input.ts', // reads other profiles' pets and alert setting, read-only (getItem only), and holds no cache
     'src/utils/family-management.ts', // lists storage keys to report leftovers, read-only, and holds no cache
+    'src/utils/child-overview.ts', // reads each ACTIVE child's pet record for the Parent Dashboard, read-only (getItem only), and holds no cache
     'src/utils/journal-sharing.ts', // reads a CHILD's shared journal entries for a parent, read-only (getItem only), filters before returning, holds no cache
     'src/utils/native-notifications.ts', // the lazily loaded expo-notifications package itself (or the error from loading it): nothing of any profile
   ];
