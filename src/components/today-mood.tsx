@@ -11,7 +11,8 @@ import { useT } from '@/i18n';
 import { MOODS, moodName, type Mood } from '@/utils/mood';
 
 type TodayMoodProps = {
-  mood: Mood;
+  // null = nothing recorded for today: an empty (unchecked) square is shown and nothing is selected
+  mood: Mood | null;
   message: string;
   onSelectMood: (mood: Mood) => void;
 };
@@ -25,12 +26,29 @@ export function TodayMood({ mood, message, onSelectMood }: TodayMoodProps) {
       <ThemedText style={styles.title}>{t('todaysMood')}</ThemedText>
 
       <View style={styles.selectedRow}>
-        <MoodIcon mood={mood} size={72} />
+        {mood ? (
+          <MoodIcon mood={mood} size={72} />
+        ) : (
+          <View
+            testID="today-mood-empty"
+            accessible
+            accessibilityLabel={t('moodNoneLabel')}
+            style={[styles.emptyBox, { borderColor: theme.backgroundSelected }]}
+          />
+        )}
         <View style={styles.selectedTextGroup}>
-          <ThemedText type="smallBold">{t('moodExclaim', { name: moodName(mood) })}</ThemedText>
-          <ThemedView type="background" style={styles.bubble}>
-            <ThemedText type="small">{message}</ThemedText>
-          </ThemedView>
+          {mood ? (
+            <>
+              <ThemedText type="smallBold">{t('moodExclaim', { name: moodName(mood) })}</ThemedText>
+              <ThemedView type="background" style={styles.bubble}>
+                <ThemedText type="small">{message}</ThemedText>
+              </ThemedView>
+            </>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary">
+              {t('moodNotRecorded')}
+            </ThemedText>
+          )}
         </View>
       </View>
 
@@ -39,7 +57,9 @@ export function TodayMood({ mood, message, onSelectMood }: TodayMoodProps) {
           <Pressable
             key={option}
             onPress={() => onSelectMood(option)}
+            accessibilityRole="button"
             accessibilityLabel={moodName(option)}
+            accessibilityState={{ selected: option === mood }}
             style={({ pressed }) => pressed && styles.pressed}>
             <View
               style={[
@@ -77,6 +97,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.one,
     alignItems: 'flex-start',
+  },
+  // Nothing recorded for today: an empty, dashed square the size of the mood picture.
+  emptyBox: {
+    width: 72,
+    height: 72,
+    borderRadius: Spacing.three,
+    borderWidth: 2,
+    borderStyle: 'dashed',
   },
   bubble: {
     borderRadius: Spacing.three,

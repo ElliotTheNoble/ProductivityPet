@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GentleWipeGame } from '@/components/gentle-wipe-game';
 import { BATHING_INSTRUCTIONS, BathingMiniGame, TOTAL_BATHING_TARGETS, type BathingPhase } from '@/components/bathing-mini-game';
 import { RoomPet } from '@/components/room-pet';
+import { AssignedRoomTasks, useFocusPulse } from '@/components/assigned-task-views';
 import { RoomTaskPanel } from '@/components/room-task-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -31,7 +32,9 @@ import { isPetDirty } from '@/utils/pet-needs';
 import { getPetProfile, subscribeToPetProfile, type PetProfile } from '@/utils/pet-profile';
 import { PET_STAGES } from '@/utils/pet-stage';
 import { resolveRoomPetPlacement } from '@/utils/room-pet-placement';
+import { isOutstanding, useAssignedTasks, viewsForRoom } from '@/utils/assigned-tasks';
 import { getRoomTasks } from '@/utils/room-tasks';
+import { canCreatePersonalTasksNow, useCanCreatePersonalTasks } from '@/utils/task-creation-policy';
 import type { RoomInfo } from '@/utils/rooms';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
@@ -54,6 +57,8 @@ const BLOW_DRYER_ICON = '💨';
 
 type RoomDetailScreenProps = {
   room: RoomInfo;
+  // A new value each time Home's guide sends the child to this room: the task panel opens and the assigned tasks light up for a moment.
+  focusToken?: string;
 };
 
 // The room's own background (with its birthday override, where one
@@ -66,14 +71,23 @@ type RoomDetailScreenProps = {
 // @/components/room-pet.tsx), and this room's own task panel (right side
 // on desktop by default, left for Kitchen, collapsible on mobile — see
 // @/components/room-task-panel.tsx).
-export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
+export function RoomDetailScreen({ room, focusToken }: RoomDetailScreenProps) {
   const { t } = useT();
+  const focusHighlight = useFocusPulse(focusToken);
+  // The safe area's height (what is left under the header and clear of the system bars), for the task panel's most height.
+  const [areaHeight, setAreaHeight] = useState<number | undefined>(undefined);
+  // The tasks a parent assigned to the child playing, for THIS room (nothing unless family mode is on and a child is playing).
+  const assignedHere = viewsForRoom(useAssignedTasks(), room.slug);
+  const canCreate = useCanCreatePersonalTasks(); // a child (by default) cannot create tasks of their own
   const router = useRouter();
   // Needed by resolveRoomPetPlacement below (Bedroom's wide-desktop nudge
   // is the only placement that currently depends on it).
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   // Phone-width window (same breakpoint the Home screen uses for its narrow layout).
   const isPhone = width < 700;
+  // Landscape puts Back to Rooms (and the task panel) at the bottom, as they always were; portrait keeps them at the top.
+  const isLandscape = width > height;
+  const isShort = height < 480; // a phone on its side: the task panel is the collapsible kind there
 
   // The pet's real stage, same formula Home uses — loaded fresh on every
   // mount (this screen remounts per room navigation, same convention as
@@ -430,6 +444,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
   // rewriting/tagging involved, just the real field — then persists
   // through the identical toggle/save path.
   function handleAddRoomTask(text: string) {
+    if (!canCreatePersonalTasksNow()) return; // not just a hidden field: this handler refuses too
     const created = createTask({ text, kind: 'task', date: today, room: room.slug });
     const updated = [...tasks, created];
     setTasks(updated);
@@ -438,12 +453,13 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} onLayout={(event) => setAreaHeight(event.nativeEvent.layout.height)}>
         <HoverPressable
           onPress={() => router.push('/rooms')}
           style={({ pressed }) => [
             styles.backButtonPressable,
-            isPhone && styles.backButtonPressablePhone,
+            isLandscape ? styles.backButtonLandscape : styles.backButtonPortrait,
+            isPhone && (isLandscape ? styles.backButtonLandscapePhone : styles.backButtonPortraitPhone),
             pressed && styles.pressed,
           ]}>
           <ThemedView type="accent" style={[styles.backButton, isPhone && styles.backButtonPhone]}>
@@ -651,7 +667,12 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
           tasks={roomTasks}
           onToggleTask={handleToggleRoomTask}
           onAddTask={handleAddRoomTask}
-          side={room.slug === 'kitchen' && !isPhone ? 'left' : undefined}
+          assignedSection={<AssignedRoomTasks room={room.slug} highlight={focusHighlight} />}
+          assignedCount={assignedHere.filter(isOutstanding).length}
+          canAdd={canCreate}
+          side={room.slug === 'kitchen' && !isPhone && !isShort && isLandscape ? 'left' : undefined}
+          focusToken={focusToken}
+          availableHeight={areaHeight}
         />
       </SafeAreaView>
     </ThemedView>
@@ -705,11 +726,20 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  // Upper left, where the pet picker used to be (it now shows on Home only); the task panel is the matching control at the upper right.
+  // Same place in portrait and landscape. The safe area around it keeps it clear of the status bar and the navigation bar.
   backButtonPressable: {
     position: 'absolute',
+    zIndex: 1,
+  },
+  backButtonPortrait: {
+    left: Spacing.three,
+    top: Spacing.two,
+  },
+  // Landscape: the original lower-left corner (inside the safe area, so above the navigation bar).
+  backButtonLandscape: {
     left: Spacing.four,
     bottom: Spacing.four,
-    zIndex: 1,
   },
   // Larger pill + a deeper pink than the shared theme.accent (#F28DAE) —
   // this one specific button wants to read clearly over a busy
@@ -729,7 +759,11 @@ const styles = StyleSheet.create({
   },
   // Phone: a smaller pill tucked into the bottom-left corner so it stays clear of the
   // pet (still about 36 px tall, an easy tap target; desktop is untouched).
-  backButtonPressablePhone: {
+  backButtonPortraitPhone: {
+    left: Spacing.two,
+    top: Spacing.two,
+  },
+  backButtonLandscapePhone: {
     left: Spacing.two,
     bottom: Spacing.two,
   },

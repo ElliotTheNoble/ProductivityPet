@@ -96,4 +96,9 @@ export const homeEs: Record<keyof typeof homeEn, string> = {
   roomBedroom: 'Dormitorio',
   roomBathroom: 'Baño',
   roomKitchen: 'Cocina',
+  moodNotRecorded: 'Aún no has elegido un estado de ánimo. ¡Toca uno abajo!',
+  moodNoneLabel: 'Sin estado de ánimo registrado',
+  dayMoodLabel: 'Ánimo',
+  dayMoodNone: 'Sin estado de ánimo registrado para este día',
+  dayMoodSelected: 'Estado de ánimo de este día: {name}',
 };

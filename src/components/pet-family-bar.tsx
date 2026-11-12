@@ -82,7 +82,8 @@ export function PetFamilyBar() {
   const isPhone = useWindowDimensions().width < 700;
   // In the Bathroom the banner carries the wipe-down instruction itself (the Bathroom
   // screen hides its separate message on phones), so it never overlaps a second one.
-  const inBathroom = usePathname().endsWith('/rooms/bathroom');
+  const pathname = usePathname();
+  const inBathroom = pathname.endsWith('/rooms/bathroom');
   const family = usePetFamily();
   const [now, setNow] = useState(() => Date.now());
   const { t } = useT();
@@ -135,6 +136,8 @@ export function PetFamilyBar() {
 
   if (!family) return null;
 
+  // The pet selector and the adopt button belong to the Home living room only; the health and memorial banners below show wherever the bar is.
+  const showPetControls = pathname === '/';
   const selected = getSelectedPet(family);
   const living = getLivingPets(family);
   const canAdopt = canAdoptMore(family);
@@ -178,8 +181,13 @@ export function PetFamilyBar() {
     }
   }
 
+  // Off Home with nothing to warn about, the bar has nothing to show: render NOTHING (an empty bar was a visible strip under the header on the
+  // Rooms screen, which has no full-screen picture behind it).
+  if (!showPetControls && state !== 'sick' && state !== 'critical' && !(state === 'deceased' && memorialToast)) return null;
+
   return (
     <View style={styles.wrap}>
+      {showPetControls ? (
       <View style={styles.row}>
         {family.pets.filter((pet) => !pet.retired).map((pet) => {
           const isSelected = pet.id === family.selectedPetId;
@@ -233,6 +241,7 @@ export function PetFamilyBar() {
           </Pressable>
         ) : null}
       </View>
+      ) : null}
 
       {state === 'sick' || state === 'critical' ? (
         <View

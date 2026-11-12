@@ -25,7 +25,9 @@ import {
   type ChildProfile,
   type HouseholdTask,
 } from '@/utils/household';
+import { ASSIGNABLE_ROOMS } from '@/utils/assigned-task-room';
 import { setLanguage, useOnboarding } from '@/utils/onboarding';
+import { ROOMS, type RoomSlug } from '@/utils/rooms';
 
 // The Parent Dashboard: oversight and organisation, not pet gameplay. It shows the local parent profile, a list of
 // child profiles (Add / Edit / Select), and for the selected child: assigned tasks, pending approvals, completed
@@ -46,6 +48,8 @@ export function ParentDashboard() {
   const household = useHousehold();
   const onboarding = useOnboarding();
   const [taskText, setTaskText] = useState('');
+  // The room a task is assigned to (none = anywhere).
+  const [taskRoom, setTaskRoom] = useState<RoomSlug | undefined>(undefined);
   const [editingParent, setEditingParent] = useState(false);
   const [pName, setPName] = useState('');
   const [pFamily, setPFamily] = useState('');
@@ -60,9 +64,10 @@ export function ParentDashboard() {
 
   async function submitTask(by: 'parent' | 'child') {
     if (!child) return;
-    const r = await addTask(child.id, taskText, by);
+    const r = await addTask(child.id, taskText, by, by === 'parent' ? taskRoom : undefined);
     if (r.ok) {
       setTaskText('');
+      setTaskRoom(undefined);
       setNote(null);
     } else if (r.reason === 'not-allowed') setNote('noteChildCreateOff');
   }
@@ -80,7 +85,7 @@ export function ParentDashboard() {
                 ? `${task.status === 'approved' ? t('approvedOn') : t('completedTasks')} · ${formatDate(task.decidedAt)}`
                 : task.createdBy === 'child'
                   ? t('createdByChild')
-                  : t('createdByParent')}
+                  : `${task.returnedAt ? `${t('atParentSentBack')} · ` : ''}${t('createdByParent')}${task.room ? ` · ${t('atParentRoomLine', { room: ROOMS[task.room].name })}` : ''}`}
           </ThemedText>
         </View>
         <View style={styles.taskButtons}>
@@ -211,6 +216,13 @@ export function ParentDashboard() {
 
           <Card title={t('addTask')}>
             <Field label={t('taskPlaceholder')} placeholder={t('taskPlaceholder')} value={taskText} onChangeText={setTaskText} maxLength={120} />
+            <ThemedText type="smallBold">{t('atRoomPick')}</ThemedText>
+            <View style={styles.row} accessibilityRole="radiogroup">
+              <Button label={t('atAnyRoom')} small tone={taskRoom === undefined ? 'mint' : 'soft'} onPress={() => setTaskRoom(undefined)} accessibilityLabel={`${t('atRoomPick')}: ${t('atAnyRoom')}`} />
+              {ASSIGNABLE_ROOMS.map((slug) => (
+                <Button key={slug} label={ROOMS[slug].name} small tone={taskRoom === slug ? 'mint' : 'soft'} onPress={() => setTaskRoom(slug)} accessibilityLabel={`${t('atRoomPick')}: ${ROOMS[slug].name}`} />
+              ))}
+            </View>
             <View style={styles.row}>
               <Button label={t('assign')} onPress={() => void submitTask('parent')} disabled={!taskText.trim()} />
               {child.settings.canCreateTasks ? (

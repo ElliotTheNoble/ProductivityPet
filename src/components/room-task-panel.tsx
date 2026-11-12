@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
@@ -19,6 +19,12 @@ import type { DisplayTask } from '@/utils/tasks';
 // panel's "docked vs. collapsible" switch lines up with the rest of the
 // app's own desktop/mobile boundary.
 const WIDE_PANEL_BREAKPOINT = 700;
+// A phone turned sideways is wide but short: it gets the collapsible panel too, so the panel never fills the little height there is.
+const COMPACT_HEIGHT = 480;
+// The room's top row: "Back to Rooms" at the upper left, this panel at the upper right (see room-detail-screen.tsx). A narrow portrait screen
+// has no room for both side by side once the panel is open, so the open panel sits just below this row instead.
+export const ROOM_TOP_GAP = Spacing.two;
+export const ROOM_BACK_ROW_HEIGHT = 44;
 
 type RoomTaskPanelProps = {
   // Display name matching RoomInfo.name — 'Study Room', 'Gym', etc. — used
@@ -39,6 +45,16 @@ type RoomTaskPanelProps = {
   // right over several rounds of tuning, close enough to the right-docked
   // panel that the panel needed to move to the opposite side instead.
   side?: 'left' | 'right';
+  // Tasks a parent assigned for this room (shown above the child's own list), and how many are waiting for the child. Both optional: a
+  // room with none looks exactly as before.
+  assignedSection?: ReactNode;
+  assignedCount?: number; // assigned tasks here that still need the child (To do or Try again): counted in the heading and pill
+  // Whether the profile may create its own tasks (default yes). False hides the add field and button; the screen's handler refuses as well.
+  canAdd?: boolean;
+  // A new value each time Home's guide sends the child here: the panel opens and scrolls to the top, where the assigned tasks are.
+  focusToken?: string;
+  // The height of the room's safe area (below the header, clear of the status and navigation bars), so the open panel never grows past it.
+  availableHeight?: number;
 };
 
 // A pastel task panel for a Room detail page — shows only that room's own
@@ -56,22 +72,44 @@ type RoomTaskPanelProps = {
 // expands into a bottom-anchored panel with its own scrollable list and a
 // way to collapse it again — sized and positioned to stay clear of the
 // Back to Rooms button in the bottom-left (see room-detail-screen.tsx).
-export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side = 'right' }: RoomTaskPanelProps) {
+export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side = 'right', assignedSection, assignedCount = 0, canAdd = true, focusToken, availableHeight }: RoomTaskPanelProps) {
   const { t } = useT();
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const isWide = width >= WIDE_PANEL_BREAKPOINT;
+  const { width, height } = useWindowDimensions();
+  const isWide = width >= WIDE_PANEL_BREAKPOINT && height >= COMPACT_HEIGHT;
+  const isNarrow = width < WIDE_PANEL_BREAKPOINT;
+  // Landscape (wider than tall) with the collapsible panel: it sits at the lower right, above the navigation bar, with Back to Rooms at the
+  // lower left. Portrait keeps the upper right (see room-detail-screen.tsx).
+  const atBottom = !isWide && width > height;
   const [isExpanded, setIsExpanded] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  // Opened from Home's guide: open the panel (when it is the collapsible kind) and show its top, where the assigned tasks are.
+  useEffect(() => {
+    if (!focusToken) return;
+    setIsExpanded(true);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [focusToken]);
+  // The open panel's top edge, and the most height it may take: what is left of the safe area below that edge, so it scrolls instead of
+  // running under the navigation bar or off the screen, in portrait and landscape alike.
+  const openTop = atBottom ? ROOM_TOP_GAP : isNarrow && !isWide ? ROOM_TOP_GAP + ROOM_BACK_ROW_HEIGHT + Spacing.one : ROOM_TOP_GAP;
+  const room = availableHeight ?? height;
+  const panelMax = Math.max(160, room - openTop - Spacing.two);
+  const listMax = Math.max(100, panelMax - 140);
   const [draftText, setDraftText] = useState('');
   useUnfinishedWork('task-draft', draftText.trim().length > 0);
   const isLeft = side === 'left';
 
   const completedCount = tasks.filter((task) => task.completed).length;
   const totalCount = tasks.length;
+  // The counter in the heading and on the pill is ONE number: how many tasks still need the child. That is the room's own tasks that are not
+  // done yet, plus the assigned tasks that are To do or Try again (the caller passes only those). A task waiting for the parent, or approved,
+  // is not counted; a waiting one stays in the list below with its Undo button.
+  const needAttention = totalCount - completedCount + assignedCount;
   const progressPercent = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
   const allDone = totalCount > 0 && completedCount === totalCount;
 
   function handleAdd() {
+    if (!canAdd) return;
     const trimmed = draftText.trim();
     if (!trimmed) return;
     onAddTask(trimmed);
@@ -83,7 +121,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
       <View style={styles.headerRow}>
         <ThemedText type="smallBold">{roomTasksTitle(roomName)}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          {completedCount}/{totalCount}
+          {needAttention}
         </ThemedText>
       </View>
 
@@ -92,7 +130,8 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
         <View style={{ flex: 100 - progressPercent }} />
       </View>
 
-      <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={[styles.list, { maxHeight: listMax }]} showsVerticalScrollIndicator={false} nestedScrollEnabled testID="room-panel-scroll">
+        {assignedSection}
         {totalCount === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
             {t('panelEmpty')}
@@ -133,6 +172,8 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
         </ThemedText>
       ) : null}
 
+      {canAdd ? (
+      <>
       <TextInput
         value={draftText}
         onChangeText={setDraftText}
@@ -152,6 +193,8 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
           </ThemedText>
         </ThemedView>
       </Pressable>
+      </>
+      ) : null}
     </>
   );
 
@@ -159,6 +202,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
     return (
       <ThemedView
         type="backgroundElementOverlay"
+        testID="room-panel"
         style={[
           styles.panel,
           styles.panelDocked,
@@ -168,7 +212,9 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
           // same bottom-left corner once the panel is on this side too —
           // every other room keeps the original right-docked, 75%-capped
           // shape untouched.
-          isLeft ? { left: Spacing.four, maxHeight: '60%' } : { right: Spacing.four },
+          isLeft ? { left: Spacing.four } : { right: Spacing.three },
+          // Left-docked (Kitchen, landscape): shorter, so it stays clear above Back to Rooms in the lower-left corner.
+          { top: ROOM_TOP_GAP, maxHeight: isLeft ? Math.min(panelMax, room * 0.6) : panelMax },
         ]}>
         {panelBody}
       </ThemedView>
@@ -182,9 +228,14 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
       // near the top of the screen, where it covered the pet chips on a phone.
       <Pressable
         onPress={() => setIsExpanded(true)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: false }}
+        accessibilityLabel={`${roomTasksTitle(roomName)} ${needAttention}`}
+        testID="room-panel-pill"
         style={({ pressed }) => [
           styles.collapsedPillAnchor,
-          isLeft ? { left: Spacing.three } : { right: Spacing.three },
+          { right: Spacing.three },
+          atBottom ? { bottom: ROOM_TOP_GAP } : { top: ROOM_TOP_GAP },
           // On a phone the Back to Rooms button sits bottom-left; a longer (Spanish) heading wraps in the space
           // that is left instead of sliding under that button.
           width < 700 ? { maxWidth: Math.max(120, width - 215) } : null,
@@ -192,7 +243,7 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
         ]}>
         <ThemedView type="backgroundElementOverlay" style={styles.collapsedPill}>
           <ThemedText type="smallBold">
-            📋 {roomShortName(roomName)} ({completedCount}/{totalCount})
+            📋 {roomShortName(roomName)} {needAttention}
           </ThemedText>
         </ThemedView>
       </Pressable>
@@ -205,8 +256,12 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
       style={[
         styles.panel,
         styles.panelCollapsible,
-        isLeft ? { left: Spacing.three, right: '18%' } : { right: Spacing.three, left: '18%' },
-      ]}>
+        // Landscape phone: a column on the right, clear of Back to Rooms at the left. Narrow portrait: the full width under the top row.
+        isNarrow && !atBottom ? { left: Spacing.two, right: Spacing.two } : { right: Spacing.three, width: Math.min(320, width - 220) },
+        atBottom ? { bottom: ROOM_TOP_GAP } : { top: openTop },
+        { maxHeight: panelMax },
+      ]}
+      testID="room-panel">
       <Pressable
         onPress={() => setIsExpanded(false)}
         style={({ pressed }) => [styles.collapseButton, pressed && styles.pressed]}>
@@ -253,9 +308,7 @@ const styles = StyleSheet.create({
   // Kitchen's left-docked override supplies its own smaller value inline.
   panelDocked: {
     position: 'absolute',
-    top: Spacing.four,
     width: 320,
-    maxHeight: '75%',
   },
   // Bottom-anchored, and raised clear of the Back to Rooms button's own
   // bottom-left corner (see room-detail-screen.tsx) regardless of side —
@@ -264,13 +317,10 @@ const styles = StyleSheet.create({
   // not here, for the same reason as panelDocked.
   panelCollapsible: {
     position: 'absolute',
-    bottom: 72,
-    maxHeight: '55%',
   },
   // left/right supplied inline (see JSX above), not here.
   collapsedPillAnchor: {
     position: 'absolute',
-    bottom: Spacing.two,
   },
   collapsedPill: {
     borderRadius: Spacing.five,
@@ -301,7 +351,6 @@ const styles = StyleSheet.create({
   // header/progress bar/add-task controls off past the edge of the screen.
   list: {
     flexGrow: 0,
-    maxHeight: 260,
   },
   emptyText: {
     textAlign: 'center',

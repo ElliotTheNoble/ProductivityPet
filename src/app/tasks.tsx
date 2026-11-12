@@ -1,9 +1,13 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AssignedAllTasks } from '@/components/assigned-task-views';
+import { useAssignedTasks, useIsChildProfile } from '@/utils/assigned-tasks';
+import { DayMood } from '@/components/day-mood';
 import { TaskCalendar } from '@/components/task-calendar';
 import { TaskEditModal, type TaskEditValues } from '@/components/task-edit-modal';
 import { TaskIcon } from '@/components/task-icon';
@@ -15,10 +19,11 @@ import { useTheme } from '@/hooks/use-theme';
 import { tr, useT } from '@/i18n';
 import { useUnfinishedWork } from '@/hooks/use-unfinished-work';
 import { categoryLabel } from '@/utils/categorize-task';
-import { getHolidayForDate } from '@/utils/holidays';
+import { getHolidayForDate, getHolidayIconForDate } from '@/utils/holidays';
 import { cancelTaskNotification, ensureNotificationPermission, reminderResyncNeeded, syncTaskNotifications } from '@/utils/notifications';
 import { getTaskRoom } from '@/utils/room-tasks';
 import { TASK_ROOMS, TASK_ROOM_LABELS, type TaskRoom } from '@/utils/rooms';
+import { canCreatePersonalTasksNow, useCanCreatePersonalTasks } from '@/utils/task-creation-policy';
 import { getCachedTasks, persistCachedTasks } from '@/utils/task-storage';
 import {
   createTask,
@@ -117,6 +122,8 @@ export default function TasksScreen() {
   const [selectedDate, setSelectedDate] = useState(todayISO());
 
   const [isAdding, setIsAdding] = useState(false);
+  // A child (by default) cannot create tasks of their own: no Add button here, and handleAdd and the save refuse as well.
+  const canCreate = useCanCreatePersonalTasks();
   const [draftText, setDraftText] = useState('');
   // A task being written (text typed, not yet added) is unfinished.
   useUnfinishedWork('task-draft', isAdding && draftText.trim().length > 0);
@@ -137,6 +144,12 @@ export default function TasksScreen() {
   // real reason" — both look identical as a [tasks, isHydrated] dependency
   // change, but only the latter should trigger a save + notification sync.
   const skipNextSyncRef = useRef(false);
+  // The page's scroller, so Home's "Check your Tasks tab!" can bring "Tasks from my parent" into view.
+  const scrollRef = useRef<ScrollView>(null);
+  // A child's screen is simpler: one "Today's Tasks" list (the parent's tasks and their own together) and no empty Appointments / Birthdays
+  // sections. Main and anyone else see the screen as it always was.
+  const isChild = useIsChildProfile();
+  const hasAssigned = useAssignedTasks().length > 0;
 
   // Loads the same tasks Home saves, via the shared in-memory cache (see
   // @/utils/task-storage) instead of a fresh AsyncStorage read — only the
@@ -231,6 +244,7 @@ export default function TasksScreen() {
   }
 
   function handleAdd() {
+    if (!canCreatePersonalTasksNow()) return; // not just a hidden button: this handler refuses too
     const text = draftText.trim();
     if (!text) return;
 
@@ -412,37 +426,46 @@ export default function TasksScreen() {
   // Read-only system data — entirely separate from the user's saved tasks;
   // never created, edited, or deleted through this screen's task editor.
   const dayHoliday = getHolidayForDate(selectedDate);
+  const holidayIcon = getHolidayIconForDate(selectedDate);
 
   const selectedDateLabel = formatFullDate(selectedDate);
 
   const calendar = (
-    <TaskCalendar tasks={tasks} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+    <TaskCalendar tasks={tasks} selectedDate={selectedDate} onSelectDate={setSelectedDate} smartLegend={isChild} />
   );
 
   const dayPanel = (
     <ThemedView type="backgroundElementOverlay" style={styles.dayCard}>
       <View style={styles.dayHeaderRow}>
         <ThemedText style={styles.dayTitle}>{selectedDateLabel}</ThemedText>
-        <Pressable
-          onPress={() => setIsAdding((prev) => !prev)}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <ThemedView type="accent" style={styles.addButton}>
-            <ThemedText type="smallBold" style={styles.addButtonText}>
-              {t('addButton')}
-            </ThemedText>
-          </ThemedView>
-        </Pressable>
+        {canCreate ? (
+          <Pressable
+            onPress={() => setIsAdding((prev) => !prev)}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedView type="accent" style={styles.addButton}>
+              <ThemedText type="smallBold" style={styles.addButtonText}>
+                {t('addButton')}
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
       </View>
 
       {dayHoliday ? (
         <View style={[styles.holidayBanner, { backgroundColor: theme.sky }]}>
-          <ThemedText type="smallBold" style={styles.holidayText}>
-            🎉 {dayHoliday.name}
-          </ThemedText>
+          <View style={styles.holidayRow}>
+            {holidayIcon ? <MaterialCommunityIcons name={holidayIcon} size={18} color="#2E4A57" testID="holiday-icon" accessibilityElementsHidden importantForAccessibility="no" /> : null}
+            <ThemedText type="smallBold" style={styles.holidayText}>
+              {dayHoliday.name}
+            </ThemedText>
+          </View>
         </View>
       ) : null}
 
-      {isAdding ? (
+      {/* The player's own mood for the selected day (today or a past day; nothing for a future day). */}
+      <DayMood dateISO={selectedDate} />
+
+      {isAdding && canCreate ? (
         <View style={styles.form}>
           <View style={styles.pillRow}>
             {KIND_OPTIONS.map((kind) => (
@@ -638,13 +661,16 @@ export default function TasksScreen() {
 
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
-          {t('sectionTasks')}
+          {isChild && selectedDate === todayISO() ? t('todaysTasks') : t('sectionTasks')}
         </ThemedText>
-        {dayTasks.length === 0 ? (
+        {/* The tasks a parent assigned to this child (nothing unless family mode is on and a child is playing), above the child's own tasks
+            in the same list. */}
+        <AssignedAllTasks scrollRef={scrollRef} embedded />
+        {dayTasks.length === 0 ? (hasAssigned ? null : (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
             {t('emptyTasksDay')}
           </ThemedText>
-        ) : (
+        )) : (
           dayTasks.map((task) => {
             const completed = isOccurrenceCompleted(task, selectedDate);
             return (
@@ -684,6 +710,7 @@ export default function TasksScreen() {
         )}
       </View>
 
+      {isChild && dayEvents.length === 0 ? null : (
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
           {t('sectionAppointments')}
@@ -729,6 +756,9 @@ export default function TasksScreen() {
         )}
       </View>
 
+      )}
+
+      {isChild && dayBirthdays.length === 0 ? null : (
       <View style={styles.section}>
         <ThemedText type="smallBold" themeColor="textSecondary">
           {t('sectionBirthdays')}
@@ -756,6 +786,7 @@ export default function TasksScreen() {
           ))
         )}
       </View>
+      )}
     </ThemedView>
   );
 
@@ -763,13 +794,16 @@ export default function TasksScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={[styles.safeArea, { maxWidth: isWideLayout ? WIDE_MAX_WIDTH : MaxContentWidth }]}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.introBackdrop}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
-              {t('tasksIntro')}
-            </ThemedText>
-          </View>
+          {isChild ? null : (
+            <View style={styles.introBackdrop}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.intro}>
+                {t('tasksIntro')}
+              </ThemedText>
+            </View>
+          )}
 
           {isWideLayout ? (
             <View style={styles.wideRow}>
@@ -878,6 +912,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
+  holidayRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   holidayText: {
     color: '#2E4A57',
   },

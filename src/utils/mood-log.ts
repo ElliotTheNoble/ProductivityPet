@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 
 import { MOODS, type Mood } from '@/utils/mood';
 import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
@@ -80,6 +81,51 @@ async function doRecordMoodEntry(mood: Mood, now: Date): Promise<void> {
   cachedLog = [...log, entry];
   void writeScoped(scopedKey(MOOD_LOG_KEY_NAME), JSON.stringify(cachedLog));
   listeners.forEach((listener) => listener(cachedLog ?? []));
+}
+
+// ONE mood per calendar day, chosen by the player (Home's "Today's Mood" and the Tasks calendar's mood selector, for today and past days).
+//  - Picking a mood for a day REPLACES what that day had (never a second record for the same day); picking the mood the day already has clears
+//    the day. Only the day the player is editing is ever touched: every other day's check-ins stay exactly as they are.
+//  - A future day is refused (nothing is written).
+//  - Nothing here reads or writes the pet's own needs, happiness or growth.
+export type MoodChange = 'set' | 'cleared' | 'future' | 'unchanged';
+
+export function moodOnDate(log: readonly MoodEntry[], dateISO: string): Mood | null {
+  let latest: MoodEntry | null = null;
+  for (const entry of log) if (entry.dateISO === dateISO && (!latest || entry.at > latest.at)) latest = entry;
+  return latest ? latest.mood : null;
+}
+
+export function toggleMoodForDate(dateISO: string, mood: Mood, now: Date = new Date()): Promise<MoodChange> {
+  return trackOperation(doToggleMoodForDate(dateISO, mood, now));
+}
+
+async function doToggleMoodForDate(dateISO: string, mood: Mood, now: Date): Promise<MoodChange> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO) || dateISO > dateToISO(now)) return 'future';
+  if (!MOODS.includes(mood)) return 'unchanged';
+  const log = await getMoodLog();
+  const rest = log.filter((entry) => entry.dateISO !== dateISO);
+  const clearing = moodOnDate(log, dateISO) === mood;
+  const entry: MoodEntry = { id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, mood, at: now.toISOString(), dateISO };
+  cachedLog = clearing ? rest : [...rest, entry];
+  void writeScoped(scopedKey(MOOD_LOG_KEY_NAME), JSON.stringify(cachedLog));
+  listeners.forEach((listener) => listener(cachedLog ?? []));
+  return clearing ? 'cleared' : 'set';
+}
+
+// A screen's view of one day's mood, kept live (null = nothing recorded for that day yet).
+export function useMoodForDate(dateISO: string): Mood | null {
+  const [log, setLog] = useState<MoodEntry[]>(() => cachedLog ?? []);
+  useEffect(() => {
+    let cancelled = false;
+    getMoodLog().then((list) => !cancelled && setLog(list)).catch(() => {});
+    const off = subscribeToMoodLog((list) => !cancelled && setLog(list));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+  return moodOnDate(log, dateISO);
 }
 
 // Same cross-screen reactivity pattern as subscribeToPetProfile — lets Stats

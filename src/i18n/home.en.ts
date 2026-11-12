@@ -104,4 +104,10 @@ export const homeEn = {
   roomBedroom: 'Bedroom',
   roomBathroom: 'Bathroom',
   roomKitchen: 'Kitchen',
+  // The player's mood for a day (Home's Today's Mood and the Tasks calendar)
+  moodNotRecorded: 'No mood picked yet. Tap one below!',
+  moodNoneLabel: 'No mood recorded',
+  dayMoodLabel: 'Mood',
+  dayMoodNone: 'No mood recorded for this day',
+  dayMoodSelected: 'Mood for this day: {name}',
 };

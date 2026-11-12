@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 
+import { isAssignableRoom } from '@/utils/assigned-task-room';
 import { FAMILY_MODE_ENABLED } from '@/utils/dev-flags';
 import { checkParentAction, type ParentActionLevel } from '@/utils/parent-session';
 import { registerChildProfile, trackOperation } from '@/utils/profiles';
+import type { RoomSlug } from '@/utils/rooms';
 
 // The household: a local parent profile and the child profiles a parent manages. Saved in its OWN storage key
 // (`@ProductivityPet:household`); it never touches the pet family, the global task list, Paw Tokens, the Shop
@@ -35,6 +37,9 @@ export type PetSafety = 'gentle' | 'classic';
 
 export type ChildSettings = {
   canCreateTasks: boolean;
+  // Whether this child may create tasks of their OWN (in their profile's task list). Absent = not allowed. A parent setting for it is planned
+  // (there is no screen for it yet); see @/utils/task-creation-policy.ts.
+  allowPersonalTasks?: boolean;
   // When true, a child finishing a task makes it 'pending' (waiting for a parent) instead of 'completed'.
   requireApproval: boolean;
   // Saved only: NOT enforced yet (pets are not separated per child; see features.md).
@@ -55,6 +60,13 @@ export type HouseholdTask = {
   createdAt: string;
   submittedAt?: string;
   decidedAt?: string;
+  // The room the parent assigned it to (Study Room, Gym, Bedroom, Kitchen or Bathroom). Absent = "anywhere": every task saved before rooms
+  // existed, and any task the parent did not give a room.
+  room?: RoomSlug;
+  // Set when a parent sent the task back for another try. It stays through a resubmission (that is how a resubmitted task is told apart from
+  // an original submission), so undoing the child's hand-in goes back to "sent back" for a resubmission and to "to do" for an original one.
+  // A task that is 'assigned' and has this is shown as "sent back"; the status itself (the flow) is unchanged.
+  returnedAt?: string;
 };
 
 export type ChildProfile = {
@@ -153,6 +165,8 @@ function normalizeTask(raw: unknown): HouseholdTask | null {
     createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date().toISOString(),
     submittedAt: typeof r.submittedAt === 'string' ? r.submittedAt : undefined,
     decidedAt: typeof r.decidedAt === 'string' ? r.decidedAt : undefined,
+    room: isAssignableRoom(r.room) ? r.room : undefined,
+    returnedAt: typeof r.returnedAt === 'string' ? r.returnedAt : undefined,
   };
 }
 
@@ -200,6 +214,7 @@ function normalize(raw: unknown): Normalized {
         createdAt: typeof cr.createdAt === 'string' ? cr.createdAt : new Date().toISOString(),
         settings: {
           canCreateTasks: s.canCreateTasks === true,
+          ...(s.allowPersonalTasks === true ? { allowPersonalTasks: true } : {}),
           requireApproval: s.requireApproval === false ? false : true,
           petSafety: s.petSafety === 'classic' ? 'classic' : 'gentle',
         },
@@ -526,14 +541,15 @@ export async function updateChildSettings(childId: string, patch: Partial<ChildS
 // ---- tasks ----
 
 // A parent assigns a task; or (createdBy 'child', only when allowed in the child's settings) the child adds one.
-export async function addTask(childId: string, text: string, createdBy: 'parent' | 'child'): Promise<ActionResult> {
+export async function addTask(childId: string, text: string, createdBy: 'parent' | 'child', room?: RoomSlug): Promise<ActionResult> {
   const t = clean(text, MAX_TASK);
   if (!t) return { ok: false, reason: 'invalid' };
+  if (room !== undefined && !isAssignableRoom(room)) return { ok: false, reason: 'invalid' };
   return change((h) => {
     const child = h.children.find((c) => c.id === childId);
     if (!child) return { ok: false, reason: 'not-found' };
     if (createdBy === 'child' && !child.settings.canCreateTasks) return { ok: false, reason: 'not-allowed' };
-    const task: HouseholdTask = { id: newId('task'), text: t, createdBy, status: 'assigned', createdAt: new Date().toISOString() };
+    const task: HouseholdTask = { id: newId('task'), text: t, createdBy, status: 'assigned', createdAt: new Date().toISOString(), ...(room ? { room } : {}) };
     return { ok: true, id: task.id, next: updateChildIn(h, childId, (c) => ({ ...c, tasks: [...c.tasks, task] })) };
   }, createdBy === 'parent' ? 'parent' : undefined); // a task a child adds (when allowed) is the child's own action
 }
@@ -554,6 +570,25 @@ export async function markTaskDone(childId: string, taskId: string): Promise<Act
       next: updateChildIn(h, childId, (c) => ({
         ...c,
         tasks: c.tasks.map((t) => (t.id === taskId ? { ...t, status, submittedAt: now, decidedAt: status === 'completed' ? now : undefined } : t)),
+      })),
+    };
+  });
+}
+
+// The CHILD side: "Undo". Takes back a hand-in that a parent has not looked at yet: only a task that is still 'pending' goes back to
+// 'assigned' (to do, or sent back when it had been sent back before). A task a parent already approved (or one that completed at once
+// because no approval is needed) is refused: it is never un-approved, and no reward is ever touched here. The check and the change are one
+// step inside the household's serialized update, so an undo and a parent's approval at the same moment cannot both succeed.
+export async function undoTaskSubmission(childId: string, taskId: string): Promise<ActionResult> {
+  return change((h) => {
+    const task = h.children.find((c) => c.id === childId)?.tasks.find((t) => t.id === taskId);
+    if (!task) return { ok: false, reason: 'not-found' };
+    if (task.status !== 'pending') return { ok: false, reason: 'wrong-state' };
+    return {
+      ok: true,
+      next: updateChildIn(h, childId, (c) => ({
+        ...c,
+        tasks: c.tasks.map((t) => (t.id === taskId ? { ...t, status: 'assigned', submittedAt: undefined, decidedAt: undefined } : t)),
       })),
     };
   });
@@ -585,7 +620,7 @@ export async function sendTaskBack(childId: string, taskId: string): Promise<Act
       ok: true,
       next: updateChildIn(h, childId, (c) => ({
         ...c,
-        tasks: c.tasks.map((t) => (t.id === taskId ? { ...t, status: 'assigned', submittedAt: undefined, decidedAt: undefined } : t)),
+        tasks: c.tasks.map((t) => (t.id === taskId ? { ...t, status: 'assigned', submittedAt: undefined, decidedAt: undefined, returnedAt: new Date().toISOString() } : t)),
       })),
     };
   }, 'parent');

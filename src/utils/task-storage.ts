@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
 import { ensureProfilesReady, registerProfileStore, scopedKey, trackOperation, writeScoped } from '@/utils/profiles';
+import { withoutDisallowedAdditions } from '@/utils/task-creation-policy';
 import { normalizeTask, todayISO, type Task } from '@/utils/tasks';
 
 // Single source of truth for the storage key — Home, Tasks, birthday
@@ -59,10 +60,14 @@ export async function getCachedTasks(): Promise<Task[]> {
 // @/utils/paw-tokens.ts) against the same tasks — this is a read-only,
 // additive side effect from Paw Tokens' own perspective; it never changes
 // what gets written here or what callers receive back.
+//
+// A profile that may not create tasks of its own (a child, by default; see @/utils/task-creation-policy.ts) cannot save a NEW one by any
+// route: whatever new task a screen hands in here is dropped, while every existing task, edit, completion and deletion is saved as before.
 export function persistCachedTasks(tasks: Task[]): void {
-  cachedTasks = tasks;
-  void writeScoped(scopedKey(TASKS_KEY_NAME), JSON.stringify(tasks));
-  reconcilePawTokenEarnings(tasks).catch(() => {});
+  const allowed = withoutDisallowedAdditions(cachedTasks, tasks);
+  cachedTasks = allowed;
+  void writeScoped(scopedKey(TASKS_KEY_NAME), JSON.stringify(allowed));
+  reconcilePawTokenEarnings(allowed).catch(() => {});
 }
 
 // Profile switching: forget this profile's list. Its phone reminders are cancelled by the pet-alerts store, which

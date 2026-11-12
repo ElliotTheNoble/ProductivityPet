@@ -55,6 +55,10 @@ type Props = {
   // True while the OTHER panel is open: this panel's tab fades away so it can't be mistaken
   // for part of the open panel (and can't be tapped through the dimmed room).
   tabHidden?: boolean;
+  // An optional small number on the tab (for example how many tasks wait). Nothing is shown for 0 or when it is left out; `badgeLabel` is what a
+  // screen reader adds to the tab's name.
+  badge?: number;
+  badgeLabel?: string;
   onOpen: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -70,6 +74,8 @@ export function SlideOutPanel({
   tabTop = 0.36,
   open,
   tabHidden = false,
+  badge = 0,
+  badgeLabel,
   onOpen,
   onClose,
   children,
@@ -270,7 +276,7 @@ export function SlideOutPanel({
           {...(Platform.OS === 'web' ? ({ onMouseEnter: () => setTabHover(true), onMouseLeave: () => setTabHover(false) } as object) : null)}
           pointerEvents={tabHidden ? 'none' : 'auto'}
           accessibilityRole="button"
-          accessibilityLabel={t(open ? 'panelClose' : 'panelOpen', { label })}
+          accessibilityLabel={`${t(open ? 'panelClose' : 'panelOpen', { label })}${badge > 0 && badgeLabel ? `. ${badgeLabel}` : ''}`}
           style={[
             styles.tab,
             { backgroundColor: tint, top: `${tabTop * 100}%`, opacity: tabHidden ? 0 : 1 },
@@ -295,6 +301,11 @@ export function SlideOutPanel({
             size={16}
             color="#5B3F6B"
           />
+          {badge > 0 ? (
+            <View style={styles.tabBadge} pointerEvents="none" testID="tab-badge">
+              <Text style={styles.tabBadgeText}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          ) : null}
           <View style={styles.tabLabelBox} pointerEvents="none">
             <View style={styles.tabLabelRotated}>
               <Ionicons name={icon} size={14} color="#5B3F6B" />
@@ -390,6 +401,22 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  // A small, quiet pastel circle on the tab's lower edge; it does not change the tab's size or position.
+  tabBadge: {
+    position: 'absolute',
+    bottom: 6,
+    alignSelf: 'center',
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 5,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#F28DAE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: { fontSize: 12, lineHeight: 15, fontWeight: '800', color: '#9A3E63' },
   tabLabelBox: {
     flex: 1,
     width: TAB_WIDTH,

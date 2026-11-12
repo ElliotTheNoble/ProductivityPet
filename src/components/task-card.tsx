@@ -1,4 +1,5 @@
 import { categoryLabel } from '@/utils/categorize-task';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { HoverPressable as Pressable } from '@/components/hover-pressable';
@@ -21,6 +22,11 @@ type TaskCardProps = {
   onStopRepeating: (id: string) => void;
   onRemoveToday: (id: string) => void;
   isCelebrating: boolean;
+  // A child's card only: the tasks a parent assigned (compact rows, shown above the child's own), how many there are, and how many of them still
+  // need the child. With none passed (Main, or a child with nothing assigned) the card is exactly as it was.
+  assignedRows?: ReactNode;
+  assignedTotal?: number;
+  assignedOutstanding?: number;
 };
 
 // Adding new tasks now only happens from the Tasks tab (which has date and
@@ -34,9 +40,16 @@ export function TaskCard({
   onStopRepeating,
   onRemoveToday,
   isCelebrating,
+  assignedRows,
+  assignedTotal = 0,
+  assignedOutstanding = 0,
 }: TaskCardProps) {
-  const { t } = useT();
+  const { t, tn } = useT();
   const theme = useTheme();
+  const hasAssigned = assignedTotal > 0;
+  // What still needs the child: their own tasks not done yet, plus the assigned ones that are To do or Try again. A task waiting for the
+  // parent, or already approved, is not counted.
+  const outstanding = tasks.filter((task) => !task.completed).length + assignedOutstanding;
 
   const completedCount = tasks.filter((task) => task.completed).length;
   const completionPercent =
@@ -55,7 +68,7 @@ export function TaskCard({
 
       <View style={styles.progressSection}>
         <ThemedText type="smallBold" themeColor={isCelebrating ? 'accent' : 'textSecondary'}>
-          {isCelebrating ? t('allTasksDone') : t('percentComplete', { p: completionPercent })}
+          {hasAssigned ? tn('atOutstanding', outstanding) : isCelebrating ? t('allTasksDone') : t('percentComplete', { p: completionPercent })}
         </ThemedText>
         <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
           <View style={{ flex: completionPercent, backgroundColor: theme.mint }} />
@@ -64,11 +77,12 @@ export function TaskCard({
       </View>
 
       <View style={styles.list}>
-        {tasks.length === 0 ? (
+        {assignedRows}
+        {tasks.length === 0 ? (hasAssigned ? null : (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
             {t('noTasksToday')}
           </ThemedText>
-        ) : (
+        )) : (
           tasks.map((task, index) => (
             <Pressable
               key={task.id}

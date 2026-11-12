@@ -92,6 +92,48 @@ const HOLIDAY_NAME_KEYS: Record<string, StringKey> = {
   "New Year's Eve": 'holidayNewYearsEve'
 };
 
+// A simple vector icon for each holiday (MaterialCommunityIcons, the icon set the app already ships), instead of one emoji for all of them.
+// Vector icons draw the same on every Android device; emoji depend on the phone's font. Keyed by the English name, like the names above.
+export type HolidayIcon =
+  | 'party-popper'
+  | 'ribbon'
+  | 'heart'
+  | 'bank'
+  | 'flower'
+  | 'star-circle'
+  | 'firework'
+  | 'hammer-wrench'
+  | 'ghost'
+  | 'medal'
+  | 'turkey'
+  | 'star-four-points'
+  | 'pine-tree'
+  | 'glass-cocktail';
+
+const HOLIDAY_ICONS: Record<string, HolidayIcon> = {
+  "New Year's Day": 'party-popper',
+  'Martin Luther King Jr. Day': 'ribbon',
+  "Valentine's Day": 'heart',
+  "Presidents' Day": 'bank',
+  'Memorial Day': 'flower',
+  Juneteenth: 'star-circle',
+  'Independence Day': 'firework',
+  'Labor Day': 'hammer-wrench',
+  Halloween: 'ghost',
+  'Veterans Day': 'medal',
+  Thanksgiving: 'turkey',
+  'Christmas Eve': 'star-four-points',
+  'Christmas Day': 'pine-tree',
+  "New Year's Eve": 'glass-cocktail',
+};
+
+// The icon for the holiday on a date (none when it is not a holiday). Names, dates and the calendar logic are untouched.
+export function getHolidayIconForDate(dateISO: string): HolidayIcon | undefined {
+  const year = Number(dateISO.slice(0, 4));
+  const found = getHolidaysForYear(year).find((holiday) => holiday.date === dateISO);
+  return found ? HOLIDAY_ICONS[found.name] : undefined;
+}
+
 export function holidayDisplayName(englishName: string): string {
   const key = HOLIDAY_NAME_KEYS[englishName];
   return key ? tr(key) : englishName;

@@ -1,0 +1,32 @@
+import type { assignedTasksEn } from './assigned-tasks.en';
+
+// Spanish strings for the tasks a parent assigns. Same keys as assigned-tasks.en.ts.
+export const assignedTasksEs: Record<keyof typeof assignedTasksEn, string> = {
+  atTitle: 'Tareas de mi padre o madre',
+  atToDo: 'Por hacer',
+  atSentBack: 'Inténtalo otra vez',
+  atWaiting: 'Esperando a mi padre o madre',
+  atDone: '¡Ya lo hice!',
+  atDoneFor: 'Ya lo hice: {task}',
+  atAnywhere: 'En cualquier lugar',
+  atOutstanding_one: '{count} por hacer',
+  atOutstanding_other: '{count} por hacer',
+  atWaitingCount: '{count} esperando',
+  atTabBadge: '{count} tareas de mi padre o madre',
+  atUndo: 'Deshacer',
+  atUndoFor: 'Deshacer: {task}',
+  atUndoFailed: 'No se pudo deshacer. Es posible que tu padre o madre ya lo haya revisado.',
+  atSendFailed: 'No se pudo enviar. Inténtalo de nuevo.',
+  atOpenRoom: 'Abrir {room}',
+  atRoomPick: 'Habitación para esta tarea',
+  atAnyRoom: 'En cualquier lugar',
+  atParentSentBack: 'Devuelta para intentarlo otra vez',
+  atParentRoomLine: 'Habitación: {room}',
+  atCardLabel: '{task}, {state}',
+  atCardHintOpen: 'Muestra más sobre esta tarea',
+  atCardHintClose: 'Oculta los detalles de esta tarea',
+  atFromParent: 'De mi padre o madre',
+  atFromParentRoom: 'De mi padre o madre · {room}',
+  atHomeRowLabel: '{task}, {state}, {from}',
+  atOpenTasksTab: 'Abre tu pestaña de Tareas',
+};

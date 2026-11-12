@@ -15,6 +15,8 @@ type TaskCalendarProps = {
   tasks: Task[];
   selectedDate: string;
   onSelectDate: (dateISO: string) => void;
+  // Child screens: show only the legend entries that have a dot in the month on screen (nothing at all when there are none).
+  smartLegend?: boolean;
 };
 
 type DayCell = { date: Date; iso: string } | null;
@@ -40,7 +42,7 @@ function getMonthGrid(year: number, month: number): DayCell[][] {
   return rows;
 }
 
-export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendarProps) {
+export function TaskCalendar({ tasks, selectedDate, onSelectDate, smartLegend = false }: TaskCalendarProps) {
   const { t, tl } = useT();
   const WEEKDAY_LABELS = tl('weekdaysNarrow');
   const MONTH_LABELS = tl('months');
@@ -51,6 +53,26 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
 
   const today = todayISO();
   const weeks = getMonthGrid(viewYear, viewMonth);
+
+  // Which kinds of dot appear in the month shown (for the smart legend).
+  const shownKinds = { holiday: false, appointment: false, birthday: false, important: false, task: false };
+  if (smartLegend) {
+    for (const week of weeks) {
+      for (const cell of week) {
+        if (!cell) continue;
+        if (getHolidayForDate(cell.iso)) shownKinds.holiday = true;
+        for (const task of tasks) {
+          if (!occursOnDate(task, cell.iso)) continue;
+          if (task.kind === 'event') shownKinds.appointment = true;
+          else if (task.kind === 'birthday') shownKinds.birthday = true;
+          else if (task.important) shownKinds.important = true;
+          else shownKinds.task = true;
+        }
+      }
+    }
+  }
+  const showLegend = !smartLegend || Object.values(shownKinds).some(Boolean);
+  const showKind = (kind: keyof typeof shownKinds) => !smartLegend || shownKinds[kind];
 
   function goToPreviousMonth() {
     if (viewMonth === 0) {
@@ -171,38 +193,50 @@ export function TaskCalendar({ tasks, selectedDate, onSelectDate }: TaskCalendar
         </View>
       ))}
 
+      {showLegend ? (
       <View style={styles.legendRow}>
+        {showKind('holiday') ? (
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.sky }]} />
           <ThemedText type="small" themeColor="textSecondary">
             {t('legendHoliday')}
           </ThemedText>
         </View>
+        ) : null}
+        {showKind('appointment') ? (
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.accent }]} />
           <ThemedText type="small" themeColor="textSecondary">
             {t('legendAppointment')}
           </ThemedText>
         </View>
+        ) : null}
+        {showKind('birthday') ? (
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.peach }]} />
           <ThemedText type="small" themeColor="textSecondary">
             {t('legendBirthday')}
           </ThemedText>
         </View>
+        ) : null}
+        {showKind('important') ? (
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.purple }]} />
           <ThemedText type="small" themeColor="textSecondary">
             {t('legendImportant')}
           </ThemedText>
         </View>
+        ) : null}
+        {showKind('task') ? (
         <View style={styles.legendItem}>
           <View style={[styles.dot, { backgroundColor: theme.mint }]} />
           <ThemedText type="small" themeColor="textSecondary">
             {t('legendTask')}
           </ThemedText>
         </View>
+        ) : null}
       </View>
+      ) : null}
     </ThemedView>
   );
 }

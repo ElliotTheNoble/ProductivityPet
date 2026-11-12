@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -10,6 +9,7 @@ import { PetProgress } from '@/components/pet-progress';
 import { HATCHLING_INTRO_DURATION_MS } from '@/components/pet-placeholder';
 import { PetRoom } from '@/components/pet-room';
 import { RoomsCard } from '@/components/rooms-card';
+import { AssignedHomeRows } from '@/components/assigned-task-views';
 import { SlideOutPanel } from '@/components/slide-out-panel';
 import { PawadiseMailbox } from '@/components/pawadise-mailbox';
 import { ToyPlayCard } from '@/components/toy-play-card';
@@ -25,12 +25,12 @@ import {
   subscribeToDevPreviewStageIndex,
 } from '@/utils/dev-stage-preview';
 import { useT, trList, tr } from '@/i18n';
-import { MOODS, getMoodMessage, getRandomMoodMessageIndex, type Mood } from '@/utils/mood';
-import { recordMoodEntry } from '@/utils/mood-log';
+import { getMoodMessage, getRandomMoodMessageIndex, type Mood } from '@/utils/mood';
+import { toggleMoodForDate, useMoodForDate } from '@/utils/mood-log';
 import { getPetLifeMessage } from '@/utils/pet-life-messages';
 import { cancelTaskNotification, reminderResyncNeeded, syncTaskNotifications } from '@/utils/notifications';
+import { isOutstanding, outstandingTotal, useAssignedTasks, useIsChildProfile } from '@/utils/assigned-tasks';
 import { reconcilePawTokenEarnings } from '@/utils/paw-tokens';
-import { ensureProfilesReady, scopedKey, writeScoped } from '@/utils/profiles';
 import { isPoopPaused, applyCleanUpPile } from '@/utils/pet-poop';
 import { useSelectedPetId } from '@/hooks/use-pet-family';
 import { getEquippedAccessories, type EquippedAccessories } from '@/utils/pet-equipment';
@@ -77,8 +77,7 @@ const DEFAULT_MOOD: Mood = 'Happy';
 // the parsed list in memory so Home, Tasks, birthday detection, and the
 // Rooms hub don't each do their own independent AsyncStorage read on every
 // navigation — see that file for details.
-// The saved mood belongs to the active profile (see @/utils/profiles.ts).
-const MOOD_KEY_NAME = 'mood';
+// The player's mood is one record per day in the active profile's mood log (see @/utils/mood-log.ts).
 
 // How long the "Dev: Replay Hatching Animation" button's simulated Egg
 // artwork briefly shows before the simulated hatch itself begins — purely
@@ -106,8 +105,11 @@ export default function HomeScreen() {
   const [temporaryMessage, setTemporaryMessage] = useState<TemporaryMessage | null>(null);
   const [messageIndex, setMessageIndex] = useState(0);
   const [isCelebrating, setIsCelebrating] = useState(false);
-  const [mood, setMood] = useState<Mood>(DEFAULT_MOOD);
-  const [isMoodHydrated, setIsMoodHydrated] = useState(false);
+  // The player's mood for TODAY, from the one-mood-per-day record (see @/utils/mood-log.ts): null until they pick one, and it follows the
+  // Tasks calendar's mood selector. Nothing is chosen or saved for them. The pet's bubble keeps its usual ambient line (the Happy pool) while
+  // there is no mood, so the kitty's own messages do not change.
+  const recordedMood = useMoodForDate(todayISO());
+  const mood: Mood = recordedMood ?? DEFAULT_MOOD;
   const [moodMessageIndex, setMoodMessageIndex] = useState(() => getRandomMoodMessageIndex(DEFAULT_MOOD));
   const moodMessage = getMoodMessage(mood, moodMessageIndex);
   // The Today's Mood picker's handler: updates the on-screen mood exactly as
@@ -116,8 +118,7 @@ export default function HomeScreen() {
   // player selection records an entry — loading the saved mood on startup
   // goes through setMood directly and does not.
   const handleSelectMood = (selected: Mood) => {
-    setMood(selected);
-    recordMoodEntry(selected).catch(() => {});
+    toggleMoodForDate(todayISO(), selected).catch(() => {});
   };
   // Local copy of the Pet Profile, used only by the Feed button below for
   // now. Seeded from getPetProfile() on mount — not
@@ -162,6 +163,9 @@ export default function HomeScreen() {
   const celebrationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const temporaryMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width, height } = useWindowDimensions();
+  // Tasks a parent assigned to THIS child (none unless family mode is on and a child is playing): a small number on the right-hand tab.
+  const assignedTasks = useAssignedTasks();
+  const isChildProfile = useIsChildProfile();
   // Portrait = taller than wide. Re-evaluated on every rotation, so switching orientation just
   // re-lays-out Home (nothing saved changes).
   const isPortrait = height >= width;
@@ -189,33 +193,6 @@ export default function HomeScreen() {
   // real reason" — both look identical as a [tasks, isHydrated] dependency
   // change, but only the latter should trigger a save + notification sync.
   const skipNextSyncRef = useRef(false);
-
-  // Load any previously saved mood once on mount. The key is fixed once the profile registry is ready, so the
-  // mood is always saved back to the profile it was loaded from.
-  const moodKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    ensureProfilesReady()
-      .then(() => {
-        moodKeyRef.current = scopedKey(MOOD_KEY_NAME);
-        return AsyncStorage.getItem(moodKeyRef.current);
-      })
-      .then((stored) => {
-        if (cancelled || !stored) return;
-        if (MOODS.includes(stored as Mood)) setMood(stored as Mood);
-      })
-      .finally(() => {
-        if (!cancelled) setIsMoodHydrated(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isMoodHydrated) return;
-    if (moodKeyRef.current) void writeScoped(moodKeyRef.current, mood);
-  }, [mood, isMoodHydrated]);
 
   // Seed the local Pet Profile state once on mount (see the petProfile
   // declaration above for why this uses getPetProfile() rather than
@@ -799,6 +776,10 @@ export default function HomeScreen() {
       onStopRepeating={stopRepeating}
       onRemoveToday={removeTodayOccurrence}
       isCelebrating={isCelebrating}
+      // A child's parent-assigned tasks join this one card (nothing for Main, or a child with none assigned)
+      assignedRows={assignedTasks.length > 0 ? <AssignedHomeRows /> : undefined}
+      assignedTotal={assignedTasks.length}
+      assignedOutstanding={assignedTasks.filter(isOutstanding).length}
     />
   );
 
@@ -913,12 +894,15 @@ export default function HomeScreen() {
           tabTop={0.3}
           open={openPanel === 'features'}
           tabHidden={openPanel === 'progress'}
+          badge={outstandingTotal(assignedTasks)}
+          badgeLabel={t('atTabBadge', { count: outstandingTotal(assignedTasks) })}
           onOpen={() => setOpenPanel('features')}
           onClose={() => setOpenPanel((current) => (current === 'features' ? null : current))}>
           <ToyPlayCard />
           {taskCard}
-          {appointmentsCard}
-          <TodayMood mood={mood} message={moodMessage} onSelectMood={handleSelectMood} />
+          {/* A child's Home hides the whole appointments card (heading and empty message too) while there is nothing today; Main always shows it. */}
+          {isChildProfile && todaysDisplayAppointments.length === 0 ? null : appointmentsCard}
+          <TodayMood mood={recordedMood} message={moodMessage} onSelectMood={handleSelectMood} />
           {!isPortrait ? <RoomsCard /> : null}
         </SlideOutPanel>
 
