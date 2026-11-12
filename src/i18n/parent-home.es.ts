@@ -26,8 +26,6 @@ export const parentHomeEs: Record<keyof typeof parentHomeEn, string> = {
   phReadOnly: 'Vista de solo lectura. Aquí no puedes cambiar nada.',
   phPetsTitle: 'Mascotas',
   phNoPets: 'Todavía no hay mascotas.',
-  phSoon: 'Próximamente',
-  phSoonNote: 'Esta parte todavía no está hecha, así que no se muestra nada.',
   phTasks: 'Tareas',
   phAchievements: 'Logros',
   phJournals: 'Diarios compartidos',

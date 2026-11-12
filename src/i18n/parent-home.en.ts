@@ -25,8 +25,6 @@ export const parentHomeEn = {
   phReadOnly: 'Look-only view. You cannot change anything here.',
   phPetsTitle: 'Pets',
   phNoPets: 'No pets yet.',
-  phSoon: 'Coming soon',
-  phSoonNote: 'This part is not built yet, so nothing is shown.',
   phTasks: 'Tasks',
   phAchievements: 'Achievements',
   phJournals: 'Shared Journals',

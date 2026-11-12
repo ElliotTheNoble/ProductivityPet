@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ChildAccomplishmentsSection, ChildActivitySection, ChildTasksSection } from '@/components/child-activity-sections';
+import { ChildJournalSection, SharedEntryScreen } from '@/components/child-journal-section';
 import { Button, Card, PageShell } from '@/components/family-ui';
 import { ThemedText } from '@/components/themed-text';
 import { hoverLift } from '@/constants/hover';
@@ -166,6 +167,8 @@ function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: (
   const { t } = useT();
   const [overview, setOverview] = useState<ChildOverview | null>(null);
   const [activity, setActivity] = useState<ChildActivityResult | null>(null);
+  // The shared journal entry being read (a page of its own); nothing is kept once it is closed.
+  const [entryId, setEntryId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void readChildOverview(child.id).then((result) => {
@@ -179,6 +182,8 @@ function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: (
     };
   }, [child.id]);
   const avatar = avatarFor(child.id);
+
+  if (entryId !== null) return <SharedEntryScreen childId={child.id} nickname={child.nickname} entryId={entryId} onBack={() => setEntryId(null)} />;
 
   return (
     <PageShell maxWidth={820} scrollKey={child.id}>
@@ -237,20 +242,8 @@ function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: (
         </>
       ) : null}
 
-      {/* Shared Journals is not built yet: nothing of any journal is read or shown here. */}
-      <Card title={t('phJournals')} color="rgba(255,255,255,0.7)">
-        <ThemedText type="small" themeColor="textSecondary">
-          {t('phJournalsText')}
-        </ThemedText>
-        <View style={styles.soonPill}>
-          <ThemedText type="smallBold" style={styles.soonText}>
-            {t('phSoon')}
-          </ThemedText>
-        </View>
-        <ThemedText type="small" themeColor="textSecondary">
-          {t('phSoonNote')}
-        </ThemedText>
-      </Card>
+      {/* Only entries the child chose to share are ever read (see @/components/child-journal-section.tsx). */}
+      <ChildJournalSection childId={child.id} nickname={child.nickname} onOpen={setEntryId} />
     </PageShell>
   );
 }
@@ -282,6 +275,4 @@ const styles = StyleSheet.create({
   petRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', minHeight: 36 },
   petName: { flexShrink: 1 },
   dot: { width: 12, height: 12, borderRadius: 6 },
-  soonPill: { alignSelf: 'flex-start', paddingHorizontal: Spacing.three, paddingVertical: Spacing.one, borderRadius: Spacing.four, backgroundColor: '#EFE9FA' },
-  soonText: { color: '#7B5CB8' },
 });

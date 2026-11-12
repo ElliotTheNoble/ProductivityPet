@@ -248,14 +248,13 @@ describe('the child overview', () => {
     return view;
   }
 
-  test('shows the child, their pets, a look-only note and clearly labelled "coming soon" sections with no statistics', async () => {
+  test('shows the child, their pets, a look-only note and every section, with no statistics when nothing is saved', async () => {
     await openBilly();
     expect(await RNTL.screen.findByText(text('phReadOnly'))).toBeTruthy();
     expect(await RNTL.screen.findByText('Biscuit')).toBeTruthy();
-    // Tasks, Achievements and Activity history are real sections now (see parent-activity.test.tsx); only Shared Journals is still "coming soon"
+    // Tasks, Achievements, Activity history and Shared Journals are real sections (see parent-activity.test.tsx and parent-journal.test.tsx)
     for (const key of ['phTasks', 'phAchievements', 'phJournals', 'paActTitle']) expect(await RNTL.screen.findByText(text(key))).toBeTruthy();
-    expect(RNTL.screen.getAllByText(text('phSoon'))).toHaveLength(1);
-    expect(RNTL.screen.getAllByText(text('phSoonNote'))).toHaveLength(1);
+    expect(await RNTL.screen.findByText(text('pjEmpty').replace('{name}', 'Billy'))).toBeTruthy(); // nothing shared: a plain empty state
     // nothing numeric is invented: not one number appears in the overview's words
     const strings: string[] = [];
     const walk = (node: unknown) => {
@@ -293,7 +292,7 @@ describe('the child overview', () => {
     expect(RNTL.screen.getByText('Sarah')).toBeTruthy();
   });
 
-  test('journal content is never shown, private or shared', async () => {
+  test('private journal entries are never shown; only an entry the child shared appears (see parent-journal.test.tsx)', async () => {
     const view = await boot();
     await view.app.AsyncStorage.setItem(
       scoped(view.ids.Billy, 'journal'),
@@ -307,7 +306,8 @@ describe('the child overview', () => {
     await press(text('phOpenChild').replace('{name}', 'Billy'));
     await settle();
     const rendered = JSON.stringify(RNTL.screen.toJSON());
-    expect(rendered).not.toMatch(/PRIVATE-WORDS|SHARED-WORDS|MAIN-JOURNAL/);
+    expect(rendered).not.toMatch(/PRIVATE-WORDS|MAIN-JOURNAL/);
+    expect(rendered).toContain('SHARED-WORDS'); // the one the child shared
   });
 
   test('the same in Spanish', async () => {
@@ -318,7 +318,7 @@ describe('the child overview', () => {
     await RNTL.screen.findByText('Billy');
     await press(textEs('phOpenChild').replace('{name}', 'Billy'));
     expect(await RNTL.screen.findByText(textEs('phReadOnly'))).toBeTruthy();
-    expect(RNTL.screen.getAllByText(textEs('phSoon'))).toHaveLength(1);
+    expect(RNTL.screen.getByText(textEs('phJournals'))).toBeTruthy();
   });
 });
 

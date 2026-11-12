@@ -251,7 +251,7 @@ describe('what is not saved shows a plain empty state, never a made-up number', 
 });
 
 describe('privacy, protection and Spanish', () => {
-  test('no journal content, private or shared, and no mood record is read or shown', async () => {
+  test('the activity sections read no journal and no mood record, and no private entry is ever shown', async () => {
     const { app, ids } = await boot();
     await seedBilly(app, ids);
     await app.AsyncStorage.setItem(
@@ -266,8 +266,9 @@ describe('privacy, protection and Spanish', () => {
     getItem.mockClear();
     await openChild('Billy');
     const read = getItem.mock.calls.map(([key]) => String(key)); // before the dump below
-    expect(read.filter((key) => /journal|moodLog|:mood$/.test(key))).toEqual([]);
-    expect(JSON.stringify(RNTL.screen.toJSON())).not.toMatch(/PRIVATE-WORDS|SHARED-WORDS/);
+    expect(read.filter((key) => /moodLog|:mood$/.test(key))).toEqual([]); // no mood record, ever
+    // the journal is read only by the Shared Journals section (through the filtered reader), never by the Tasks, Accomplishments or Activity code
+    expect(JSON.stringify(RNTL.screen.toJSON())).not.toMatch(/PRIVATE-WORDS/);
   });
 
   test('viewing writes nothing and leaves every saved record byte for byte as it was (Main\'s and the children\'s)', async () => {
