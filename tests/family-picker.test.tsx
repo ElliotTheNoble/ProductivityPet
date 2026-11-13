@@ -198,7 +198,6 @@ describe('cold start', () => {
     await withPin.screen.findByText(t(withPin, 'fpTitle'));
     await withPin.fireEvent.press(mainCard(withPin));
     await typePin(withPin, PIN);
-    await withPin.fireEvent.press(withPin.screen.getByRole('button', { name: t(withPin, 'pgUnlock') }));
     await withPin.screen.findByText(/SHELL main/);
     withPin.stop();
     const noPin = await boot({ seed: { [HOUSEHOLD]: household([child('kid-mia', 'Mia', { archivedAt: iso(T0) })]) }, pin: 'none' });
@@ -307,7 +306,6 @@ describe('children choose their own profile without a PIN', () => {
 
     await app.fireEvent.press(mainCard(app));
     await typePin(app, PIN);
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }));
     await app.screen.findByText(/SHELL main wallet/);
     expect(JSON.parse((await app.AsyncStorage.getItem(scoped('kid-mia', 'petFamily')))!).wallet.pawTokens).toBe(25);
   });
@@ -324,7 +322,6 @@ describe('Main needs the Parent PIN', () => {
   }
   const unlock = async (app: App, pin: string) => {
     await typePin(app, pin);
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }));
   };
 
   test('the correct PIN opens Main, and only Main', async () => {
@@ -338,7 +335,7 @@ describe('Main needs the Parent PIN', () => {
 
   test('a wrong PIN says so with the tries left, opens nothing and loads nothing', async () => {
     const app = await pinPrompt();
-    await unlock(app, '111111');
+    await unlock(app, '1111');
     expect(await app.screen.findByText(new RegExp(t(app, 'pgWrong')))).toBeTruthy();
     expect(app.screen.queryByText(/SHELL/)).toBeNull();
     expect(app.shellLoads).toEqual([]);
@@ -348,7 +345,7 @@ describe('Main needs the Parent PIN', () => {
   test('five wrong PINs call for the phone\'s screen lock (no waiting, not even for the right PIN until it is passed); children still play', async () => {
     const app = await pinPrompt();
     for (let i = 0; i < 5; i += 1) {
-      await unlock(app, '111111');
+      await unlock(app, '1111');
       if (i < 4) await app.screen.findByText(new RegExp(t(app, 'pgWrong')));
     }
     expect(await app.screen.findByText(t(app, 'pgDeviceCheck'))).toBeTruthy();
@@ -356,7 +353,7 @@ describe('Main needs the Parent PIN', () => {
     expect(app.screen.queryByText(/Please wait/)).toBeNull(); // there is no waiting period
     // the number pad is held back, so the right PIN opens nothing
     await typePin(app, PIN);
-    expect(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }).props.accessibilityState.disabled).toBe(true);
+    expect(app.screen.queryByRole('button', { name: t(app, 'pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
     expect(app.screen.queryByText(/SHELL/)).toBeNull();
     expect(app.shellLoads).toEqual([]);
     // leaving and coming back does not skip it
@@ -370,7 +367,7 @@ describe('Main needs the Parent PIN', () => {
 
   test('passing the screen-lock check gives the tries back, and the right PIN then opens Main', async () => {
     const app = await pinPrompt();
-    for (let i = 0; i < 5; i += 1) await unlock(app, '111111');
+    for (let i = 0; i < 5; i += 1) await unlock(app, '1111');
     await app.fireEvent.press(await app.screen.findByRole('button', { name: t(app, 'pgDeviceCheckButton') }));
     await app.waitFor(() => expect(app.screen.queryByText(t(app, 'pgDeviceCheck'))).toBeNull());
     await unlock(app, PIN);
@@ -378,23 +375,23 @@ describe('Main needs the Parent PIN', () => {
     expect(app.profiles.getActiveProfileId()).toBe('main');
   });
 
-  test('the Main profile PIN prompt takes exactly 4 digits: pad, physical keyboard and device keyboard; Unlock enables only at 4', async () => {
+  test('the Main profile PIN prompt takes exactly 4 digits and checks the PIN at the fourth: pad, physical keyboard and device keyboard', async () => {
     const app = await pinPrompt();
-    const unlockButton = () => app.screen.getByRole('button', { name: t(app, 'pgUnlock') });
+    expect(app.screen.queryByRole('button', { name: t(app, 'pgUnlock') })).toBeNull(); // no Unlock button at all
     await typePin(app, '135');
-    expect(unlockButton().props.accessibilityState.disabled).toBe(true);
-    await typePin(app, '79246'); // only the first of these five counts
-    expect(app.screen.getByText(/^4 digits entered$/)).toBeTruthy();
-    expect(unlockButton().props.accessibilityState.disabled).toBe(false);
+    expect(app.screen.getByText(/^3 digits entered$/)).toBeTruthy(); // three digits: nothing is checked yet
+    expect(app.screen.queryByText(new RegExp(t(app, 'pgWrong')))).toBeNull();
+    await typePin(app, '8'); // the fourth digit checks 1358 at once (one counted try)
+    expect(await app.screen.findByText(new RegExp(`${t(app, 'pgWrong')} 4 tries left`))).toBeTruthy(); // exactly one counted try
+    expect(app.screen.getByText(/^0 digits entered$/)).toBeTruthy(); // the dots were wiped
     const hardware = app.screen.getByTestId('pin-hardware-input', { hidden: true });
     expect(hardware.props.maxLength).toBe(4);
-    await app.fireEvent.changeText(hardware, '123456789');
-    expect(app.screen.getByText(/^4 digits entered$/)).toBeTruthy();
     await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pinUseKeyboard') }));
     const keyboard = app.screen.getByTestId('pin-keyboard-input');
     expect(keyboard.props.maxLength).toBe(4);
-    await app.fireEvent.changeText(keyboard, '98765432');
-    expect(app.screen.getByTestId('pin-keyboard-input').props.value).toBe('9876');
+    await app.fireEvent.changeText(keyboard, '98765432'); // the device keyboard keeps only four digits, and the fourth checks them (a second counted try)
+    expect(await app.screen.findByText(new RegExp(`${t(app, 'pgWrong')} 3 tries left`))).toBeTruthy();
+    expect(app.screen.getByTestId('pin-keyboard-input').props.value).toBe('');
     expect(app.screen.queryByText(/longer than 4/i)).toBeNull();
   });
 
@@ -513,7 +510,6 @@ describe('a switch that fails', () => {
     await app.fireEvent.press(mainCard(app));
     await app.screen.findByText(t(app, 'fpPinBodyMain'));
     await typePin(app, PIN);
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }));
     await app.screen.findByText(/SHELL main/);
     expect(await app.AsyncStorage.getItem(HOUSEHOLD)).toContain('Mia'); // nothing was lost
   });
@@ -537,7 +533,7 @@ describe('read-only care badges', () => {
       child('kid-low', 'Lowneeds'),
       child('kid-sick', 'Sicky'),
       child('kid-crit', 'Critty'),
-      child('kid-dead', 'Deady'),
+      child('kid-dead', 'Deady', { settings: { canCreateTasks: false, requireApproval: true, petSafety: 'classic' } }), // Classic: a pet can pass away (Gentle children never do)
       child('kid-new', 'Newbie'),
       child('kid-bad', 'Broken'),
     ]),
@@ -785,7 +781,6 @@ describe('Main fails closed (security review)', () => {
     await first.screen.findByText('Mia');
     await first.fireEvent.press(mainCard(first));
     await typePin(first, PIN);
-    await first.fireEvent.press(first.screen.getByRole('button', { name: t(first, 'pgUnlock') }));
     await first.screen.findByText(/SHELL main/);
     const disk: Record<string, string> = {};
     for (const key of await first.AsyncStorage.getAllKeys()) disk[key] = (await first.AsyncStorage.getItem(key)) as string;
@@ -803,7 +798,6 @@ describe('the parent session locks (security review)', () => {
     await app.screen.findByText('Mia');
     await app.fireEvent.press(mainCard(app));
     await typePin(app, PIN);
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }));
     await app.screen.findByText(/SHELL main/);
     expect((await app.gate.getParentAccess()).state).toBe('unlocked');
     return app;
@@ -838,7 +832,6 @@ describe('the parent session locks (security review)', () => {
     await app.screen.findByText('Mia');
     await app.fireEvent.press(mainCard(app));
     await typePin(app, PIN);
-    await app.fireEvent.press(app.screen.getByRole('button', { name: t(app, 'pgUnlock') }));
     await app.screen.findByText(/SHELL main/);
     expect((await app.gate.getParentAccess()).state).toBe('unlocked');
     await app.rntl.act(async () => watch.listeners().forEach((h) => h('background')));
@@ -852,8 +845,8 @@ describe('the parent session locks (security review)', () => {
     await app.screen.findByText('Mia');
     await app.fireEvent.press(mainCard(app));
     await app.screen.findByText(t(app, 'fpPinBodyMain'));
-    await typePin(app, '1357');
-    expect(app.screen.getAllByText(app.i18n.tn('pinDigitsEntered', 4)).length).toBeGreaterThan(0);
+    await typePin(app, '135'); // three digits: still waiting for the fourth (the fourth would check the PIN)
+    expect(app.screen.getAllByText(app.i18n.tn('pinDigitsEntered', 3)).length).toBeGreaterThan(0);
     await app.rntl.act(async () => watch.listeners().forEach((h) => h('background')));
     expect(app.screen.getAllByText(app.i18n.tn('pinDigitsEntered', 0)).length).toBeGreaterThan(0);
     watch.spy.mockRestore();

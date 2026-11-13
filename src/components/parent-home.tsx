@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -19,6 +20,7 @@ import {
 } from '@/utils/child-overview';
 import { avatarFor } from '@/utils/family-picker-model';
 import { useHousehold } from '@/utils/household';
+import { useFreshHousehold } from '@/hooks/use-fresh-household';
 
 // The Parent Dashboard: what Main shows in family mode (see @/components/parent-shell.tsx). It lists the ACTIVE children (real profiles,
 // nothing hardcoded), opens a read-only overview of one child, and links to Family Settings (the existing /parent screen, where children
@@ -56,6 +58,7 @@ type ListState = { kind: 'loading' } | { kind: 'ok'; children: DashboardChild[] 
 
 export function ParentHome() {
   const { t } = useT();
+  useFreshHousehold();
   const router = useRouter();
   const household = useHousehold();
   const [list, setList] = useState<ListState>({ kind: 'loading' });
@@ -97,7 +100,9 @@ export function ParentHome() {
   return (
     <PageShell maxWidth={820}>
       <View style={styles.header}>
-        <ThemedText style={styles.headerIcon}>🏡</ThemedText>
+        <View style={styles.headerBadge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="parent-header-icon">
+          <Ionicons name="shield-checkmark" size={34} color="#7B5CC4" />
+        </View>
         <ThemedText type="subtitle" accessibilityRole="header" style={styles.center}>
           {t('phTitle')}
         </ThemedText>
@@ -117,9 +122,6 @@ export function ParentHome() {
       </Card>
 
       <Card title={t('phSettings')} color="#FFF4E3">
-        <ThemedText type="small" themeColor="textSecondary">
-          {t('phSettingsHint')}
-        </ThemedText>
         <Button tone="mint" label={t('phSettingsOpen')} onPress={() => router.push('/parent')} />
       </Card>
     </PageShell>
@@ -250,7 +252,7 @@ function ChildOverviewView({ child, onBack }: { child: DashboardChild; onBack: (
 
 const styles = StyleSheet.create({
   header: { alignItems: 'center', gap: Spacing.one, paddingVertical: Spacing.two },
-  headerIcon: { fontSize: 44, lineHeight: 52 },
+  headerBadge: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6DBF8' },
   center: { textAlign: 'center' },
   backRow: { alignItems: 'flex-start' },
   childCard: {

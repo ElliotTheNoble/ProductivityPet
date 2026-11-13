@@ -134,7 +134,6 @@ describe('a new Parent PIN is exactly 4 digits on every creation screen', () => 
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
     await press(en('pmChange'));
     await typeDigits(PIN);
@@ -180,7 +179,12 @@ describe('every box that CHECKS the PIN takes exactly 4 digits too (no way to ty
       </ParentGate>
     );
     await screen.findByText(en('pgTitle'));
-    await expectBoxStopsAtFour(en('pgUnlock'));
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // the fourth digit checks the PIN: no Unlock button
+    await typeDigits('135');
+    expect(screen.getByText(en('pinDigitsEntered_other', { count: 3 }))).toBeTruthy(); // nothing is checked before the fourth digit
+    await typeDigits('8'); // the fourth digit checks 1358 at once (one counted try)
+    expect(await screen.findByText(new RegExp(`${en('pgWrong')} 4 tries left`))).toBeTruthy();
+    expect(screen.getByTestId('pin-hardware-input', { hidden: true }).props.maxLength).toBe(4);
     expect(screen.queryByText(/longer than 4/i)).toBeNull(); // no option for a longer PIN
   });
 
@@ -189,7 +193,6 @@ describe('every box that CHECKS the PIN takes exactly 4 digits too (no way to ty
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
     await press(en('pmChange'));
     await expectBoxStopsAtFour(en('psNext'));
@@ -200,7 +203,6 @@ describe('every box that CHECKS the PIN takes exactly 4 digits too (no way to ty
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
     await press(en('pmNewCode'));
     await expectBoxStopsAtFour(en('psNext'));
@@ -215,8 +217,8 @@ describe('every box that CHECKS the PIN takes exactly 4 digits too (no way to ty
       </ParentGate>
     );
     await screen.findByText(es('pgTitle'));
-    await typeDigits('123456');
-    expect(screen.getByText(es('pinDigitsEntered_other', { count: 4 }))).toBeTruthy();
-    expect(screen.getByRole('button', { name: es('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: false });
+    await typeDigits('123456'); // the fourth digit checks the PIN at once
+    expect(await screen.findByText(/Te quedan 4 intentos/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: es('pgUnlock') })).toBeNull();
   });
 });

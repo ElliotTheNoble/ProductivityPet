@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState, type ComponentProps, type ReactNode } from 'react';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/family-ui';
@@ -7,16 +8,15 @@ import { ThemedText } from '@/components/themed-text';
 import { hoverLift } from '@/constants/hover';
 import { Spacing } from '@/constants/theme';
 import { getLocale, useT, type StringKey } from '@/i18n';
+import { tasksWaitingForApproval, useHousehold } from '@/utils/household';
 import {
   BUCKET_COUNTS,
-  MISSED_ESTIMATE_DAYS,
   buildActivity,
   historyStartISO,
   type ActivityBucket,
   type ActivityPeriod,
   type Milestone,
   type MilestoneKind,
-  type TaskLine,
 } from '@/utils/child-activity-model';
 import type { ChildActivity } from '@/utils/child-activity';
 
@@ -51,132 +51,60 @@ function Note({ children }: { children: ReactNode }) {
   );
 }
 
-function Lines({ lines, repeatingSuffix }: { lines: TaskLine[]; repeatingSuffix?: boolean }) {
-  const { t } = useT();
-  return (
-    <View style={styles.lines}>
-      {lines.slice(0, LIST_LIMIT).map((item) => (
-        <View key={item.id} style={styles.lineRow}>
-          <ThemedText type="small" style={styles.lineText}>
-            {item.important ? '★ ' : ''}
-            {item.text}
-          </ThemedText>
-          {item.dateISO && !repeatingSuffix ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {shortDate(item.dateISO)}
-            </ThemedText>
-          ) : null}
-        </View>
-      ))}
-      {lines.length > LIST_LIMIT ? <Note>{t('paMore', { count: lines.length - LIST_LIMIT })}</Note> : null}
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------------------------------------------------
 export function ChildTasksSection({ activity }: { activity: ChildActivity }) {
   const { t } = useT();
-  const section = activity.tasks;
+  const router = useRouter();
+  // Only what the child has handed in and is waiting for the parent (status 'pending'): not a task still to do, not one already approved, and not
+  // one that was sent back (that is back with the child as to do). Nothing else is listed here: the task details are in Family Settings.
+  // It is read from the live household record through the same function Family Settings uses for its waiting list (see tasksWaitingForApproval), so
+  // it follows every change at once (a hand-in, an Undo, a resubmission, an approval, a send back) and can never differ from that list. The snapshot
+  // the overview was opened with is only the fallback while the household is still loading.
+  const household = useHousehold();
+  const live = household?.children.find((c) => c.id === activity.childId);
+  const needsApproval = live ? tasksWaitingForApproval(live).length : activity.assigned.byStatus.pending.length;
+  // Opens Family Settings on THIS child's task list (the parent area is already unlocked: the same PIN-protected route, and the same session).
+  // `section`: 'tasks' (the whole list) or 'pending' (what waits for the parent); `task`: one task to bring into view and light up for a moment.
+  // Only the dashboard's own selection (whose tasks it shows) changes: nobody starts playing.
+  const open = (target: 'tasks' | 'pending', task?: string) =>
+    router.push({ pathname: '/parent', params: { child: activity.childId, section: target, ...(task ? { task } : {}), focus: String(Date.now()) } });
   return (
     <>
-      <Card title={t('phTasks')}>
-        {section.state === 'unreadable' ? <Note>{t('paUnavailable')}</Note> : null}
-        {section.state === 'none' ? <Note>{t('paTasksEmpty')}</Note> : null}
-        {section.state === 'ok' ? <TaskStatusBlocks activity={activity} /> : null}
+      <Card color="#FFF4E3">
+        {/* The WHOLE card opens the child's complete task list (including what is still to do): one control fills the card behind its contents
+            (which let a touch through wherever they are blank). "Needs approval" is its own control on top of it, a sibling and never nested, so
+            one tap is one navigation. */}
+        <Pressable
+          onPress={() => open('tasks')}
+          accessibilityRole="button"
+          accessibilityLabel={t('paOpenTasks', { name: activity.nickname })}
+          testID="assigned-open-tasks"
+          style={({ pressed }) => [StyleSheet.absoluteFill, styles.cardTap, pressed && styles.cardPressed]}
+        />
+        <View pointerEvents="box-none" style={styles.cardContent}>
+          <View pointerEvents="box-none" style={styles.cardHeading}>
+            <ThemedText type="smallBold" style={styles.linkTitle}>
+              {t('paAssignedTitle')}
+            </ThemedText>
+            <ThemedText type="smallBold" accessibilityElementsHidden importantForAccessibility="no">
+              ›
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={() => open('pending')}
+            accessibilityRole="button"
+            accessibilityLabel={t('paOpenPending', { name: activity.nickname, count: needsApproval })}
+            testID="assigned-open-pending"
+            style={(state) => [styles.linkRow, state.pressed && styles.linkPressed, hoverLift(state, true)]}>
+            <ThemedText type="smallBold" style={styles.linkTitle}>
+              {t('paNeedsApproval', { count: needsApproval })}
+            </ThemedText>
+            <ThemedText type="smallBold" accessibilityElementsHidden importantForAccessibility="no">
+              ›
+            </ThemedText>
+          </Pressable>
+        </View>
       </Card>
-
-      <Card title={t('paAssignedTitle')} color="#FFF4E3">
-        <Note>{t('paAssignedNote', { name: activity.nickname })}</Note>
-        {activity.assigned.total === 0 ? <Note>{t('paAssignedEmpty', { name: activity.nickname })}</Note> : null}
-        {(
-          [
-            ['assigned', 'paAssignedToDo'],
-            ['pending', 'paAssignedPending'],
-            ['approved', 'paAssignedApproved'],
-            ['completed', 'paAssignedDone'],
-          ] as const
-        ).map(([status, label]) =>
-          activity.assigned.byStatus[status].length > 0 ? (
-            <View key={status} style={styles.block}>
-              <ThemedText type="smallBold">{`${t(label)} (${activity.assigned.byStatus[status].length})`}</ThemedText>
-              <View style={styles.lines}>
-                {activity.assigned.byStatus[status].slice(0, LIST_LIMIT).map((task) => (
-                  <ThemedText key={task.id} type="small">
-                    {task.text}
-                  </ThemedText>
-                ))}
-                {activity.assigned.byStatus[status].length > LIST_LIMIT ? (
-                  <Note>{t('paMore', { count: activity.assigned.byStatus[status].length - LIST_LIMIT })}</Note>
-                ) : null}
-              </View>
-            </View>
-          ) : null
-        )}
-      </Card>
-    </>
-  );
-}
-
-function TaskStatusBlocks({ activity: a }: { activity: ChildActivity }) {
-  const { t, tn } = useT();
-  if (a.tasks.state !== 'ok') return null;
-  const { status, skippedEntries } = a.tasks.value;
-  const total = status.completed.total;
-  return (
-    <>
-      <View style={styles.block}>
-        <SectionTitle icon="today-outline">{t('paTasksNow')}</SectionTitle>
-        <Note>{t('paTasksNowNote')}</Note>
-        {status.dueToday.length === 0 && status.doneTodayCount === 0 ? <ThemedText type="small">{t('paNothingToday')}</ThemedText> : null}
-        {status.dueToday.length > 0 ? <ThemedText type="smallBold">{tn('paDueToday', status.dueToday.length)}</ThemedText> : null}
-        {status.dueToday.length > 0 ? <Lines lines={status.dueToday} repeatingSuffix /> : null}
-        {status.doneTodayCount > 0 ? <ThemedText type="small">{t('paDoneToday', { count: status.doneTodayCount })}</ThemedText> : null}
-        {status.activeRepeatingCount > 0 ? <Note>{tn('paRepeatingRunning', status.activeRepeatingCount)}</Note> : null}
-      </View>
-
-      {status.upcoming.length > 0 ? (
-        <View style={styles.block}>
-          <SectionTitle icon="calendar-outline">{`${t('paUpcoming')} (${status.upcoming.length})`}</SectionTitle>
-          <Note>{t('paUpcomingNote')}</Note>
-          <Lines lines={status.upcoming} />
-        </View>
-      ) : null}
-
-      {status.pastDueNotDone.length > 0 ? (
-        <View style={styles.block}>
-          <SectionTitle icon="alert-circle-outline">{`${t('paPastDue')} (${status.pastDueNotDone.length})`}</SectionTitle>
-          <Note>{t('paPastDueNote')}</Note>
-          <Lines lines={status.pastDueNotDone} />
-        </View>
-      ) : null}
-
-      {status.noDueDate.length > 0 ? (
-        <View style={styles.block}>
-          <SectionTitle icon="help-circle-outline">{`${t('paNoDueDate')} (${status.noDueDate.length})`}</SectionTitle>
-          <Note>{t('paNoDueDateNote')}</Note>
-          <Lines lines={status.noDueDate} />
-        </View>
-      ) : null}
-
-      <View style={styles.block}>
-        <SectionTitle icon="repeat-outline">{t('paRepeating')}</SectionTitle>
-        <Note>{t('paRepeatingNote', { days: MISSED_ESTIMATE_DAYS })}</Note>
-        {status.repeatingEstimate.items.length === 0 ? <ThemedText type="small">{t('paRepeatingNone', { days: MISSED_ESTIMATE_DAYS })}</ThemedText> : null}
-        {status.repeatingEstimate.items.slice(0, LIST_LIMIT).map((item) => (
-          <ThemedText key={item.id} type="small">
-            {`${item.important ? '★ ' : ''}${item.text}: ${item.dates.slice(0, 6).map(shortDate).join(', ')}${item.dates.length > 6 ? ` +${item.dates.length - 6}` : ''}`}
-          </ThemedText>
-        ))}
-        {status.repeatingEstimate.items.length > LIST_LIMIT ? <Note>{t('paMore', { count: status.repeatingEstimate.items.length - LIST_LIMIT })}</Note> : null}
-      </View>
-
-      <View style={styles.block}>
-        <SectionTitle icon="checkmark-circle-outline">{tn('paCompletedTotal', total)}</SectionTitle>
-        <Note>{t('paCompletedNote')}</Note>
-        {status.completed.important > 0 ? <ThemedText type="small">{t('paCompletedImportant', { count: status.completed.important })}</ThemedText> : null}
-        {status.completed.undated > 0 ? <ThemedText type="small">{tn('paCompletedUndated', status.completed.undated)}</ThemedText> : null}
-        {skippedEntries > 0 ? <Note>{tn('paTasksSkipped', skippedEntries)}</Note> : null}
-      </View>
     </>
   );
 }
@@ -315,7 +243,10 @@ export function ChildActivitySection({ activity }: { activity: ChildActivity }) 
         {buckets.slice(0, BUCKET_COUNTS[period]).map((bucket) => (
           <View key={bucket.key} style={styles.activityRow}>
             <ThemedText type="smallBold">{label(bucket)}</ThemedText>
-            <ThemedText type="small">{bucket.tasksCompleted > 0 ? tn('paRowTasks', bucket.tasksCompleted) : t('paRowNone')}</ThemedText>
+            {bucket.tasksCompleted > 0 || bucket.householdDone === 0 ? (
+              <ThemedText type="small">{bucket.tasksCompleted > 0 ? tn('paRowTasks', bucket.tasksCompleted) : t('paRowNone')}</ThemedText>
+            ) : null}
+            {bucket.householdDone > 0 ? <ThemedText type="small">{tn('paRowHousehold', bucket.householdDone)}</ThemedText> : null}
             {bucket.tokenCoverage === 'tracked' && (bucket.tokens ?? 0) > 0 ? <ThemedText type="small">{t('paRowTokens', { count: bucket.tokens ?? 0 })}</ThemedText> : null}
             {bucket.tokenCoverage === 'partial' && (bucket.tokens ?? 0) > 0 ? <ThemedText type="small">{t('paRowTokensPartial', { count: bucket.tokens ?? 0 })}</ThemedText> : null}
             {bucket.tokenCoverage === 'before-tracking' ? (
@@ -341,6 +272,13 @@ export function ChildActivitySection({ activity }: { activity: ChildActivity }) 
 }
 
 const styles = StyleSheet.create({
+  cardTap: { borderRadius: Spacing.four },
+  cardPressed: { backgroundColor: 'rgba(228, 218, 247, 0.35)' },
+  cardContent: { gap: Spacing.two, minWidth: 0 },
+  cardHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 28 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, minHeight: 44, paddingHorizontal: Spacing.two, borderRadius: Spacing.three, backgroundColor: 'rgba(228, 218, 247, 0.5)' },
+  linkTitle: { flexShrink: 1 },
+  linkPressed: { opacity: 0.75 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   block: { gap: Spacing.one, paddingTop: Spacing.one },
   lines: { gap: 2 },

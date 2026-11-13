@@ -5,10 +5,10 @@ export const familyManagementEn = {
   // actions
   fmRename: 'Rename',
   fmArchive: 'Archive',
-  fmRestore: 'Restore',
+  fmRestore: 'Resume',
   fmRenameLabel: 'Rename {name}',
   fmArchiveLabel: 'Archive {name}',
-  fmRestoreLabel: 'Restore {name}',
+  fmRestoreLabel: 'Resume {name}',
   fmSelectLabel: 'Select {name}',
   fmArchivedTitle: 'Archived children',
   fmArchivedShow: 'Show archived children ({count})',
@@ -55,7 +55,7 @@ export const familyManagementEn = {
 
   // family health
   fmHealthTitle: 'Family health',
-  fmHealthIntro: 'Only things that need a look are shown here. Nothing is ever deleted, repaired or merged automatically.',
+  fmHealthIntro: 'Nothing is deleted, repaired or merged automatically.',
   fmHealthRefresh: 'Check again',
   fmHealthCareTitle: 'Pets that need care',
   fmHealthCareActive: '{name}: {status}',

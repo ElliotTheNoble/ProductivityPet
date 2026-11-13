@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 
+import { pinTrace } from '@/utils/pin-trace';
 import { subscribeToActiveProfile } from '@/utils/profiles';
 
 // Parent Gate (M2 Stage 2A-0): the access barrier in front of the parent-only areas (the Parent Dashboard and the
@@ -30,6 +31,9 @@ export type PinVerifier = {
   verify(pin: string): Promise<boolean>;
   // Set while a PIN should exist but cannot be used. The area then stays locked and no guess is counted or checked.
   issue?(): Promise<ParentAuthIssue | null>;
+  // Both of the above from ONE look at the stored state (a PIN check used to read it twice before it even started). Optional: a checker without it
+  // is asked the two questions separately, as before.
+  inspect?(): Promise<{ configured: boolean; issue: ParentAuthIssue | null }>;
 };
 
 const NO_PIN: PinVerifier = { isConfigured: async () => false, verify: async () => false };
@@ -326,9 +330,16 @@ export const PIN_FORMAT = /^\d{4,8}$/;
 // Checks a PIN and opens the parent area (see limitedAttempt for how guesses are counted).
 export async function unlockParentArea(pin: string): Promise<UnlockResult> {
   if (typeof pin !== 'string' || !PIN_FORMAT.test(pin)) return { ok: false, reason: 'invalid-format' };
-  if (!(await verifier.isConfigured().catch(() => true))) return { ok: true }; // no PIN exists: nothing to unlock
-  if (await currentIssue()) return { ok: false, reason: 'verifier-missing' }; // nothing to check, nothing counted
+  const startedAt = Date.now();
+  // One look at the stored state answers both "is there a PIN" and "can it be used" (an unknown answer keeps the area protected, as before).
+  const info = verifier.inspect
+    ? await verifier.inspect().catch(() => ({ configured: true, issue: null as ParentAuthIssue | null }))
+    : { configured: await verifier.isConfigured().catch(() => true), issue: null as ParentAuthIssue | null };
+  if (!info.configured) return { ok: true }; // no PIN exists: nothing to unlock
+  if (verifier.inspect ? info.issue : await currentIssue()) return { ok: false, reason: 'verifier-missing' }; // nothing to check, nothing counted
   const outcome = await limitedAttempt(() => verifier.verify(pin));
+  // Development only (never prints a digit, see pin-trace.ts): how long the whole check took, so a slow unlock can be measured on a real phone.
+  pinTrace('unlock:finished', { ms: Date.now() - startedAt, ok: outcome.kind === 'ok' });
   switch (outcome.kind) {
     case 'ok': {
       const at = Date.now();

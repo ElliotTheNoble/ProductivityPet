@@ -1,0 +1,33 @@
+import type { rewardsEn } from './rewards.en';
+
+// Spanish strings for Paw Token rewards on household tasks. Every key of rewards.en.ts is required here.
+export const rewardsEs: Record<keyof typeof rewardsEn, string> = {
+  rwTitle: 'Recompensas de fichas de patita',
+  rwRegular: 'Tarea normal',
+  rwImportant: 'Tarea importante',
+  rwTokens_one: '{count} ficha de patita',
+  rwTokens_other: '{count} fichas de patita',
+  rwMoreFor: 'Más fichas de patita: {kind}',
+  rwFewerFor: 'Menos fichas de patita: {kind}',
+  rwSave: 'Guardar',
+  rwSaved: 'Guardado. Las tareas nuevas empezarán con estas cantidades.',
+  rwSetDefault: 'Restaurar valores por defecto',
+  rwDefaultSet: 'Vuelven las cantidades originales: Normal 5 e Importante 10. Se descartaron los cambios que no habías guardado.',
+  rwFailed: 'No se pudieron guardar las recompensas. No se cambió nada. Inténtalo de nuevo.',
+  rwKindLabel: 'Tipo de tarea',
+  rwKindRegular: 'Normal',
+  rwKindImportant: 'Importante',
+  rwRewardLabel: 'Recompensa',
+  rwEdit: 'Editar recompensa',
+  rwEditSave: 'Guardar recompensa',
+  rwTaskLine: '{kind} · {tokens}',
+  rwGiven: 'Recompensa entregada: {tokens}',
+  rwOwed: 'Recompensa {tokens}: se añade cuando {name} abra su perfil',
+  rwChild: 'Recompensa: {tokens}',
+  rwChildImportant: '⭐ Importante',
+  hhTitle: 'Tareas de {name}',
+  hhNone: 'Aún no hay tareas.',
+  hhWaiting: 'Esperando tu revisión',
+  hhToDo: 'Por hacer',
+  rwNote: 'Aprobar una tarea le da al niño o niña su recompensa de fichas de patita (nunca crecimiento de la mascota). Devolverla o deshacerla no da nada.',
+};

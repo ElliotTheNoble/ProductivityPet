@@ -32,6 +32,7 @@ import {
   SICK_TO_CRITICAL_HOURS,
 } from '@/utils/pet-family-config';
 import { getRenderedStage } from '@/utils/pet-growth';
+import { currentSafetyRules } from '@/utils/pet-safety';
 import { getMemorialMessage } from '@/utils/pet-life-messages';
 import { ensureProfilesReady, scopedKey, writeScoped } from '@/utils/profiles';
 
@@ -265,7 +266,7 @@ export function PetFamilyBar() {
               </ThemedText>
             ) : null}
           </View>
-          {!Number.isNaN(sickSinceMs) ? (
+          {!Number.isNaN(sickSinceMs) && !currentSafetyRules().gentle ? (
             <View style={styles.healthTimer}>
               <Ionicons name="time-outline" size={16} color={STATUS_COLORS[state]} />
               <ThemedText type="smallBold">

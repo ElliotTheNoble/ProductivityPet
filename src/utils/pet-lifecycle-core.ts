@@ -16,6 +16,7 @@ import {
   RECOVERY_NEED_THRESHOLD,
   SICK_TO_CRITICAL_HOURS,
 } from '@/utils/pet-family-config';
+import { currentSafetyRules, type SafetyRules } from '@/utils/pet-safety';
 import type { PetProfile } from '@/utils/pet-profile-model';
 import { PET_STAGES, TASKS_PER_STAGE, getPetStageIndex } from '@/utils/pet-stage';
 
@@ -219,7 +220,9 @@ function simulate(profile: PetProfile, exhaustedIn: boolean, fromMs: number, toM
 // Applies the health rules to a pet whose needs are already current.
 // `zeroAtMs` is when a need reached 0 if that is known; otherwise a newly
 // sick pet is treated as having become sick right now (conservative).
-export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: number | null): PetRecord {
+// `rules` are the Pet Safety rules of the profile the pet belongs to (see @/utils/pet-safety.ts): Gentle never lets a pet pass away; Classic is the
+// original rule, except that a pet cannot pass away before CRITICAL_TO_DEATH_HOURS after the parent last switched the child to Classic.
+export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: number | null, rules: SafetyRules = currentSafetyRules()): PetRecord {
   const nowIso = new Date(nowMs).toISOString();
   let lifecycle = pet.lifecycle;
   const events: PetEvent[] = [];
@@ -252,8 +255,10 @@ export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: numbe
       lifecycle = { ...lifecycle, state: 'critical', criticalSince: criticalIso };
       events.push(makeEvent('critical', criticalIso));
     }
-    if (elapsed >= (SICK_TO_CRITICAL_HOURS + CRITICAL_TO_DEATH_HOURS) * HOUR_MS) {
-      const diedIso = new Date(sinceMs + (SICK_TO_CRITICAL_HOURS + CRITICAL_TO_DEATH_HOURS) * HOUR_MS).toISOString();
+    // Never earlier than the original schedule, and (after a switch to Classic) never before the switch plus the critical-to-death time.
+    const deathAtMs = Math.max(sinceMs + (SICK_TO_CRITICAL_HOURS + CRITICAL_TO_DEATH_HOURS) * HOUR_MS, rules.classicSince !== null ? rules.classicSince + CRITICAL_TO_DEATH_HOURS * HOUR_MS : Number.NEGATIVE_INFINITY);
+    if (!rules.gentle && nowMs >= deathAtMs) {
+      const diedIso = new Date(deathAtMs).toISOString();
       lifecycle = { ...lifecycle, state: 'deceased', diedAt: diedIso };
       events.push(makeEvent('died', diedIso));
     }
@@ -274,7 +279,7 @@ export function evaluateLifecycle(pet: PetRecord, nowMs: number, zeroAtMs: numbe
 // `grace` is used once when migrating an existing save: a need that is
 // already 0 starts its sickness clock at `now`, so nothing can die on the
 // first launch.
-export function advancePet(pet: PetRecord, now: Date, grace = false): PetRecord {
+export function advancePet(pet: PetRecord, now: Date, grace = false, rules: SafetyRules = currentSafetyRules()): PetRecord {
   if (pet.lifecycle.state === 'deceased' || pet.retired) return pet;
 
   const lastEvaluated = ms(pet.lifecycle.lastEvaluatedAt);
@@ -308,16 +313,16 @@ export function advancePet(pet: PetRecord, now: Date, grace = false): PetRecord 
   }
 
   const advanced: PetRecord = { ...pet, profile, lifecycle: { ...pet.lifecycle, exhausted } };
-  return evaluateLifecycle(advanced, nowMs, grace ? null : zeroAtMs);
+  return evaluateLifecycle(advanced, nowMs, grace ? null : zeroAtMs, rules);
 }
 
 // Evaluates the health rules after a care action saved new needs (no decay).
-export function reevaluatePet(pet: PetRecord, now: Date): PetRecord {
+export function reevaluatePet(pet: PetRecord, now: Date, rules: SafetyRules = currentSafetyRules()): PetRecord {
   if (pet.lifecycle.state === 'deceased' || pet.retired) return pet;
   const last = ms(pet.lifecycle.lastEvaluatedAt);
   const nowMs = Math.max(now.getTime(), Number.isNaN(last) ? 0 : last);
   if (isEggStage(pet.growthUnits)) return pet;
-  return evaluateLifecycle(pet, nowMs, null);
+  return evaluateLifecycle(pet, nowMs, null, rules);
 }
 
 // Predicts when a healthy pet's first need would reach 0 if nothing is done,

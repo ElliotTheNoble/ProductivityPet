@@ -453,13 +453,19 @@ function PinPrompt({
   // Five wrong PINs in a row (kept across restarts): the phone's screen-lock check is needed before more tries. No waiting period.
   const needsDeviceCheck = (access.state === 'locked' && access.deviceCheck === true) || feedback?.kind === 'device-check';
 
+  // The fourth digit checks the PIN straight away (see ParentLockScreen in parent-gate.tsx): same check, same limit, no Unlock button.
+  useEffect(() => {
+    if (pin.length === NEW_PIN_LENGTH && !busy && !needsDeviceCheck) void submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin]);
+
   async function submit() {
     if (busy || needsDeviceCheck) return;
     if (!PIN_FORMAT.test(pin)) {
       setFeedback({ kind: 'format' });
       return;
     }
-    // The dots clear at once and the button says "Checking…" (see ParentGate): the screen answers the tap immediately.
+    // The dots clear at once and "Checking…" shows (see ParentGate): the screen answers the tap immediately.
     const attempt = pin;
     setPin('');
     setBusy(true);
@@ -525,7 +531,11 @@ function PinPrompt({
                     {t('pgUnavailable')}
                   </ThemedText>
                 ) : null}
-                <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length !== NEW_PIN_LENGTH} />
+                {busy ? (
+                  <ThemedText type="smallBold" themeColor="textSecondary" accessibilityLiveRegion="polite" testID="pin-checking" style={styles.center}>
+                    {t('pgChecking')}
+                  </ThemedText>
+                ) : null}
                 <Button tone="soft" label={t('fpCancel')} onPress={onCancel} />
               </PinEntry>
             </Card>

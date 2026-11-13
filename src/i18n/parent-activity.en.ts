@@ -4,43 +4,8 @@ export const parentActivityEn = {
   paUnavailable: "This couldn't be read right now. Nothing was changed.",
   paMore: '…and {count} more',
 
-  // tasks, today
-  paTasksNow: 'Right now',
-  paTasksNowNote: 'How the saved task list looks today.',
-  paDueToday_one: '{count} task to do today',
-  paDueToday_other: '{count} tasks to do today',
-  paDoneToday: '{count} done today',
-  paNothingToday: 'Nothing is due today.',
-  paUpcoming: 'Coming up',
-  paUpcomingNote: 'One-time tasks with a later date.',
-  paPastDue: 'Past its date and not done',
-  paPastDueNote: 'One-time tasks dated before today that are not marked done.',
-  paNoDueDate: 'No due date',
-  paNoDueDateNote: 'Saved without a usable date, so they are never counted as past due.',
-  paRepeating: 'Repeating tasks: possibly missed (estimate)',
-  paRepeatingNote:
-    'An estimate for the last {days} days. The app does not record when a repeating task was created or whether a day was really missed, so this is not verified history.',
-  paRepeatingNone: 'No unmarked days found in the last {days} days.',
-  paRepeatingRunning_one: '{count} repeating task is running.',
-  paRepeatingRunning_other: '{count} repeating tasks are running.',
-  paCompletedTotal_one: '{count} task completed in total',
-  paCompletedTotal_other: '{count} tasks completed in total',
-  paCompletedNote: "Counted the same way as the child's own Stats page.",
-  paCompletedImportant: '{count} marked important',
-  paCompletedUndated_one: '{count} of these has no saved date.',
-  paCompletedUndated_other: '{count} of these have no saved date.',
-  paTasksEmpty: 'No tasks saved yet.',
-  paTasksSkipped_one: '{count} saved task could not be understood and is not shown.',
-  paTasksSkipped_other: '{count} saved tasks could not be understood and are not shown.',
 
-  // tasks assigned by the parent
-  paAssignedTitle: 'Assigned by you',
-  paAssignedNote: "Tasks you added in Family Settings. They are kept separate from {name}'s own tasks and are not counted with them.",
-  paAssignedToDo: 'To do',
-  paAssignedPending: 'Waiting for your approval',
-  paAssignedApproved: 'Approved',
-  paAssignedDone: 'Done',
-  paAssignedEmpty: 'You have not assigned any tasks to {name}.',
+  paAssignedTitle: 'Tasks assigned by you',
 
   // accomplishments
   paMilestones: 'Pet milestones',
@@ -66,9 +31,9 @@ export const parentActivityEn = {
 
   // activity history
   paActTitle: 'Activity history',
-  paActNote: 'Built from tasks that are still saved, Paw Token earnings and pet milestones. Deleted tasks and completions that were un-checked are not included.',
-  paActUndated_one: '{count} earlier completion has no saved date, so it is not placed on any day.',
-  paActUndated_other: '{count} earlier completions have no saved date, so they are not placed on any day.',
+  paActNote: 'Deleted tasks and un-checked completions are not included.',
+  paActUndated_one: '{count} earlier completion has no saved date.',
+  paActUndated_other: '{count} earlier completions have no saved date.',
   paPeriodDay: 'Day',
   paPeriodWeek: 'Week',
   paPeriodMonth: 'Month',
@@ -81,5 +46,11 @@ export const parentActivityEn = {
   paRowTokensPartial: '{count} Paw Tokens (tracking began during this period)',
   paRowTokensBefore: 'Paw Tokens: not tracked yet',
   paRowTokensNone: 'Paw Tokens: no history',
-  paActNothing: 'Nothing has been recorded yet.',
+  paActNothing: 'Nothing recorded yet.',
+  paRowHousehold_one: '{count} task approved',
+  paRowHousehold_other: '{count} tasks approved',
+  // opening the tasks from the overview
+  paOpenTasks: "Open {name}'s tasks",
+  paOpenPending: "Open {name}'s tasks waiting for your approval ({count})",
+  paNeedsApproval: 'Needs approval ({count})',
 };

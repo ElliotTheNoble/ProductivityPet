@@ -3,11 +3,11 @@ import type { parentHomeEn } from './parent-home.en';
 // Spanish strings for the Parent Dashboard. Same keys as parent-home.en.ts (TypeScript checks this).
 export const parentHomeEs: Record<keyof typeof parentHomeEn, string> = {
   phTitle: 'Panel de padres',
-  phSubtitle: 'Mira cómo le va a cada niño. Es una vista de solo lectura: aquí nada cambia la mascota, las tareas ni el diario de un niño.',
+  phSubtitle: 'Cómo le va a cada niño.',
   phNavDashboard: 'Panel',
   phChildren: 'Tus hijos',
   phLoading: 'Cargando…',
-  phNoChildren: 'Todavía no hay niños activos. Usa Ajustes de la familia para añadir uno o recuperar a un niño archivado.',
+  phNoChildren: 'Todavía no hay niños. Añade uno en Ajustes de la familia.',
   phUnreadable: 'No se pudo leer la lista de niños ahora. No se cambió nada.',
   phOpenChild: 'Abrir a {name}',
   phPets_one: '{count} mascota',
@@ -26,11 +26,9 @@ export const parentHomeEs: Record<keyof typeof parentHomeEn, string> = {
   phReadOnly: 'Vista de solo lectura. Aquí no puedes cambiar nada.',
   phPetsTitle: 'Mascotas',
   phNoPets: 'Todavía no hay mascotas.',
-  phTasks: 'Tareas',
   phAchievements: 'Logros',
   phJournals: 'Diarios compartidos',
-  phJournalsText: 'Entradas del diario que tu hijo decide compartir contigo.',
+  phJournalsText: 'Solo las entradas que tu hijo decide compartir.',
   phSettings: 'Ajustes de la familia',
-  phSettingsHint: 'Añade, renombra o archiva niños, gestiona el PIN de padres y más.',
   phSettingsOpen: 'Abrir Ajustes de la familia',
 };

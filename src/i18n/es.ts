@@ -63,7 +63,8 @@ export const familyEs: FamilyStrings = {
   completedTasks: 'Tareas completadas',
   noAssigned: 'No hay nada asignado ahora.',
   noPending: 'Nada espera tu aprobación.',
-  noCompleted: 'Aún no hay tareas completadas.',
+  completedToday: 'Completadas hoy',
+  noCompleted: 'Nada completado hoy.',
   addTask: 'Añadir una tarea',
   taskPlaceholder: '¿Qué debe hacer?',
   assign: 'Asignar',
@@ -72,33 +73,24 @@ export const familyEs: FamilyStrings = {
   deleteTask: 'Eliminar',
   createdByChild: 'Añadida por el niño',
   createdByParent: 'Añadida por ti',
-  waitingForApproval: 'Esperando aprobación',
+  waitingForApproval: 'Esperando tu aprobación',
   approvedOn: 'Aprobada',
-  previewAsChild: 'Prueba: el niño la marca como hecha',
-  previewNote:
-    'Todavía no hay pantalla para niños, así que este botón finge ser el niño para hacer pruebas. Solo se puede aprobar aquí, en el Panel familiar.',
-  rewardsNote: 'Las recompensas (fichas de patita y crecimiento de la mascota) aún no están conectadas a las aprobaciones, así que aprobar todavía no paga nada.',
+  rewardsNote: 'Aprobar le da al niño las fichas de patita de la tarea. Intentar de nuevo no da ninguna.',
 
   childSettings: 'Ajustes del niño',
   childCanCreate: 'El niño puede crear tareas',
   requireApproval: 'Completar requiere mi aprobación',
-  requireApprovalHelp: 'Si está activado, una tarea terminada espera tu aprobación en lugar de contar enseguida.',
   on: 'Sí',
   off: 'No',
-  noteChildCreateOff: 'El niño puede crear tareas: No',
 
   petSafety: 'Seguridad de la mascota',
   gentleMode: 'Modo suave',
-  gentleDesc:
-    'Las mascotas no pueden morir para siempre. Pueden tener hambre, cansancio, suciedad o enfermarse, y los cuidados las ayudan a recuperarse. (Recomendado)',
+  gentleDesc: 'Las mascotas no pueden morir para siempre. Pueden tener hambre, cansancio, suciedad o enfermarse, y los cuidados las ayudan a recuperarse.',
   classicMode: 'Modo clásico',
   classicDesc: 'Las reglas originales, incluida la posibilidad de que una mascota muera si no se cuida, y la resurrección de pago.',
-  petSafetyNotEnforced:
-    'Esta opción se guarda para el niño, pero TODAVÍA NO se aplica. Las mascotas aún no están separadas por niño, así que hoy todas siguen las reglas clásicas.',
 
   language: 'Idioma',
   languageSettings: 'Ajustes de idioma',
-  languageNote: 'Tu elección se guarda en este dispositivo y se aplica de inmediato.',
 
   parentProfile: 'Perfil del adulto',
   editParent: 'Editar perfil',

@@ -262,10 +262,8 @@ describe('unlock', () => {
     expect(await screen.findByText(en('pgTitle'))).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
     await typeDigits(NEW_PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
@@ -279,7 +277,6 @@ describe('unlock', () => {
     await screen.findByText(en('pgTitle'));
     for (let i = 0; i < 5; i++) {
       await typeDigits(NEW_PIN);
-      await press(en('pgUnlock'));
       await flush();
     }
     expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
@@ -288,7 +285,6 @@ describe('unlock', () => {
     await press(en('pgDeviceCheckButton'));
     await waitFor(() => expect(screen.queryByText(en('pgDeviceCheck'))).toBeNull());
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
@@ -340,10 +336,8 @@ describe('forgotten PIN', () => {
     await press(en('prToUnlock'));
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN); // the old PIN no longer works
-    await press(en('pgUnlock'));
     expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
     await typeDigits(NEW_PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
@@ -385,7 +379,6 @@ describe('forgotten PIN', () => {
     );
     await screen.findByText(en('pgTitle'));
     await typeDigits(NEW_PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText(en('pgdTitle'))).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
@@ -411,7 +404,6 @@ describe('forgotten PIN', () => {
     );
     await screen.findByText(en('pgTitle'));
     await typeDigits(NEW_PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pgdTitle'));
     await press(en('pgdNew'));
     await typeDigits(NEW_PIN);
@@ -435,7 +427,6 @@ describe('PIN management', () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
   }
 
@@ -463,7 +454,6 @@ describe('PIN management', () => {
     lockParentArea();
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
   });
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getSelectableChildren } from '@/utils/family-profiles';
+import { safetyRulesForProfile } from '@/utils/pet-safety';
 import { alertsEnabledFromSaved, careEventsFromPets, type ProfileCareInput } from '@/utils/family-care-plan';
 import { FAMILY_KEY_NAME, parseSavedFamily } from '@/utils/pet-family';
 import { MAIN_PROFILE_ID, ensureProfilesReady, getProfilesStatus, scopedKeyFor } from '@/utils/profiles';
@@ -47,7 +48,7 @@ export async function readProfileCareInput(profileId: string, kind: 'main' | 'ch
   }
   const family = parseSavedFamily(parsed);
   if (!family) return { ...base, alertsEnabled, readable: false, events: [] };
-  return { ...base, alertsEnabled, readable: true, events: careEventsFromPets(family.pets, now) };
+  return { ...base, alertsEnabled, readable: true, events: careEventsFromPets(family.pets, now, safetyRulesForProfile(profileId)) };
 }
 
 // Main plus every selectable child, read in parallel. A child that cannot be read is reported as unreadable, never as healthy.

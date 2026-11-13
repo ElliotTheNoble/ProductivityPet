@@ -252,8 +252,8 @@ describe('the child overview', () => {
     await openBilly();
     expect(await RNTL.screen.findByText(text('phReadOnly'))).toBeTruthy();
     expect(await RNTL.screen.findByText('Biscuit')).toBeTruthy();
-    // Tasks, Achievements, Activity history and Shared Journals are real sections (see parent-activity.test.tsx and parent-journal.test.tsx)
-    for (const key of ['phTasks', 'phAchievements', 'phJournals', 'paActTitle']) expect(await RNTL.screen.findByText(text(key))).toBeTruthy();
+    // "Tasks assigned by you", Achievements, Activity history and Shared Journals are real sections (see parent-activity.test.tsx and parent-journal.test.tsx)
+    for (const key of ['paAssignedTitle', 'phAchievements', 'phJournals', 'paActTitle']) expect(await RNTL.screen.findByText(text(key))).toBeTruthy();
     expect(await RNTL.screen.findByText(text('pjEmpty').replace('{name}', 'Billy'))).toBeTruthy(); // nothing shared: a plain empty state
     // nothing numeric is invented: not one number appears in the overview's words
     const strings: string[] = [];
@@ -275,7 +275,7 @@ describe('the child overview', () => {
   test('there is nothing to edit: only Back, the header and the profile switch are buttons', async () => {
     await openBilly();
     await RNTL.screen.findByText('Biscuit');
-    const names = RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel ?? ''));
+    const names = RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel ?? '')).filter((n) => !/^Open /.test(n)); // ("Open ..." only goes to the task list)
     // exactly: the profile switch, the two header pills, and Back. Nothing that changes anything.
     expect([...names].sort()).toEqual(
       [`Switch player. Playing as Main.`, text('phNavDashboard'), text('phSettings'), `‹ ${text('phBack')}`].sort()

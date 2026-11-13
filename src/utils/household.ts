@@ -15,8 +15,10 @@ import type { RoomSlug } from '@/utils/rooms';
 //  - Child tasks are kept INSIDE each child's profile, not in the global task list, because the global list
 //    pays Paw Tokens and pet growth the moment a task is marked complete. A task that is waiting for a parent's
 //    approval therefore can never pay anything early.
-//  - Nothing here grants rewards yet: approving a task only changes its state. Connecting approvals to rewards
-//    needs per-child pets first (not built; see features.md "next integration step").
+//  - Rewards (Step 4B): a parent task carries the Paw Token amount it was assigned with (`reward`, saved on the task, so changing the
+//    household's default amounts later never re-prices it). Approving the task is ONE saved change that marks it approved; the child's
+//    own profile then collects the amount into its own wallet (see @/utils/household-rewards.ts) and marks it `rewardPaidAt`. Nothing
+//    here ever touches a wallet: a wallet is part of one profile's own storage, and this record is the household's.
 //  - These are local profiles, not secure accounts: there is no password or lock.
 //  - A child's `id` is permanent and is ALSO the id of that child's storage profile (see @/utils/profiles.ts): the child's
 //    pets, tasks, tokens and every other personal record live under it. Changing or reusing an id would point at someone
@@ -44,6 +46,9 @@ export type ChildSettings = {
   requireApproval: boolean;
   // Saved only: NOT enforced yet (pets are not separated per child; see features.md).
   petSafety: PetSafety;
+  // When the parent last CHANGED the mode (absent until they do). It is what keeps a pet that was sick while Gentle from passing away the moment
+  // the mode becomes Classic (see @/utils/pet-safety.ts).
+  petSafetyChangedAt?: string;
 };
 
 // assigned  - waiting for the child to do it
@@ -67,6 +72,13 @@ export type HouseholdTask = {
   // an original submission), so undoing the child's hand-in goes back to "sent back" for a resubmission and to "to do" for an original one.
   // A task that is 'assigned' and has this is shown as "sent back"; the status itself (the flow) is unchanged.
   returnedAt?: string;
+  // A parent task's kind and the Paw Tokens it is worth, both saved when the task was assigned or last edited by a parent. Absent on every task
+  // saved before rewards existed: those are worth nothing and are never paid, whatever their state.
+  important?: boolean;
+  reward?: number;
+  // When the child's profile collected the reward (set once, after the amount reached the child's wallet). Absent on an approved task with a
+  // reward = approved, not collected yet.
+  rewardPaidAt?: string;
 };
 
 export type ChildProfile = {
@@ -83,11 +95,22 @@ export type ChildProfile = {
 
 export type ParentProfile = { displayName: string; familyName: string };
 
+// The household's default Paw Token amounts for a new task. Absent = the defaults below.
+export type RewardSettings = { regular: number; important: number };
+export const DEFAULT_REWARD_SETTINGS: RewardSettings = { regular: 5, important: 10 };
+export const MAX_REWARD = 999;
+// A reward is a whole number of tokens from 0 to MAX_REWARD: never negative, fractional, text or infinite.
+export function isValidReward(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_REWARD;
+}
+
 export type Household = {
   version: 1;
   parent: ParentProfile | null;
   children: ChildProfile[];
   selectedChildId: string | null;
+  // The parent's chosen default rewards (see RewardSettings). Absent until the parent changes them.
+  rewards?: RewardSettings;
   // Number of times this household has been saved (absent = 0). See the note above about stale copies.
   revision?: number;
 };
@@ -167,6 +190,9 @@ function normalizeTask(raw: unknown): HouseholdTask | null {
     decidedAt: typeof r.decidedAt === 'string' ? r.decidedAt : undefined,
     room: isAssignableRoom(r.room) ? r.room : undefined,
     returnedAt: typeof r.returnedAt === 'string' ? r.returnedAt : undefined,
+    ...(r.important === true ? { important: true } : {}),
+    ...(isValidReward(r.reward) ? { reward: r.reward } : {}),
+    ...(typeof r.rewardPaidAt === 'string' && r.rewardPaidAt ? { rewardPaidAt: r.rewardPaidAt } : {}),
   };
 }
 
@@ -184,6 +210,14 @@ function normalize(raw: unknown): Normalized {
     const displayName = clean(p.displayName, MAX_NAME);
     if (displayName) out.parent = { displayName, familyName: clean(p.familyName, MAX_NAME) };
     else unreadableEntries += 1;
+  }
+  if (r.rewards && typeof r.rewards === 'object') {
+    const rw = r.rewards as Record<string, unknown>;
+    // Each amount that is not a valid whole number falls back to its default; nothing else is guessed.
+    out.rewards = {
+      regular: isValidReward(rw.regular) ? rw.regular : DEFAULT_REWARD_SETTINGS.regular,
+      important: isValidReward(rw.important) ? rw.important : DEFAULT_REWARD_SETTINGS.important,
+    };
   }
   const seen = new Set<string>();
   if (Array.isArray(r.children)) {
@@ -217,6 +251,7 @@ function normalize(raw: unknown): Normalized {
           ...(s.allowPersonalTasks === true ? { allowPersonalTasks: true } : {}),
           requireApproval: s.requireApproval === false ? false : true,
           petSafety: s.petSafety === 'classic' ? 'classic' : 'gentle',
+          ...(typeof s.petSafetyChangedAt === 'string' && s.petSafetyChangedAt ? { petSafetyChangedAt: s.petSafetyChangedAt } : {}),
         },
         tasks,
         archivedAt: typeof cr.archivedAt === 'string' && cr.archivedAt ? cr.archivedAt : undefined,
@@ -273,6 +308,17 @@ export function ensureHouseholdLoaded(): Promise<Household> {
 
 export function peekHousehold(): Household | null {
   return state;
+}
+
+// Looks at the SAVED household again and adopts it, in line with every other change (it never runs in the middle of one). The parent screens call
+// it when they open and when the app comes back to the foreground, so what they show is what is saved, whatever happened while they were away
+// (a change made by a child's session, or by another copy of the app, never reaches this copy's memory by itself). Returns false when the saved
+// record could not be read: the copy in memory is then kept as it is.
+export function refreshHousehold(): Promise<boolean> {
+  const run = () => reloadHousehold();
+  const result = changeChain.then(run, run);
+  changeChain = result.catch(() => {});
+  return result;
 }
 
 // Reads the stored household again (after a conflict, or to retry a failed read). Returns false when it could not be read.
@@ -532,7 +578,14 @@ export async function selectChild(childId: string): Promise<void> {
 export async function updateChildSettings(childId: string, patch: Partial<ChildSettings>): Promise<ActionResult> {
   return change((h) =>
     h.children.some((c) => c.id === childId)
-      ? { ok: true, next: updateChildIn(h, childId, (c) => ({ ...c, settings: { ...c.settings, ...patch } })) }
+      ? {
+          ok: true,
+          next: updateChildIn(h, childId, (c) => ({
+            ...c,
+            // Choosing the mode the child already has changes nothing (and keeps the time of the last real change).
+            settings: { ...c.settings, ...patch, ...(patch.petSafety !== undefined && patch.petSafety !== c.settings.petSafety ? { petSafetyChangedAt: new Date().toISOString() } : {}) },
+          })),
+        }
       : { ok: false, reason: 'not-found' },
     'parent'
   );
@@ -541,15 +594,20 @@ export async function updateChildSettings(childId: string, patch: Partial<ChildS
 // ---- tasks ----
 
 // A parent assigns a task; or (createdBy 'child', only when allowed in the child's settings) the child adds one.
-export async function addTask(childId: string, text: string, createdBy: 'parent' | 'child', room?: RoomSlug): Promise<ActionResult> {
+// A parent task also gets its kind (Regular or Important) and the Paw Tokens it is worth: `extra.reward` when the parent customized it, else the
+// household's current default for that kind. The amount is saved on the task from then on. A task a child adds has no reward.
+export async function addTask(childId: string, text: string, createdBy: 'parent' | 'child', room?: RoomSlug, extra?: { important?: boolean; reward?: number }): Promise<ActionResult> {
   const t = clean(text, MAX_TASK);
   if (!t) return { ok: false, reason: 'invalid' };
   if (room !== undefined && !isAssignableRoom(room)) return { ok: false, reason: 'invalid' };
+  if (extra?.reward !== undefined && !isValidReward(extra.reward)) return { ok: false, reason: 'invalid' };
   return change((h) => {
     const child = h.children.find((c) => c.id === childId);
     if (!child) return { ok: false, reason: 'not-found' };
     if (createdBy === 'child' && !child.settings.canCreateTasks) return { ok: false, reason: 'not-allowed' };
-    const task: HouseholdTask = { id: newId('task'), text: t, createdBy, status: 'assigned', createdAt: new Date().toISOString(), ...(room ? { room } : {}) };
+    const important = createdBy === 'parent' && extra?.important === true;
+    const rewardFields = createdBy === 'parent' ? { ...(important ? { important: true } : {}), reward: extra?.reward ?? getRewardSettings(h)[important ? 'important' : 'regular'] } : {};
+    const task: HouseholdTask = { id: newId('task'), text: t, createdBy, status: 'assigned', createdAt: new Date().toISOString(), ...(room ? { room } : {}), ...rewardFields };
     return { ok: true, id: task.id, next: updateChildIn(h, childId, (c) => ({ ...c, tasks: [...c.tasks, task] })) };
   }, createdBy === 'parent' ? 'parent' : undefined); // a task a child adds (when allowed) is the child's own action
 }
@@ -635,10 +693,88 @@ export async function deleteTask(childId: string, taskId: string): Promise<Actio
   );
 }
 
+// ---- rewards ----
+
+export function getRewardSettings(h: Household | null): RewardSettings {
+  return h?.rewards ?? DEFAULT_REWARD_SETTINGS;
+}
+
+// "Save": the parent saves the amounts they chose, for NEW tasks. Until they do, the amounts are the original defaults, Regular 5 and
+// Important 10. Tasks already assigned keep the amount they were saved with.
+export async function setRewardSettings(next: RewardSettings): Promise<ActionResult> {
+  if (!isValidReward(next?.regular) || !isValidReward(next?.important)) return { ok: false, reason: 'invalid' };
+  return change((h) => ({ ok: true, next: { ...h, rewards: { regular: next.regular, important: next.important } } }), 'parent');
+}
+
+// "Set as Default": back to the ORIGINAL amounts, Regular 5 and Important 10, saved at once (for new tasks; tasks already assigned keep theirs).
+export async function resetRewardSettings(): Promise<ActionResult> {
+  return change((h) => {
+    const { rewards: _dropped, ...rest } = h;
+    return { ok: true, next: rest };
+  }, 'parent');
+}
+
+// A parent changes the kind and/or the amount of a parent task that is still to do or waiting for review. An approved task is closed: its
+// amount is what was agreed, and it can never be changed.
+export async function updateTaskReward(childId: string, taskId: string, patch: { important?: boolean; reward?: number }): Promise<ActionResult> {
+  if (patch.reward !== undefined && !isValidReward(patch.reward)) return { ok: false, reason: 'invalid' };
+  return change((h) => {
+    const task = h.children.find((c) => c.id === childId)?.tasks.find((t) => t.id === taskId);
+    if (!task) return { ok: false, reason: 'not-found' };
+    if (task.createdBy !== 'parent') return { ok: false, reason: 'not-allowed' };
+    if (task.status !== 'assigned' && task.status !== 'pending') return { ok: false, reason: 'wrong-state' };
+    return {
+      ok: true,
+      next: updateChildIn(h, childId, (c) => ({
+        ...c,
+        tasks: c.tasks.map((t) => {
+          if (t.id !== taskId) return t;
+          const { important: _old, ...without } = t;
+          const important = patch.important ?? t.important === true;
+          return { ...without, ...(important ? { important: true } : {}), reward: patch.reward ?? t.reward ?? getRewardSettings(h)[important ? 'important' : 'regular'] };
+        }),
+      })),
+    };
+  }, 'parent');
+}
+
+// Is this task approved with a reward that has not been collected yet? (Older tasks have no reward, so they are never owed anything.)
+export function rewardOwed(task: HouseholdTask): boolean {
+  return task.createdBy === 'parent' && task.status === 'approved' && isValidReward(task.reward) && task.reward > 0 && !task.rewardPaidAt;
+}
+
+// The CHILD's profile calls this once the amount is in the child's wallet: the task is then marked collected, for good. Only an approved
+// task with an uncollected reward changes; anything else is left exactly as it is (so calling it twice is harmless).
+export async function markRewardCollected(childId: string, taskId: string): Promise<ActionResult> {
+  return change((h) => {
+    const task = h.children.find((c) => c.id === childId)?.tasks.find((t) => t.id === taskId);
+    if (!task) return { ok: false, reason: 'not-found' };
+    if (!rewardOwed(task)) return { ok: true, next: h };
+    const now = new Date().toISOString();
+    return { ok: true, next: updateChildIn(h, childId, (c) => ({ ...c, tasks: c.tasks.map((t) => (t.id === taskId ? { ...t, rewardPaidAt: now } : t)) })) };
+  });
+}
+
+// The LOCAL calendar date ('YYYY-MM-DD') a task was finished on: the time a parent approved it (or, for a task that needs no approval, the time
+// it was completed), NOT the time the child handed it in. null when the task is not finished or has no usable time.
+export function finishedDateISO(task: HouseholdTask): string | null {
+  if (task.status !== 'approved' && task.status !== 'completed') return null;
+  if (!task.decidedAt) return null;
+  const when = new Date(task.decidedAt);
+  if (Number.isNaN(when.getTime())) return null;
+  return `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`;
+}
+
+// What a parent has to look at for ONE child: the tasks the child handed in that no parent has answered yet. The ONE definition: the Family Settings
+// list of waiting tasks (with Approve / Send back) and the Dashboard's "Needs approval (N)" both use it, so they can never disagree.
+export function tasksWaitingForApproval(child: ChildProfile | null | undefined): HouseholdTask[] {
+  return child ? child.tasks.filter((t) => t.status === 'pending') : [];
+}
+
 export function tasksByStatus(child: ChildProfile) {
   return {
     assigned: child.tasks.filter((t) => t.status === 'assigned'),
-    pending: child.tasks.filter((t) => t.status === 'pending'),
+    pending: tasksWaitingForApproval(child),
     completed: child.tasks.filter((t) => t.status === 'approved' || t.status === 'completed'),
   };
 }

@@ -206,8 +206,8 @@ describe('Home\'s right-hand tab', () => {
     await settle();
     const text = words();
     for (const title of ['g1', 'g2', 'b1', 'Water the plants']) expect(text).toContain(title);
-    expect(text).toContain(en('atFromParentRoom', { room: 'Gym' }));
-    expect(text).toContain(en('atFromParentRoom', { room: 'Bedroom' })); // a room whose task is only waiting stays listed
+    expect(text).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 }));
+    expect(text).toContain(en('atGroupTitle_one', { room: 'Bedroom', count: 1 })); // a room whose task is only waiting stays listed
     expect(text).not.toContain('Kitchen'); // no tasks there: not listed
     expect(text).toContain(en('atWaiting'));
     expect(text).not.toContain(en('atDone'));

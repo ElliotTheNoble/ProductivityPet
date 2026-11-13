@@ -251,6 +251,13 @@ function AppShell() {
     };
   }, []);
 
+  // Family mode: a child's Paw Token rewards for tasks a parent approved are collected into this child's own wallet, once each (see
+  // @/utils/household-rewards.ts). Nothing is loaded with family mode off, and Main collects nothing.
+  useEffect(() => {
+    if (!FAMILY_MODE_ENABLED) return undefined;
+    return (require('@/utils/household-rewards') as typeof import('@/utils/household-rewards')).startHouseholdRewardCollection();
+  }, []);
+
   // Health alerts: phone notifications scheduled ahead from the sickness
   // clocks, plus the live critical signal (see @/utils/pet-alerts.ts).
   useEffect(() => startPetAlerts(), []);

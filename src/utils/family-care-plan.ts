@@ -1,4 +1,5 @@
 import { advancePet, isEggStage, type PetRecord } from '@/utils/pet-lifecycle-core';
+import type { SafetyRules } from '@/utils/pet-safety';
 import { SICK_TO_CRITICAL_HOURS } from '@/utils/pet-family-config';
 
 // The anonymous "family care" notification plan (Stage 4.5d). PURE: nothing here reads or writes storage, calls a notification API, sets a
@@ -109,7 +110,7 @@ export function familyCareMessage(language: string): { title: string; body: stri
 // The upcoming care events of one profile's pets, from its saved pets (already read; nothing is read or written here). The pets are
 // advanced on COPIES with the same rules the app uses when the profile is opened. A pet whose saved data cannot be worked with (an
 // invalid timestamp, anything that makes the lifecycle throw) simply contributes nothing.
-export function careEventsFromPets(pets: readonly PetRecord[], now: Date): CareEvent[] {
+export function careEventsFromPets(pets: readonly PetRecord[], now: Date, rules?: SafetyRules): CareEvent[] {
   const nowMs = now.getTime();
   if (!Number.isFinite(nowMs)) return [];
   const events: CareEvent[] = [];
@@ -120,13 +121,13 @@ export function careEventsFromPets(pets: readonly PetRecord[], now: Date): CareE
   for (const saved of pets) {
     try {
       if (saved.retired) continue; // in Pet Pawadise: frozen, never sick
-      const pet = advancePet(saved, now);
+      const pet = advancePet(saved, now, false, rules);
       if (pet.lifecycle.state === 'deceased') continue;
       if (isEggStage(pet.growthUnits)) continue; // an egg cannot get sick
       if (pet.lifecycle.state === 'healthy') {
         // When would the lifecycle itself mark this pet sick if nothing changes? Run it far ahead on a copy: whatever happens on the
         // way (the dirty penalty, bedtime, exhaustion) is already in its answer.
-        const ahead = advancePet(pet, new Date(nowMs + LIFECYCLE_HORIZON_MS));
+        const ahead = advancePet(pet, new Date(nowMs + LIFECYCLE_HORIZON_MS), false, rules);
         const since = ahead.lifecycle.sickSince ? new Date(ahead.lifecycle.sickSince).getTime() : Number.NaN;
         if (Number.isFinite(since)) {
           add(since, 'normal');

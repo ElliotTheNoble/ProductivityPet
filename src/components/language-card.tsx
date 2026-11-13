@@ -22,9 +22,6 @@ export function LanguageCard() {
           <ChoiceCard key={l.code} title={l.nativeName} selected={lang === l.code} onPress={() => void setLanguage(l.code as LanguageCode)} />
         ))}
       </View>
-      <ThemedText type="small" themeColor="textSecondary">
-        {t('languageNote')}
-      </ThemedText>
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { addToWallet, awardGrowthForTasks, ensureFamilyLoaded, getLivingPetCount } from '@/utils/pet-family';
+import { addToWallet, awardGrowthForTasks, creditHouseholdReward, ensureFamilyLoaded, getLivingPetCount } from '@/utils/pet-family';
 import { getTaskTokenReward } from '@/utils/pet-family-config';
 import {
   StaleProfileError,
@@ -280,6 +280,49 @@ async function runReconcile(tasks: Task[], owner: ProfileOwner): Promise<void> {
       source: occurrence.source,
       refId: occurrence.taskId,
     }).catch(() => {});
+  }
+}
+
+// ---- household task rewards (Step 4B) ----
+// A parent-approved household task pays the exact amount it was saved with, ONCE, into the wallet of the profile that is open (the child's own:
+// the household record cannot reach another profile's wallet, see @/utils/household-rewards.ts for the caller). The credit and the note that it
+// was given are ONE write in the profile's family record (creditHouseholdReward in @/utils/pet-family.ts), so an interrupted save can never
+// leave a reward "paid" but missing, or paid twice; the earnings history entry (id `earn:household:<taskId>`) is added (or repaired) after it.
+// No pet growth is paid: tasks a parent assigns give Paw Tokens only.
+//  'paid'    - the amount was added now
+//  'already' - this task had been paid before (nothing added)
+//  'failed'  - nothing is known to be paid; trying again later is safe
+export type HouseholdPayout = 'paid' | 'already' | 'failed';
+
+export function awardHouseholdTaskReward(taskId: string, amount: number): Promise<HouseholdPayout> {
+  const owner = captureProfileOwner();
+  const turn = () => runHouseholdPayout(taskId, amount, owner);
+  const run = pendingReconcile.then(turn, turn).then(
+    (result) => result,
+    () => 'failed' as HouseholdPayout
+  );
+  pendingReconcile = run.then(() => undefined, () => undefined);
+  return trackOperation(run);
+}
+
+async function runHouseholdPayout(taskId: string, amount: number, owner: ProfileOwner): Promise<HouseholdPayout> {
+  try {
+    if (!Number.isInteger(amount) || amount <= 0 || !taskId) return 'failed';
+    // The first version of this feature remembered a payment in the paid-keys record above, before crediting. A task remembered there is not
+    // paid again here (whether or not that older credit survived is not something this device can tell, and guessing could pay twice).
+    await runReconcile([], owner);
+    assertProfileOwner(owner);
+    if (cachedAwardedKeys?.has(`household:${taskId}`)) return 'already';
+    const result = await creditHouseholdReward(taskId, amount);
+    assertProfileOwner(owner);
+    if (result === 'failed') return 'failed';
+    // Logged for both 'paid' and 'already': the entry is keyed by the task, so it is never added twice, and a credit whose history entry was
+    // lost to an interruption gets it back. Logging never changes the amount or the balance.
+    await recordTokenEarning({ id: `earn:household:${taskId}`, amount, source: 'task', refId: taskId }).catch(() => {});
+    return result;
+  } catch (error) {
+    if (error instanceof StaleProfileError) return 'failed';
+    throw error;
   }
 }
 

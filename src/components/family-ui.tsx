@@ -33,13 +33,17 @@ export function PageShell({
   maxWidth = 760,
   scrollKey,
   compact,
+  scrollerRef,
 }: {
   children: ReactNode;
   maxWidth?: number;
   scrollKey?: string;
   compact?: boolean;
+  // Lets a screen scroll the page to one of its own sections (the screen's ref is filled with the page's scroller).
+  scrollerRef?: { current: ScrollView | null };
 }) {
   const { scrollRef, frameRef, bottomInset, onScroll } = useKeyboardAvoidance();
+  if (scrollerRef) scrollerRef.current = scrollRef.current;
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [scrollKey, scrollRef]);

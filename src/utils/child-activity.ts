@@ -14,7 +14,7 @@ import {
   type TokenSummary,
 } from '@/utils/child-activity-model';
 import { getSelectableChildren } from '@/utils/family-profiles';
-import { ensureHouseholdLoaded } from '@/utils/household';
+import { ensureHouseholdLoaded, finishedDateISO } from '@/utils/household';
 import { FAMILY_KEY_NAME, getPetLabel, parseSavedFamily } from '@/utils/pet-family';
 import { checkParentAction } from '@/utils/parent-session';
 import { ensureProfilesReady, scopedKeyFor } from '@/utils/profiles';
@@ -179,6 +179,7 @@ export async function readChildActivity(childId: string, now: Date = new Date())
         tokens: tokenSource,
         milestones: milestones.state === 'ok' ? milestones.value : [],
         firstPetISO: firstPetISO(family),
+        householdDone: (record?.tasks ?? []).map(finishedDateISO).filter((date): date is string => date !== null),
       },
     };
   } catch {

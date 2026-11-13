@@ -669,6 +669,7 @@ export function RoomDetailScreen({ room, focusToken }: RoomDetailScreenProps) {
           onAddTask={handleAddRoomTask}
           assignedSection={<AssignedRoomTasks room={room.slug} highlight={focusHighlight} />}
           assignedCount={assignedHere.filter(isOutstanding).length}
+          hasAssigned={assignedHere.length > 0}
           canAdd={canCreate}
           side={room.slug === 'kitchen' && !isPhone && !isShort && isLandscape ? 'left' : undefined}
           focusToken={focusToken}

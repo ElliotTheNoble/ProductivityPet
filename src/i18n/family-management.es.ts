@@ -7,10 +7,10 @@ type Table = { [K in keyof typeof familyManagementEn]: string };
 export const familyManagementEs: Table = {
   fmRename: 'Cambiar nombre',
   fmArchive: 'Archivar',
-  fmRestore: 'Restaurar',
+  fmRestore: 'Reanudar',
   fmRenameLabel: 'Cambiar el nombre de {name}',
   fmArchiveLabel: 'Archivar a {name}',
-  fmRestoreLabel: 'Restaurar a {name}',
+  fmRestoreLabel: 'Reanudar a {name}',
   fmSelectLabel: 'Seleccionar a {name}',
   fmArchivedTitle: 'Niños archivados',
   fmArchivedShow: 'Mostrar niños archivados ({count})',
@@ -52,7 +52,7 @@ export const familyManagementEs: Table = {
   fmArchiveConfirm: 'Sí, archivar a {name}',
 
   fmHealthTitle: 'Salud de la familia',
-  fmHealthIntro: 'Aquí solo se muestra lo que necesita atención. Nunca se borra, repara ni une nada automáticamente.',
+  fmHealthIntro: 'Nada se borra, repara ni une automáticamente.',
   fmHealthRefresh: 'Comprobar de nuevo',
   fmHealthCareTitle: 'Mascotas que necesitan cuidados',
   fmHealthCareActive: '{name}: {status}',

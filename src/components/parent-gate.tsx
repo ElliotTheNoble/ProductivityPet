@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DeviceCheckPanel } from '@/components/device-check-panel';
@@ -107,6 +107,14 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
   // Five wrong PINs in a row (kept across restarts): the phone's screen-lock check is needed before more tries. No waiting period.
   const needsDeviceCheck = (access.state === 'locked' && access.deviceCheck === true) || feedback?.kind === 'device-check';
 
+  // The fourth digit checks the PIN straight away: there is no Unlock button to find. It goes through exactly the same check as before
+  // (one counted try, the same limit and device check); `busy` stops a second check from starting while one is running, and the dots are
+  // wiped the moment it starts, so one PIN is never checked twice. A PIN is exactly four digits here (see PinEntry), so four is complete.
+  useEffect(() => {
+    if (pin.length === NEW_PIN_LENGTH && !busy && !needsDeviceCheck) void submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin]);
+
   async function submit() {
     if (busy || needsDeviceCheck) return;
     if (!PIN_FORMAT.test(pin)) {
@@ -190,7 +198,11 @@ export function ParentLockScreen({ access }: { access: ParentAccess }) {
             {t('pgUnavailable')}
           </ThemedText>
         ) : null}
-        <Button label={busy ? t('pgChecking') : t('pgUnlock')} onPress={() => void submit()} disabled={busy || needsDeviceCheck || pin.length !== NEW_PIN_LENGTH} />
+        {busy ? (
+          <ThemedText type="smallBold" themeColor="textSecondary" accessibilityLiveRegion="polite" testID="pin-checking" style={styles.center}>
+            {t('pgChecking')}
+          </ThemedText>
+        ) : null}
         <Button tone="soft" label={t('pgBackHome')} onPress={() => router.replace('/')} />
       </PinEntry>
     </Card>

@@ -250,8 +250,8 @@ describe('Home: ONE "Today\'s Tasks" card', () => {
     expect(count(text, en('todaysTasks'))).toBe(1);
     expect(text).not.toContain(en('atTitle'));
     for (const title of ['Do ten jumping jacks', 'Water the plants', 'Mine a']) expect(count(text, title)).toBe(1);
-    expect(text).toContain(en('atFromParentRoom', { room: 'Gym' }));
-    expect(text).toContain(en('atFromParent'));
+    expect(text).toContain(en('atGroupTitle_one', { room: 'Gym', count: 1 }));
+    expect(text).toContain(en('atGroupTitle_one', { room: en('atAnywhere'), count: 1 }));
     expect(text).not.toContain(en('noTasksToday'));
     expect(text).toContain('Tuesday, March 10, 2026');
   });

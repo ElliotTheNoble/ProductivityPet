@@ -210,12 +210,12 @@ describe('actions from every view, all in step', () => {
     await everyView(app, ids);
     // three views of the same task: the Tasks tab, the Gym section, and (as a count) Home's card
     expect(buttons('Stretch for a minute', 'atDoneFor')).toHaveLength(2); // Tasks tab + Gym section
-    expect(words()).toContain(en('atFromParentRoom', { room: 'Gym' })); // Home's guide
+    expect(words()).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 })); // Home's guide
     await RNTL.fireEvent.press(buttons('Stretch for a minute', 'atDoneFor')[0]); // from the Tasks tab
     await settle();
     expect(buttons('Stretch for a minute', 'atDoneFor')).toHaveLength(0);
     expect(buttons('Stretch for a minute', 'atUndoFor')).toHaveLength(2); // both views now show Undo
-    expect(words()).toContain(en('atFromParentRoom', { room: 'Gym' })); // Home's guide: one task is still to do
+    expect(words()).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 })); // Home's guide: one task is still to do
     expect(task(ids.Billy, id).status).toBe('pending'); // the parent's approval list sees it
     expect(H().tasksByStatus(H().peekHousehold()!.children.find((c) => c.id === ids.Billy)!).pending.map((t) => t.id)).toEqual([id]);
     await RNTL.fireEvent.press(buttons('Stretch for a minute', 'atUndoFor')[1]); // undo from the room section
@@ -230,7 +230,7 @@ describe('actions from every view, all in step', () => {
     const { app, ids } = await boot();
     const id = await assign(ids.Billy, 'Water the plants');
     await everyView(app, ids);
-    expect(words()).toContain(en('atFromParent')); // Home's guide
+    expect(words()).toContain(en('atGroupTitle_one', { room: en('atAnywhere'), count: 1 })); // Home's guide
     expect(buttons('Water the plants', 'atDoneFor')).toHaveLength(1); // only the Tasks tab has the button
     await RNTL.fireEvent.press(buttons('Water the plants', 'atDoneFor')[0]);
     await settle();

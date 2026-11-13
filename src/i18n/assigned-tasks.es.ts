@@ -29,4 +29,6 @@ export const assignedTasksEs: Record<keyof typeof assignedTasksEn, string> = {
   atFromParentRoom: 'De mi padre o madre · {room}',
   atHomeRowLabel: '{task}, {state}, {from}',
   atOpenTasksTab: 'Abre tu pestaña de Tareas',
+  atGroupTitle_one: '{room} ({count} tarea)',
+  atGroupTitle_other: '{room} ({count} tareas)',
 };

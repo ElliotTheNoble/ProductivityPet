@@ -575,6 +575,10 @@ export function createPinVerifier(): PinVerifier {
       return state.kind === 'ready' || state.kind === 'verifier-missing';
     },
     verify: (pin) => pinMatches(pin),
+    async inspect() {
+      const state = await getAuthState();
+      return { configured: state.kind === 'ready' || state.kind === 'verifier-missing', issue: state.kind === 'verifier-missing' ? 'verifier-missing' : null };
+    },
     async issue() {
       return (await getAuthState()).kind === 'verifier-missing' ? 'verifier-missing' : null;
     },

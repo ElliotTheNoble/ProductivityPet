@@ -49,6 +49,8 @@ type RoomTaskPanelProps = {
   // room with none looks exactly as before.
   assignedSection?: ReactNode;
   assignedCount?: number; // assigned tasks here that still need the child (To do or Try again): counted in the heading and pill
+  // Whether ANY task a parent assigned is listed in this room (waiting ones included). With some, the room is not empty, whatever the child's own list says.
+  hasAssigned?: boolean;
   // Whether the profile may create its own tasks (default yes). False hides the add field and button; the screen's handler refuses as well.
   canAdd?: boolean;
   // A new value each time Home's guide sends the child here: the panel opens and scrolls to the top, where the assigned tasks are.
@@ -72,7 +74,7 @@ type RoomTaskPanelProps = {
 // expands into a bottom-anchored panel with its own scrollable list and a
 // way to collapse it again — sized and positioned to stay clear of the
 // Back to Rooms button in the bottom-left (see room-detail-screen.tsx).
-export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side = 'right', assignedSection, assignedCount = 0, canAdd = true, focusToken, availableHeight }: RoomTaskPanelProps) {
+export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side = 'right', assignedSection, assignedCount = 0, hasAssigned = false, canAdd = true, focusToken, availableHeight }: RoomTaskPanelProps) {
   const { t } = useT();
   const theme = useTheme();
   const { width, height } = useWindowDimensions();
@@ -132,7 +134,9 @@ export function RoomTaskPanel({ roomName, tasks, onToggleTask, onAddTask, side =
 
       <ScrollView ref={scrollRef} style={[styles.list, { maxHeight: listMax }]} showsVerticalScrollIndicator={false} nestedScrollEnabled testID="room-panel-scroll">
         {assignedSection}
-        {totalCount === 0 ? (
+        {/* "No tasks yet! Let's add one!" invites the person to ADD a task, so it is only for someone who can (never a child, who plays with the tasks
+            a parent assigns) and only when the room really has nothing: not while assigned tasks are listed above, waiting ones included. */}
+        {totalCount === 0 && canAdd && !hasAssigned ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
             {t('panelEmpty')}
           </ThemedText>

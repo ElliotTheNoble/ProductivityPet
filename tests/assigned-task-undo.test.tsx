@@ -263,13 +263,13 @@ describe('on screen: the button, the statuses and the counts follow at once', ()
     await settle();
     const labels = () => RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel)).filter((l) => /^(I did it|Undo): /.test(l));
     expect(labels().filter((l) => l.startsWith(en('atDoneFor', { task: '' }).split(':')[0]))).toHaveLength(2);
-    expect(words()).toContain(en('atFromParentRoom', { room: 'Gym' })); // Home's rows
+    expect(words()).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 })); // Home's rows
     await RNTL.fireEvent.press(RNTL.screen.getByRole('button', { name: en('atDoneFor', { task: 'Do some stretches' }) }));
     await settle();
     expect(labels()).toContain(en('atUndoFor', { task: 'Do some stretches' }));
     expect(labels()).not.toContain(en('atDoneFor', { task: 'Do some stretches' }));
     expect(words()).toContain(en('atWaiting'));
-    expect(words()).toContain(en('atFromParentRoom', { room: 'Gym' })); // still listed
+    expect(words()).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 })); // still listed
     await RNTL.fireEvent.press(RNTL.screen.getByRole('button', { name: en('atUndoFor', { task: 'Do some stretches' }) }));
     await settle();
     expect(labels()).toContain(en('atDoneFor', { task: 'Do some stretches' }));

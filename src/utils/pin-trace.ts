@@ -17,6 +17,7 @@ export type TraceEvent =
   | 'change:new-pin-verified'
   | 'change:old-pin-checked'
   | 'change:finished'
+  | 'unlock:finished'
   | 'screen:finish-pressed'
   | 'screen:result'
   | 'screen:wiped'

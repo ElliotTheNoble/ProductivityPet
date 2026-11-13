@@ -19,7 +19,8 @@ import type { RoomSlug } from '@/utils/rooms';
 // to-do: assigned, never handed in or sent back. sent-back: a parent asked for another try. waiting: handed in, waiting for the parent.
 export type AssignedState = 'to-do' | 'sent-back' | 'waiting';
 
-export type AssignedTaskView = { id: string; text: string; room: RoomSlug | null; state: AssignedState };
+// `reward` is the Paw Tokens it is worth (null for a task saved before rewards existed); `important` marks an Important task.
+export type AssignedTaskView = { id: string; text: string; room: RoomSlug | null; state: AssignedState; reward: number | null; important: boolean };
 
 export type RoomKey = RoomSlug | 'anywhere';
 export const ROOM_KEYS: readonly RoomKey[] = [...ASSIGNABLE_ROOMS, 'anywhere'];
@@ -42,6 +43,8 @@ export function assignedTasksFor(household: Household | null, profileId: string,
       text: task.text,
       room: task.room ?? null,
       state: task.status === 'pending' ? 'waiting' : task.returnedAt ? 'sent-back' : 'to-do',
+      reward: typeof task.reward === 'number' ? task.reward : null,
+      important: task.important === true,
     });
   }
   return out;

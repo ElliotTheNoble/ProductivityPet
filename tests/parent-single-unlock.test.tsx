@@ -99,7 +99,6 @@ async function enterMainWithPin() {
   await RNTL.fireEvent.press(main!);
   await settle();
   for (const digit of TEST_PIN) await RNTL.fireEvent.press(RNTL.screen.getByRole('button', { name: digit }));
-  await pressButton(t('pgUnlock'));
   await RNTL.screen.findByText(t('phChildren'), {}, { timeout: 20000 }); // the PIN is checked, then Main opens on the dashboard
   await settle();
 }

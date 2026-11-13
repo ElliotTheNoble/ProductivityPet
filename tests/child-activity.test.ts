@@ -147,7 +147,7 @@ describe('what is not saved is reported as not saved', () => {
     expect(result.itemsOwned).toEqual({ state: 'none' });
     expect(result.streak).toEqual({ current: 0, longest: 0, undated: 0 }); // no tasks at all really is a streak of 0 days
     expect(result.assigned.total).toBe(0);
-    expect(result.activityInput).toEqual({ tasks: [], tokens: null, milestones: [], firstPetISO: null });
+    expect(result.activityInput).toEqual({ tasks: [], tokens: null, milestones: [], firstPetISO: null, householdDone: [] });
   });
 
   test('damaged records are "unreadable", a list with unusable entries skips and counts them, nothing is guessed', async () => {

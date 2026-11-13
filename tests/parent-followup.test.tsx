@@ -97,7 +97,6 @@ describe('changing the PIN, then the protected recovery-code flow', () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
     const before = record();
 
@@ -161,16 +160,13 @@ describe('an ordinary wrong PIN', () => {
       () => new Promise((resolve) => { answer = () => resolve({ ok: false, reason: 'wrong', triesLeft: 4 }); })
     );
     await typeDigits('1111');
-    expect(screen.getByText(/4 digits entered/)).toBeTruthy();
-    await press(en('pgUnlock'));
     // the check is still running: the screen already answered the tap
     expect(screen.getByText(/0 digits entered/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgChecking') })).toBeTruthy();
+    expect(screen.getByTestId('pin-checking')).toBeTruthy(); // "Checking…" shows while the PIN is being checked
     expect(screen.queryByText(en('pgWrong'), { exact: false })).toBeNull();
 
     await act(async () => answer());
     expect(await screen.findByText(new RegExp(`${en('pgWrong')} 4 tries left`))).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') })).toBeTruthy();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
@@ -178,18 +174,16 @@ describe('an ordinary wrong PIN', () => {
     await lockedGate();
     for (const [i, wrong] of ['1111', '2222', '3333', '4444', '5555'].entries()) {
       await typeDigits(wrong);
-      await press(en('pgUnlock'));
       if (i < 4) expect(await screen.findByText(new RegExp(en('pgWrong')))).toBeTruthy();
       expect(screen.queryByText(/Please wait/)).toBeNull(); // never a waiting period
     }
     expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
     expect(screen.getByRole('button', { name: en('pgDeviceCheckButton') })).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
     expect(screen.queryByText('SECRET')).toBeNull();
     await press(en('pgDeviceCheckButton'));
     await waitFor(() => expect(screen.queryByText(en('pgDeviceCheck'))).toBeNull());
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     expect(await screen.findByText('SECRET')).toBeTruthy();
   });
 
@@ -197,14 +191,13 @@ describe('an ordinary wrong PIN', () => {
     await lockedGate();
     for (const wrong of ['1111', '2222', '3333', '4444', '5555']) {
       await typeDigits(wrong);
-      await press(en('pgUnlock'));
     }
     await screen.findByText(en('pgDeviceCheck'));
     mockAuth.result = { success: false, error: 'user_cancel' };
     await press(en('pgDeviceCheckButton'));
     expect(await screen.findByText(en('pgDeviceCheckCancelled'))).toBeTruthy();
     expect(screen.getByText(en('pgDeviceCheck'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
   });
 });
 
@@ -285,7 +278,6 @@ describe('saving a changed PIN', () => {
     await render(<ParentSecurityScreen />);
     await screen.findByText(en('pgTitle'));
     await typeDigits(PIN);
-    await press(en('pgUnlock'));
     await screen.findByText(en('pmTitle'));
     await press(en('pmChange'));
     await typeDigits(PIN);

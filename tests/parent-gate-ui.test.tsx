@@ -68,7 +68,6 @@ async function typePin(pin: string) {
 }
 async function enterPin(pin: string) {
   await typePin(pin);
-  await fireEvent.press(screen.getByRole('button', { name: en('pgUnlock') }));
 }
 
 beforeEach(async () => {
@@ -163,7 +162,7 @@ describe('ParentGate', () => {
       await act(async () => {});
     }
     expect(await screen.findByText(en('pgDeviceCheck'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
     expect(screen.queryByText('SECRET')).toBeNull();
   });
 
@@ -183,7 +182,7 @@ describe('ParentGate', () => {
     );
     await fireEvent.press(await screen.findByRole('button', { name: en('pgDeviceCheckButton') }));
     expect(await screen.findByText(en(messageKey))).toBeTruthy();
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
     expect(screen.getByRole('button', { name: en('prStart') })).toBeTruthy(); // the recovery code is still the way on
     expect(screen.queryByText('SECRET')).toBeNull();
   });
@@ -209,8 +208,7 @@ describe('ParentGate', () => {
     );
     await screen.findByText(en('pgTitle'));
     await typePin('123');
-    expect(screen.getByRole('button', { name: en('pgUnlock') }).props.accessibilityState?.disabled).toBe(true);
-    await fireEvent.press(screen.getByRole('button', { name: en('pgUnlock') }));
+    expect(screen.queryByRole('button', { name: en('pgUnlock') })).toBeNull(); // no Unlock button: the fourth digit checks the PIN
     expect(await AsyncStorage.getItem('@ProductivityPet:parentGate')).toBeNull();
     expect(screen.queryByText('SECRET')).toBeNull();
   });
@@ -240,7 +238,6 @@ describe('ParentGate', () => {
     expect(screen.getByText(es('pgHonest'))).toBeTruthy();
     expect(screen.getByText(es('pgForgotText'))).toBeTruthy();
     for (const digit of '000000') await fireEvent.press(screen.getByRole('button', { name: digit }));
-    await fireEvent.press(screen.getByRole('button', { name: es('pgUnlock') }));
     expect(await screen.findByText(/Te quedan 4 intentos/)).toBeTruthy();
     expect(screen.queryByText(en('pgTitle'))).toBeNull();
   });

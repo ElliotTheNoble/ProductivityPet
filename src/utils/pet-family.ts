@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { tr } from '@/i18n';
-import { GAMEPLAY_CHEATS_ALLOWED } from '@/utils/dev-flags';
+import { FAMILY_MODE_ENABLED, GAMEPLAY_CHEATS_ALLOWED } from '@/utils/dev-flags';
 import { endToySession, getToySession, resetToySessions, startToySession } from '@/utils/pet-toy-session';
 import {
   captureProfileOwner,
@@ -81,6 +81,10 @@ export type FamilyState = {
   supplies?: { washcloth: number; medicine: number };
   // Toys the player owns and hasn't used yet, by toy id (see @/utils/toys). Missing in older saves = none.
   toys?: Record<string, number>;
+  // Household tasks (a parent's approved tasks, see @/utils/household-rewards.ts) whose Paw Token reward has ALREADY been added to the wallet above.
+  // It lives in this same record, so the credit and the note that it was given are saved together in one write: whatever interrupts a save,
+  // either both are there or neither is, which is what lets a reward be retried safely and never paid twice. Missing in older saves = none.
+  householdRewards?: string[];
 };
 
 export type LifecycleNotice = {
@@ -150,6 +154,11 @@ function newPetId(): string {
 // overwrite another profile's pet or wallet (see savePetProfileForSelectedPet and ProfileOwner in @/utils/profiles.ts).
 const SESSION_TAG = Symbol('profileSession');
 type SessionTagged = { [SESSION_TAG]?: number };
+// Also invisible and copied by a spread: the wallet balance the profile was read with. A save is applied as a CHANGE to the balance (what the
+// screen added or spent since it read the profile), not as a new balance, so an older copy that nothing changed the balance in can never wipe
+// out Paw Tokens that arrived after it was read (a reward, a task payout...).
+const WALLET_BASE = Symbol('walletBase');
+type WalletTagged = { [WALLET_BASE]?: number };
 
 function toProfile(pet: PetRecord, wallet: { pawTokens: number }): PetProfile {
   const profile: PetProfile & SessionTagged = {
@@ -164,6 +173,7 @@ function toProfile(pet: PetRecord, wallet: { pawTokens: number }): PetProfile {
     diedAt: pet.lifecycle.diedAt,
   };
   profile[SESSION_TAG] = captureProfileOwner().generation;
+  (profile as WalletTagged)[WALLET_BASE] = wallet.pawTokens;
   return profile;
 }
 
@@ -204,6 +214,7 @@ function stripExtras(profile: PetProfile): PetProfile {
     delete copy[key];
   }
   delete (copy as SessionTagged)[SESSION_TAG];
+  delete (copy as WalletTagged)[WALLET_BASE];
   return copy as PetProfile;
 }
 
@@ -342,6 +353,7 @@ function normalizeFamily(raw: unknown): FamilyState | null {
     wallet: { pawTokens: isFiniteNumber(wallet.pawTokens) && wallet.pawTokens >= 0 ? wallet.pawTokens : 0 },
     supplies: normalizeSupplies(r.supplies),
     toys: normalizeToys(r.toys),
+    ...(Array.isArray(r.householdRewards) ? { householdRewards: r.householdRewards.filter((id): id is string => typeof id === 'string' && id.length > 0) } : {}),
   };
 }
 
@@ -451,6 +463,17 @@ function buildFreshFirstPet(): { pet: PetRecord; tokens: number } {
 
 async function loadFamily(): Promise<FamilyState> {
   await ensureProfilesReady();
+  // Family mode: a child's Pet Safety setting lives in the household record. It is started loading here and NOT waited for: until it has
+  // loaded the rules are unknown, and unknown counts as Gentle (see @/utils/pet-safety.ts), so a pet is never lost to a setting that has not been
+  // read yet. The next minute's tick (or any care action) evaluates again with the real rules, and a Classic pet that was due to pass away does
+  // so then, at the time it was due.
+  if (FAMILY_MODE_ENABLED) {
+    try {
+      void (require('@/utils/household') as typeof import('@/utils/household')).ensureHouseholdLoaded().catch(() => {});
+    } catch {
+      // unknown settings fail safe
+    }
+  }
   const familyKey = scopedKey(FAMILY_KEY_NAME);
   const legacyProfile = isActiveProfileLegacy();
   let stored: string | null = null;
@@ -613,7 +636,14 @@ export function savePetProfileForSelectedPet(profile: PetProfile): void {
     emitNotices([selected], [updated], true);
   }
 
-  const nextTokens = isFiniteNumber(profile.pawTokens) ? Math.max(0, profile.pawTokens) : s.wallet.pawTokens;
+  // The profile's balance is a CHANGE against the balance it was read with (see WALLET_BASE). A profile with no such note (built by hand)
+  // keeps the older meaning: its balance is the new balance.
+  const base = (profile as WalletTagged)[WALLET_BASE];
+  const nextTokens = !isFiniteNumber(profile.pawTokens)
+    ? s.wallet.pawTokens
+    : base === undefined
+      ? Math.max(0, profile.pawTokens)
+      : Math.max(0, s.wallet.pawTokens + (profile.pawTokens - base));
   const walletChanged = nextTokens !== s.wallet.pawTokens;
   if (!petChanged && !walletChanged) return;
   setState({ ...s, pets, wallet: walletChanged ? { pawTokens: nextTokens } : s.wallet });
@@ -656,6 +686,25 @@ async function doSetSelectedPetEquipped(slot: 'hat' | 'bow', id: string | null):
 
 export function getWalletBalance(): number {
   return state?.wallet.pawTokens ?? 0;
+}
+
+// A household task's reward, added ONCE (see @/utils/household-rewards.ts). The credit and the note "this task was paid" change in the same
+// state and are saved in the same write, and the result is only 'paid' once that write reached storage:
+//  'paid'    - added now and saved
+//  'already' - this task had been added before (nothing changes)
+//  'failed'  - the family is not loaded, the amount is not valid, or the write did not reach storage. If the credit was made in memory it stays,
+//              with its note, and the save is retried by the next save (or the profile switch); asking again never adds it a second time.
+export async function creditHouseholdReward(taskId: string, amount: number): Promise<'paid' | 'already' | 'failed'> {
+  const owner = captureProfileOwner();
+  const loaded = await ensureFamilyLoaded();
+  if (!isProfileOwner(owner)) return 'failed';
+  const s = state ?? loaded;
+  if (!taskId || !Number.isInteger(amount) || amount <= 0) return 'failed';
+  // Noted as given: make sure the record holding the note and the credit really is saved (a write that failed earlier is retried here), so "already"
+  // is only reported for a credit that is on storage.
+  if ((s.householdRewards ?? []).includes(taskId)) return (await persistNow()) ? 'already' : 'failed';
+  setState({ ...s, wallet: { pawTokens: s.wallet.pawTokens + amount }, householdRewards: [...(s.householdRewards ?? []), taskId] });
+  return (await writeChain) ? 'paid' : 'failed';
 }
 
 export function addToWallet(amount: number): void {

@@ -448,16 +448,16 @@ describe('Home: the parent\'s tasks as compact rows in "Today\'s Tasks"', () => 
     await settle();
     const text = words();
     for (const title of ['Gym task one', 'Gym task two', 'Wash the dishes', 'Make the bed', 'Water the plants']) expect(text.split(title).length - 1).toBe(1);
-    expect(text).toContain(en('atFromParentRoom', { room: 'Gym' }));
-    expect(text).toContain(en('atFromParentRoom', { room: 'Kitchen' }));
-    expect(text).toContain(en('atFromParent'));
+    expect(text).toContain(en('atGroupTitle_other', { room: 'Gym', count: 2 }));
+    expect(text).toContain(en('atGroupTitle_one', { room: 'Kitchen', count: 1 }));
+    expect(text).toContain(en('atGroupTitle_one', { room: en('atAnywhere'), count: 1 }));
     expect(text).toContain(en('atToDo'));
     expect(text).toContain(en('atSentBack'));
     expect(text).toContain(en('atWaiting'));
     expect(text).not.toContain(en('atDone')); // no "I did it!" or Undo here: those are in the room and the Tasks tab
     expect(text).not.toContain(en('atUndo'));
     const labels = RNTL.screen.queryAllByRole('button').map((b) => String(b.props.accessibilityLabel));
-    expect(labels).toHaveLength(5);
+    expect(labels).toHaveLength(9); // 5 tasks + the 4 room cards' titles (Gym, Kitchen, Bedroom, Anywhere)
     expect(labels).toContain(rowName('Wash the dishes', en('atWaiting'), en('atFromParentRoom', { room: 'Kitchen' })));
     expect(labels).toContain(rowName('Make the bed', en('atSentBack'), en('atFromParentRoom', { room: 'Bedroom' })));
   });
@@ -508,8 +508,8 @@ describe('Home: the parent\'s tasks as compact rows in "Today\'s Tasks"', () => 
     const { AssignedHomeRows } = views();
     await RNTL.render(<AssignedHomeRows />);
     await settle();
-    expect(words()).toContain(es('atFromParentRoom', { room: 'Dormitorio' }));
-    expect(words()).toContain(es('atFromParent'));
+    expect(words()).toContain(es('atGroupTitle_one', { room: 'Dormitorio', count: 1 }));
+    expect(words()).toContain(es('atGroupTitle_one', { room: es('atAnywhere'), count: 1 }));
     expect(words()).toContain(es('atToDo'));
   });
 

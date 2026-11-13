@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ConfirmModal } from '@/components/confirm-modal';
 import { Button, Card, Field } from '@/components/family-ui';
@@ -171,53 +171,72 @@ export function FamilyManagementCard({ selectedChildId, onSelect }: { selectedCh
           const selected = child.id === selectedChildId;
           const pending = tasksByStatus(child).pending.length;
           return (
-            <View key={child.id} style={[styles.childRow, selected && styles.childRowSelected]}>
-              {renaming === child.id ? (
-                <View style={styles.editBlock}>
-                  <Field label={t('fmNewName')} value={renameText} onChangeText={setRenameText} maxLength={40} />
-                  {renameDuplicate ? <Warning text={t('fmDuplicate', { name: renameDuplicate.nickname })} /> : null}
-                  <View style={styles.row}>
-                    <Button label={t('saveChild')} onPress={() => submitRename(child)} disabled={busy} />
-                    <Button label={t('cancel')} tone="soft" onPress={() => setRenaming(null)} disabled={busy} />
+            // ONE complete card per child. Inside it, top to bottom: who the child is (with a check when selected), then THAT child's own Rename and
+            // Archive buttons. The whole card selects the child: a control that fills the card sits behind the contents (which let a touch through
+            // wherever they are blank), and the two buttons are their own controls on top of it. Selecting only chooses whose tasks and settings the
+            // dashboard shows: it never changes who is playing and needs no extra PIN step (the dashboard is already unlocked).
+            <View key={child.id} style={[styles.childCard, selected && styles.childCardSelected]} testID={`child-card-box-${child.id}`}>
+              {renaming !== child.id ? (
+                <Pressable
+                  onPress={() => onSelect(child.id)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={t('fmSelectLabel', { name: child.nickname })}
+                  accessibilityState={{ selected, checked: selected }}
+                  testID={`child-card-${child.id}`}
+                  style={({ pressed }) => [StyleSheet.absoluteFill, styles.cardTap, pressed && styles.cardPressed]}
+                />
+              ) : null}
+              <View pointerEvents="box-none" style={styles.cardBody}>
+                {renaming === child.id ? (
+                  <View style={styles.editBlock}>
+                    <Field label={t('fmNewName')} value={renameText} onChangeText={setRenameText} maxLength={40} />
+                    {renameDuplicate ? <Warning text={t('fmDuplicate', { name: renameDuplicate.nickname })} /> : null}
+                    <View style={styles.row}>
+                      <Button label={t('saveChild')} onPress={() => submitRename(child)} disabled={busy} />
+                      <Button label={t('cancel')} tone="soft" onPress={() => setRenaming(null)} disabled={busy} />
+                    </View>
                   </View>
-                </View>
-              ) : (
-                <>
-                  <ChildIdentity child={child} badge={FAMILY_MODE_ENABLED ? badgeFor(care[child.id]) : undefined}>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {`${child.tasks.length} ${t('tasksWord')} · ${t('pendingApprovals')}: ${pending}`}
-                    </ThemedText>
-                  </ChildIdentity>
-                  <View style={styles.buttons}>
-                    <Button
-                      tone={selected ? 'mint' : 'soft'}
-                      label={selected ? t('selected') : t('select')}
-                      accessibilityLabel={t('fmSelectLabel', { name: child.nickname })}
-                      onPress={() => onSelect(child.id)}
-                    />
-                    <Button
-                      tone="soft"
-                      label={t('fmRename')}
-                      accessibilityLabel={t('fmRenameLabel', { name: child.nickname })}
-                      disabled={busy}
-                      onPress={() => {
-                        setRenameText(child.nickname);
-                        setRenaming(child.id);
-                        setNotice(null);
-                      }}
-                    />
-                    {FAMILY_MODE_ENABLED ? (
+                ) : (
+                  <>
+                    <View pointerEvents="box-none" style={styles.cardTop}>
+                      <View pointerEvents="box-none" style={styles.identityWrap}>
+                        <ChildIdentity child={child} badge={FAMILY_MODE_ENABLED ? badgeFor(care[child.id]) : undefined}>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {`${child.tasks.length} ${t('tasksWord')} · ${t('pendingApprovals')}: ${pending}`}
+                          </ThemedText>
+                        </ChildIdentity>
+                      </View>
+                      {selected ? (
+                        <ThemedText style={styles.check} accessibilityElementsHidden importantForAccessibility="no" testID={`child-selected-${child.id}`}>
+                          ✓
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <View pointerEvents="box-none" style={styles.cardActions} testID={`child-actions-${child.id}`}>
                       <Button
                         tone="soft"
-                        label={t('fmArchive')}
-                        accessibilityLabel={t('fmArchiveLabel', { name: child.nickname })}
+                        label={t('fmRename')}
+                        accessibilityLabel={t('fmRenameLabel', { name: child.nickname })}
                         disabled={busy}
-                        onPress={() => void openArchive(child)}
+                        onPress={() => {
+                          setRenameText(child.nickname);
+                          setRenaming(child.id);
+                          setNotice(null);
+                        }}
                       />
-                    ) : null}
-                  </View>
-                </>
-              )}
+                      {FAMILY_MODE_ENABLED ? (
+                        <Button
+                          tone="soft"
+                          label={t('fmArchive')}
+                          accessibilityLabel={t('fmArchiveLabel', { name: child.nickname })}
+                          disabled={busy}
+                          onPress={() => void openArchive(child)}
+                        />
+                      ) : null}
+                    </View>
+                  </>
+                )}
+              </View>
             </View>
           );
         })
@@ -256,13 +275,13 @@ export function FamilyManagementCard({ selectedChildId, onSelect }: { selectedCh
                 {t('fmArchivedHelp')}
               </ThemedText>
               {archived.map((child) => (
-                <View key={child.id} style={styles.childRow}>
+                <View key={child.id} style={styles.childCard} testID={`child-card-box-${child.id}`}>
                   <ChildIdentity child={child} badge={badgeFor(care[child.id])}>
                     <ThemedText type="small" themeColor="textSecondary">
                       {t('fmArchivedAging')}
                     </ThemedText>
                   </ChildIdentity>
-                  <View style={styles.buttons}>
+                  <View style={styles.cardActions} testID={`child-actions-${child.id}`}>
                     <Button
                       tone="mint"
                       label={t('fmRestore')}
@@ -367,9 +386,18 @@ const styles = StyleSheet.create({
   noticeOk: { backgroundColor: '#E3F6EC', borderColor: '#7FD9B6' },
   noticeError: { backgroundColor: '#FFE9E9', borderColor: '#F2B5B5' },
   warning: { backgroundColor: '#FFF4E3', borderColor: '#F0B86E', borderWidth: 2, borderRadius: Spacing.three, padding: Spacing.two },
-  childRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', padding: Spacing.two, borderRadius: Spacing.three, borderWidth: 2, borderColor: 'transparent' },
-  childRowSelected: { borderColor: '#A78BDB', backgroundColor: 'rgba(228, 218, 247, 0.6)' },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flex: 1, minWidth: 200 },
+  // One complete card per child: the contents are a column (who, then that child's own buttons), so nothing can sit outside it or overlap the
+  // next card or the Add button, in portrait or landscape.
+  childCard: { position: 'relative', alignSelf: 'stretch', padding: Spacing.three, borderRadius: Spacing.three, borderWidth: 2, borderColor: 'rgba(150, 130, 160, 0.25)', backgroundColor: 'rgba(255, 255, 255, 0.6)', gap: Spacing.two },
+  childCardSelected: { borderColor: '#A78BDB', backgroundColor: 'rgba(228, 218, 247, 0.6)' },
+  cardBody: { gap: Spacing.two, minWidth: 0 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minWidth: 0 },
+  cardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'center' },
+  cardTap: { borderRadius: Spacing.three },
+  cardPressed: { backgroundColor: 'rgba(228, 218, 247, 0.35)' },
+  identityWrap: { flex: 1, minWidth: 0 },
+  check: { fontSize: 18, fontWeight: '800', color: '#6F4FB8' },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flex: 1, minWidth: 0 },
   childInfo: { flex: 1, minWidth: 0, gap: 2, alignItems: 'flex-start' },
   childName: { fontSize: 17, lineHeight: 22 },
   avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },

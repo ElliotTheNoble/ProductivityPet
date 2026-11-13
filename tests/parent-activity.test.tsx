@@ -124,35 +124,18 @@ async function openChild(name: string, say: typeof en = en) {
 }
 
 describe('a child with saved data', () => {
-  test('Tasks: how things stand today, with every list and count taken from the saved tasks', async () => {
+  test('the separate "Tasks" status card (due today, coming up, past due, repeating estimate) is gone from the overview; the child own tasks are not listed there', async () => {
     const { app, ids } = await boot();
     await seedBilly(app, ids);
     await openChild('Billy');
-    expect(RNTL.screen.getByText(en('paDueToday_one', { count: 1 }))).toBeTruthy();
-    expect(RNTL.screen.getByText('Homework')).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paDoneToday', { count: 1 }))).toBeTruthy();
-    expect(RNTL.screen.getByText(`${en('paUpcoming')} (1)`)).toBeTruthy();
-    expect(RNTL.screen.getByText('Library book')).toBeTruthy();
-    expect(RNTL.screen.getByText(`${en('paPastDue')} (1)`)).toBeTruthy();
-    expect(RNTL.screen.getByText('Tidy room')).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paCompletedTotal_other', { count: 5 }))).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paCompletedImportant', { count: 1 }))).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paCompletedUndated_one', { count: 1 }))).toBeTruthy();
-    expect(RNTL.screen.queryByText('Dentist')).toBeNull(); // an appointment is not a task
-    expect(RNTL.screen.getByText(en('paRepeatingRunning_one', { count: 1 }))).toBeTruthy();
-  });
-
-  test('repeating tasks are an ESTIMATE, labelled as such, and never called missed history', async () => {
-    const { app, ids } = await boot();
-    await seedBilly(app, ids);
-    await openChild('Billy');
-    expect(RNTL.screen.getByText(en('paRepeating'))).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paRepeatingNote', { days: 30 }))).toBeTruthy();
-    expect(RNTL.screen.getByText('Brush teeth: Mar 1, Mar 2, Mar 3, Mar 4, Mar 6, Mar 7 +1')).toBeTruthy();
-    const all = JSON.stringify(RNTL.screen.toJSON());
-    expect(all).not.toMatch(/"missed"|Missed/); // the word is never used as a claim
-    expect(en('paRepeating')).toMatch(/estimate/i);
-    expect(en('paRepeatingNote', { days: 30 })).toMatch(/not verified history/i);
+    for (const title of ['Homework', 'Library book', 'Tidy room', 'Brush teeth']) expect(RNTL.screen.queryByText(new RegExp(title))).toBeNull();
+    expect(RNTL.screen.queryByText('Tasks')).toBeNull(); // no card with that heading
+    expect(RNTL.screen.queryByText(/Right now|Coming up|Past its date|Repeating tasks: possibly missed/)).toBeNull();
+    expect(RNTL.screen.queryByText(/tasks? completed in total/)).toBeNull();
+    // what stays: "Tasks assigned by you" first, then Accomplishments and Activity history
+    expect(RNTL.screen.getByText(en('paAssignedTitle'))).toBeTruthy();
+    expect(RNTL.screen.getByText(en('paActTitle'))).toBeTruthy();
+    expect(RNTL.screen.getByTestId('assigned-open-tasks')).toBeTruthy(); // the whole-card navigation is intact
   });
 
   test('tasks assigned by the parent are in their own card, separate from the child\'s own', async () => {
@@ -161,10 +144,9 @@ describe('a child with saved data', () => {
     expect(await household.addTask(ids.Billy, 'Wash the car', 'parent')).toMatchObject({ ok: true });
     await openChild('Billy');
     expect(RNTL.screen.getByText(en('paAssignedTitle'))).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paAssignedNote', { name: 'Billy' }))).toBeTruthy();
-    expect(RNTL.screen.getByText(`${en('paAssignedToDo')} (1)`)).toBeTruthy();
-    expect(RNTL.screen.getByText('Wash the car')).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paCompletedTotal_other', { count: 5 }))).toBeTruthy(); // still 5: not added to
+    expect(RNTL.screen.queryByText(/kept separate/i)).toBeNull(); // the old explanation that repeated the heading is gone
+    expect(RNTL.screen.getByText(en('paNeedsApproval', { count: 0 }))).toBeTruthy(); // a task still to do is not "needs approval"
+    expect(RNTL.screen.queryByText('Wash the car')).toBeNull(); // the card is a summary: no task names
   });
 
   test('Accomplishments: pet milestones, streak, Paw Tokens since tracking began (with that date), items owned', async () => {
@@ -209,7 +191,8 @@ describe('a child with saved data', () => {
     const { app, ids } = await boot();
     await seedBilly(app, ids);
     await openChild('Billy');
-    const names = RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel ?? ''));
+    // (the "Open ..." buttons only take the parent to the task list: they change nothing)
+    const names = RNTL.screen.getAllByRole('button').map((b) => String(b.props.accessibilityLabel ?? '')).filter((n) => !/^Open /.test(n));
     expect([...names].sort()).toEqual(['Switch player. Playing as Main.', en('phNavDashboard'), en('phSettings'), `‹ ${en('phBack')}`].sort());
     const radios = RNTL.screen.getAllByRole('radio').map((r) => String(r.props.accessibilityLabel));
     expect(radios).toEqual([en('paPeriodDay'), en('paPeriodWeek'), en('paPeriodMonth'), en('paPeriodYear')]);
@@ -222,10 +205,9 @@ describe('what is not saved shows a plain empty state, never a made-up number', 
     const { ids } = await boot();
     void ids;
     await openChild('Sarah');
-    expect(RNTL.screen.getByText(en('paTasksEmpty'))).toBeTruthy();
     expect(RNTL.screen.getByText(en('paNoMilestones'))).toBeTruthy();
     expect(RNTL.screen.getByText(en('paTokensNone'))).toBeTruthy();
-    expect(RNTL.screen.getByText(en('paAssignedEmpty', { name: 'Sarah' }))).toBeTruthy();
+    expect(RNTL.screen.getByText(en('paNeedsApproval', { count: 0 }))).toBeTruthy();
     // no tasks at all really is a streak of 0 days (and a best of 0 days)
     expect(RNTL.screen.getByText(en('paDays_other', { count: 0 }))).toBeTruthy();
     expect(RNTL.screen.getByText(en('paBest', { value: en('paDays_other', { count: 0 }) }))).toBeTruthy();
@@ -243,7 +225,6 @@ describe('what is not saved shows a plain empty state, never a made-up number', 
     await app.AsyncStorage.setItem(scoped(ids.Billy, 'tasks'), '{ not json');
     await app.AsyncStorage.setItem(scoped(ids.Billy, 'tokenEarnings'), '{ not json');
     await openChild('Billy');
-    expect(RNTL.screen.getAllByText(en('paUnavailable')).length).toBeGreaterThanOrEqual(1); // the task list
     expect(RNTL.screen.getAllByText(en('paReadError')).length).toBeGreaterThanOrEqual(2); // the streak and the Paw Tokens: a short error, never a 0
     expect(RNTL.screen.queryByText(en('paDays_other', { count: 0 }))).toBeNull();
     expect(RNTL.screen.queryByText(/tasks? completed in total/)).toBeNull();
@@ -294,12 +275,12 @@ describe('privacy, protection and Spanish', () => {
     const { app, ids } = await boot();
     await seedBilly(app, ids);
     await openChild('Billy');
-    expect(RNTL.screen.getByText('Homework')).toBeTruthy();
+    expect(RNTL.screen.getByText(en('paAssignedTitle'))).toBeTruthy();
     await RNTL.act(async () => {
       app.gate.lockParentArea();
     });
     await settle();
-    expect(RNTL.screen.queryByText('Homework')).toBeNull();
+    expect(RNTL.screen.queryByText(en('paAssignedTitle'))).toBeNull();
     expect(RNTL.screen.queryByText(en('paTokens'))).toBeNull();
     expect(await RNTL.screen.findByText(new RegExp(en('pgTitle')))).toBeTruthy();
   });
@@ -308,13 +289,9 @@ describe('privacy, protection and Spanish', () => {
     const { app, ids } = await boot('es');
     await seedBilly(app, ids);
     await openChild('Billy', es);
-    expect(RNTL.screen.getByText(es('paDueToday_one', { count: 1 }))).toBeTruthy();
-    expect(RNTL.screen.getByText(es('paRepeating'))).toBeTruthy();
-    expect(RNTL.screen.getByText(es('paRepeatingNote', { days: 30 }))).toBeTruthy();
     expect(RNTL.screen.getByText(es('paAssignedTitle'))).toBeTruthy();
     expect(RNTL.screen.getByText(es('paMsHatched', { pet: 'Biscuit' }))).toBeTruthy();
     expect(RNTL.screen.getByText(es('paActTitle'))).toBeTruthy();
     expect(RNTL.screen.getByRole('radio', { name: es('paPeriodWeek') })).toBeTruthy();
-    expect(es('paRepeatingNote', { days: 30 })).toMatch(/estimaci|no es un historial comprobado/i);
   });
 });

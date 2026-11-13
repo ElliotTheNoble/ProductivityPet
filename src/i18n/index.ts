@@ -27,6 +27,8 @@ import { familyPickerEn } from './family-picker.en';
 import { familyPickerEs } from './family-picker.es';
 import { parentClaimEn } from './parent-claim.en';
 import { assignedTasksEn } from './assigned-tasks.en';
+import { rewardsEn } from './rewards.en';
+import { rewardsEs } from './rewards.es';
 import { assignedTasksEs } from './assigned-tasks.es';
 import { parentActivityEn } from './parent-activity.en';
 import { parentActivityEs } from './parent-activity.es';
@@ -58,11 +60,11 @@ import { tasksEs } from './tasks.es';
 // To add a language: create its tables (same keys), add them to TABLES, and add one line to LANGUAGES (its name
 // in ITS OWN language). It then appears in every language picker.
 
-export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn, ...familyPickerEn, ...parentClaimEn, ...familyManagementEn, ...profileChipEn, ...idleEn, ...tabLockEn, ...notificationCleanupEn, ...parentHomeEn, ...parentActivityEn, ...parentJournalEn, ...assignedTasksEn };
+export const en = { ...familyEn, ...shellEn, ...homeEn, ...tasksEn, ...roomsEn, ...shopEn, ...statsEn, ...historyEn, ...pawadiseEn, ...careEn, ...parentGateEn, ...parentPinEn, ...familyPickerEn, ...parentClaimEn, ...familyManagementEn, ...profileChipEn, ...idleEn, ...tabLockEn, ...notificationCleanupEn, ...parentHomeEn, ...parentActivityEn, ...parentJournalEn, ...assignedTasksEn, ...rewardsEn };
 export type Strings = typeof en;
 export type StringKey = keyof Strings;
 
-export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs, ...familyPickerEs, ...parentClaimEs, ...familyManagementEs, ...profileChipEs, ...idleEs, ...tabLockEs, ...notificationCleanupEs, ...parentHomeEs, ...parentActivityEs, ...parentJournalEs, ...assignedTasksEs };
+export const es: Strings = { ...familyEs, ...shellEs, ...homeEs, ...tasksEs, ...roomsEs, ...shopEs, ...statsEs, ...historyEs, ...pawadiseEs, ...careEs, ...parentGateEs, ...parentPinEs, ...familyPickerEs, ...parentClaimEs, ...familyManagementEs, ...profileChipEs, ...idleEs, ...tabLockEs, ...notificationCleanupEs, ...parentHomeEs, ...parentActivityEs, ...parentJournalEs, ...assignedTasksEs, ...rewardsEs };
 
 // Lists (message pools, month and weekday names). English is the fallback here too.
 export type ListKey = keyof typeof listsEn;

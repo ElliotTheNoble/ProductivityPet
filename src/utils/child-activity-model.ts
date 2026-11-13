@@ -1,5 +1,5 @@
 import { getAllCompletedEntries } from '@/utils/category-accomplishments';
-import type { HouseholdTask, HouseholdTaskStatus } from '@/utils/household';
+import { finishedDateISO, type HouseholdTask, type HouseholdTaskStatus } from '@/utils/household';
 import type { PetEventType } from '@/utils/pet-lifecycle-core';
 import { getStreakSummary } from '@/utils/streaks';
 import type { TokenEvent, TokenSource } from '@/utils/token-history';
@@ -111,12 +111,14 @@ export function buildTaskStatus(tasks: Task[], today: string): TaskStatus {
 
 export type AssignedSummary = {
   total: number;
-  byStatus: Record<HouseholdTaskStatus, { id: string; text: string }[]>;
+  // `finishedISO`: the LOCAL date the task was approved / completed on (see finishedDateISO in @/utils/household.ts), null for a task that is not
+  // finished. The overview lists only today's finished tasks; the others stay saved and are counted in Activity History.
+  byStatus: Record<HouseholdTaskStatus, { id: string; text: string; finishedISO: string | null }[]>;
 };
 
 export function buildAssignedSummary(tasks: readonly HouseholdTask[]): AssignedSummary {
   const byStatus: AssignedSummary['byStatus'] = { assigned: [], pending: [], approved: [], completed: [] };
-  for (const task of tasks) byStatus[task.status].push({ id: task.id, text: task.text });
+  for (const task of tasks) byStatus[task.status].push({ id: task.id, text: task.text, finishedISO: finishedDateISO(task) });
   return { total: tasks.length, byStatus };
 }
 
@@ -178,6 +180,8 @@ export type ActivityBucket = {
   startISO: string;
   endISO: string;
   tasksCompleted: number;
+  // Household tasks (assigned by a parent) finished in the period, by the day the parent approved them. Kept apart from `tasksCompleted`.
+  householdDone: number;
   tokens: number | null; // null when tokenCoverage says nothing was recorded for the period
   tokenCoverage: TokenCoverage;
   milestones: Milestone[];
@@ -226,6 +230,8 @@ export type ActivityInput = {
   // null = this child has no Paw Token history at all
   tokens: { events: readonly TokenEvent[]; startedISO: string } | null;
   milestones: readonly Milestone[];
+  // The local dates ('YYYY-MM-DD') parent-assigned household tasks were finished on (see finishedDateISO in @/utils/household.ts).
+  householdDone?: readonly string[];
   // The local date the child's first saved pet was created (the app makes the first pet the first time a child opens it), or null.
   firstPetISO?: string | null;
 };
@@ -238,6 +244,7 @@ export function historyStartISO(input: ActivityInput, today: string): string | n
   if (input.firstPetISO) dates.push(input.firstPetISO);
   if (input.tokens && input.tokens.startedISO) dates.push(input.tokens.startedISO);
   for (const milestone of input.milestones) dates.push(milestone.dateISO);
+  for (const date of input.householdDone ?? []) dates.push(date);
   for (const entry of getAllCompletedEntries(input.tasks.filter((task) => task.kind === 'task'))) if (entry.dateISO) dates.push(entry.dateISO);
   const valid = dates.filter((date) => date <= today).sort();
   return valid.length > 0 ? valid[0] : null;
@@ -267,6 +274,7 @@ export function buildActivity(period: ActivityPeriod, today: string, input: Acti
       startISO,
       endISO,
       tasksCompleted: completions.filter(inRange).length,
+      householdDone: (input.householdDone ?? []).filter((date) => date <= today && inRange(date)).length,
       tokens,
       tokenCoverage,
       milestones: input.milestones.filter((m) => inRange(m.dateISO)),

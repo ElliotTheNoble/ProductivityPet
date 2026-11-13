@@ -4,6 +4,7 @@ import { getSelectableChildren } from '@/utils/family-profiles';
 import { FAMILY_KEY_NAME, getPetLabel, parseSavedFamily } from '@/utils/pet-family';
 import { RECOVERY_NEED_THRESHOLD } from '@/utils/pet-family-config';
 import { advancePet, isEggStage } from '@/utils/pet-lifecycle-core';
+import { safetyRulesForProfile } from '@/utils/pet-safety';
 import { checkParentAction } from '@/utils/parent-session';
 import { ensureProfilesReady, scopedKeyFor } from '@/utils/profiles';
 
@@ -58,7 +59,7 @@ export async function readChildOverview(childId: string, now: Date = new Date())
     const pets: OverviewPet[] = family.pets.map((saved) => {
       const label = getPetLabel(saved, family.pets);
       if (saved.retired) return { id: saved.id, label, state: 'pawadise' };
-      const pet = advancePet(saved, now);
+      const pet = advancePet(saved, now, false, safetyRulesForProfile(childId));
       switch (pet.lifecycle.state) {
         case 'deceased':
           return { id: saved.id, label, state: 'deceased' };

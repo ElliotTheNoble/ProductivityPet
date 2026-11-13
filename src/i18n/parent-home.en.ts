@@ -2,11 +2,11 @@
 // English is the base language: every key must exist in parent-home.es.ts (TypeScript checks this). Placeholders are written {name}.
 export const parentHomeEn = {
   phTitle: 'Parent Dashboard',
-  phSubtitle: "See how each child is doing. This is a look-only view: nothing here changes a child's pet, tasks or journal.",
+  phSubtitle: 'How each child is doing.',
   phNavDashboard: 'Dashboard',
   phChildren: 'Your children',
   phLoading: 'Loading…',
-  phNoChildren: 'No active children yet. Use Family Settings to add one or bring an archived child back.',
+  phNoChildren: 'No children yet. Add one in Family Settings.',
   phUnreadable: "The list of children couldn't be read right now. Nothing was changed.",
   phOpenChild: 'Open {name}',
   phPets_one: '{count} pet',
@@ -25,11 +25,9 @@ export const parentHomeEn = {
   phReadOnly: 'Look-only view. You cannot change anything here.',
   phPetsTitle: 'Pets',
   phNoPets: 'No pets yet.',
-  phTasks: 'Tasks',
   phAchievements: 'Achievements',
   phJournals: 'Shared Journals',
-  phJournalsText: 'Journal entries your child chooses to share with you.',
+  phJournalsText: 'Only entries your child chose to share.',
   phSettings: 'Family Settings',
-  phSettingsHint: 'Add, rename or archive children, manage the Parent PIN and more.',
   phSettingsOpen: 'Open Family Settings',
 };

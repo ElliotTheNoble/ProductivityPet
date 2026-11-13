@@ -30,4 +30,6 @@ export const assignedTasksEn = {
   atFromParentRoom: 'From my parent · {room}',
   atHomeRowLabel: '{task}, {state}, {from}',
   atOpenTasksTab: 'Opens your Tasks tab',
+  atGroupTitle_one: '{room} ({count} task)',
+  atGroupTitle_other: '{room} ({count} tasks)',
 };

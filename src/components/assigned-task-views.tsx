@@ -76,7 +76,7 @@ function StatePill({ state }: { state: AssignedState }) {
 // control, next to the action button rather than around it, so screen readers and the keyboard reach both. A mouse hover lightly tints the
 // card and a press darkens it a little.
 function TaskRow({ view, showRoom = false }: { view: AssignedTaskView; showRoom?: boolean }) {
-  const { t } = useT();
+  const { t, tn } = useT();
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -114,6 +114,20 @@ function TaskRow({ view, showRoom = false }: { view: AssignedTaskView; showRoom?
           </ThemedText>
         ) : null}
         <StatePill state={view.state} />
+        {view.reward !== null || view.important ? (
+          <View style={styles.rewardLine} testID={`assigned-reward-${view.id}`}>
+            {view.important ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {t('rwChildImportant')}
+              </ThemedText>
+            ) : null}
+            {view.reward !== null && view.reward > 0 ? (
+              <ThemedText type="smallBold" style={styles.rewardText}>
+                {t('rwChild', { tokens: tn('rwTokens', view.reward) })}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
         {failed ? (
           <ThemedText type="small" themeColor="accent" accessibilityLiveRegion="polite">
             {view.state === 'waiting' ? t('atUndoFailed') : t('atSendFailed')}
@@ -188,44 +202,64 @@ export function AssignedAllTasks({ scrollRef, embedded = false }: { scrollRef?: 
   );
 }
 
-// Home's "Today's Tasks" card, the parent's part: each assigned task as one compact, tappable row (title, "From my parent" with the room, and its
-// state). No buttons here: tapping a row takes the child to where the task is done: its room (which opens its task panel and lights the tasks up)
-// or, for a task with no room, the Tasks tab ("Tasks from my parent" lit up). Waiting tasks stay in the list, marked as waiting. Nothing when
-// there are none. The card around it (title, date, the child's own tasks, the count) is src/components/task-card.tsx.
+// Home's "Today's Tasks" card, the parent's part: the assigned tasks GROUPED BY ROOM. One rounded card per room, with the room's name and how many
+// tasks it holds at the top, and under it each of that room's tasks with its own state (To do, Try again, Waiting for my parent). Tasks with no room
+// are their own group ("Anywhere"). Groups appear in the order their first task was assigned. The grouping is only how the list is drawn: every task
+// is still its own record, and nothing is merged or saved differently. No buttons here (I did it! / Undo are in the room and the Tasks tab): a tap on
+// the room's title or on a task takes the child to where it is done, its room (which opens the task panel and lights the tasks up) or, for
+// "Anywhere", the Tasks tab. Nothing at all when there are none. The card around it is src/components/task-card.tsx.
 export function AssignedHomeRows() {
-  const { t } = useT();
+  const { t, tn } = useT();
   const router = useRouter();
   const views = useAssignedTasks();
   if (views.length === 0) return null;
   const nonce = () => String(Date.now());
+  const groups: { key: string; room: RoomKey; items: AssignedTaskView[] }[] = [];
+  for (const view of views) {
+    const key = view.room ?? 'anywhere';
+    const found = groups.find((g) => g.key === key);
+    if (found) found.items.push(view);
+    else groups.push({ key, room: key as RoomKey, items: [view] });
+  }
   return (
     <View style={styles.homeRows}>
-      {views.map((view) => {
-        const roomName = view.room ? ROOMS[view.room].name : null;
-        const from = roomName ? t('atFromParentRoom', { room: roomName }) : t('atFromParent');
+      {groups.map((group) => {
+        const roomName = group.key === 'anywhere' ? t('atAnywhere') : ROOMS[group.room as Exclude<RoomKey, 'anywhere'>].name;
+        const go = () =>
+          group.key === 'anywhere'
+            ? router.push({ pathname: '/tasks', params: { focus: nonce() } })
+            : router.push({ pathname: '/rooms/[room]', params: { room: group.key, focus: nonce() } });
+        const title = tn('atGroupTitle', group.items.length, { room: roomName });
+        const from = group.key === 'anywhere' ? t('atFromParent') : t('atFromParentRoom', { room: roomName });
         return (
-          <HoverPressable
-            key={view.id}
-            onPress={() =>
-              view.room
-                ? router.push({ pathname: '/rooms/[room]', params: { room: view.room, focus: nonce() } })
-                : router.push({ pathname: '/tasks', params: { focus: nonce() } })
-            }
-            accessibilityRole="button"
-            accessibilityLabel={t('atHomeRowLabel', { task: view.text, state: t(STATE_TEXT[view.state]), from })}
-            accessibilityHint={roomName ? t('atOpenRoom', { room: roomName }) : t('atOpenTasksTab')}
-            testID={`assigned-home-${view.id}`}
-            style={(state) => [styles.homeRow, state.pressed && styles.pressed]}>
-            <View style={styles.rowText}>
-              <ThemedText type="small" style={styles.taskText} numberOfLines={2}>
-                {view.text}
+          <View key={group.key} style={styles.roomCard} testID={`assigned-group-${group.key}`}>
+            <HoverPressable
+              onPress={go}
+              accessibilityRole="button"
+              accessibilityLabel={title}
+              accessibilityHint={group.key === 'anywhere' ? t('atOpenTasksTab') : t('atOpenRoom', { room: roomName })}
+              testID={`assigned-group-title-${group.key}`}
+              style={(state) => [styles.roomTitleRow, state.pressed && styles.pressed]}>
+              <ThemedText type="smallBold" style={styles.roomName}>
+                {title}
               </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {from}
-              </ThemedText>
-            </View>
-            <StatePill state={view.state} />
-          </HoverPressable>
+            </HoverPressable>
+            {group.items.map((view) => (
+              <HoverPressable
+                key={view.id}
+                onPress={go}
+                accessibilityRole="button"
+                accessibilityLabel={t('atHomeRowLabel', { task: view.text, state: t(STATE_TEXT[view.state]), from })}
+                accessibilityHint={group.key === 'anywhere' ? t('atOpenTasksTab') : t('atOpenRoom', { room: roomName })}
+                testID={`assigned-home-${view.id}`}
+                style={(state) => [styles.homeRow, state.pressed && styles.pressed]}>
+                <ThemedText type="small" style={[styles.taskText, styles.homeRowTitle]} numberOfLines={2}>
+                  {view.text}
+                </ThemedText>
+                <StatePill state={view.state} />
+              </HoverPressable>
+            ))}
+          </View>
         );
       })}
     </View>
@@ -243,14 +277,20 @@ const styles = StyleSheet.create({
   rowHover: { backgroundColor: 'rgba(242, 141, 174, 0.14)' },
   rowPressed: { backgroundColor: 'rgba(242, 141, 174, 0.26)' },
   taskText: { flexShrink: 1 },
+  rewardLine: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'center' },
+  rewardText: { color: '#8A5A00' },
   pill: { alignSelf: 'flex-start', paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Spacing.three },
   doneButton: { minHeight: 44, minWidth: 44, paddingHorizontal: Spacing.three, borderRadius: Spacing.four, alignItems: 'center', justifyContent: 'center', backgroundColor: '#7FD9B6' },
   doneText: { color: '#1F4D3A' },
   // Undo takes the same place and size as "I did it!", in the lavender of "waiting".
   undoButton: { backgroundColor: '#E6DBF8' },
   undoText: { color: '#5B3F8F' },
-  homeRows: { gap: Spacing.one },
-  homeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', minHeight: 44, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: Spacing.three, backgroundColor: '#FFF4E3' },
+  homeRows: { gap: Spacing.two },
+  // One room: a pastel rounded card holding the room's title and its tasks.
+  roomCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Spacing.three, backgroundColor: '#FFF4E3', borderWidth: 2, borderColor: 'rgba(242, 201, 76, 0.35)' },
+  roomTitleRow: { minHeight: 36, justifyContent: 'center', paddingHorizontal: Spacing.one },
+  homeRowTitle: { flex: 1, minWidth: 110 },
+  homeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', minHeight: 40, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: Spacing.two, backgroundColor: 'rgba(255, 255, 255, 0.75)' },
   roomRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: Spacing.two, minHeight: 44, paddingHorizontal: Spacing.three, borderRadius: Spacing.three, backgroundColor: '#FFF4E3' },
   roomName: { flexGrow: 1, flexShrink: 1 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },

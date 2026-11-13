@@ -10,6 +10,7 @@ import {
 import { FAMILY_KEY_NAME, parseSavedFamily } from '@/utils/pet-family';
 import { RECOVERY_NEED_THRESHOLD } from '@/utils/pet-family-config';
 import { advancePet, isEggStage } from '@/utils/pet-lifecycle-core';
+import { safetyRulesForProfile } from '@/utils/pet-safety';
 import {
   MAIN_PROFILE_ID,
   ensureProfilesReady,
@@ -188,7 +189,7 @@ export async function peekProfileCare(profileId: string, now: Date = new Date())
   let deceased = 0;
   for (const saved of family.pets) {
     if (saved.retired) continue; // in Pet Pawadise: frozen, never sick
-    const pet = advancePet(saved, now);
+    const pet = advancePet(saved, now, false, safetyRulesForProfile(profileId));
     switch (pet.lifecycle.state) {
       case 'deceased':
         deceased += 1;
