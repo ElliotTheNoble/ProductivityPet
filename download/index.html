@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ProductivityPet</title>
-  <meta name="description" content="Download the ProductivityPet demo: a friendly productivity pet with Family Mode for parents and kids.">
+  <meta name="description" content="Play the ProductivityPet demo online in your browser, or download the Android app: a friendly productivity pet with Family Mode for parents and kids.">
   <meta name="theme-color" content="#FCEEF1">
   <!-- This is a demo page: keep it out of search engines for now. Delete this line when the app is public. -->
   <meta name="robots" content="noindex, nofollow">
@@ -18,6 +18,7 @@
       --muted: #7A6670;
       --pink: #F28DAE;
       --pink-deep: #D9577F;
+      --pink-button: #D9577F; /* the solid Play Online button: deep enough for white text, still the same pastel pink family */
       --lavender: #E6DBF8;
       --lavender-text: #5B3F8F;
       --mint: #7FD9B6;
@@ -73,14 +74,18 @@
     }
     .btn:hover { filter: saturate(1.2) brightness(0.97); transform: translateY(-1px); }
     .btn:focus-visible { outline: 3px solid var(--lavender-text); outline-offset: 3px; }
-    .btn[aria-disabled="true"] {
-      background: var(--lavender); color: var(--lavender-text); cursor: not-allowed; opacity: 0.9;
+    /* The secondary buttons (Android, iPhone and iPad): outlined, so that Play Online stays the one solid pink call to action. */
+    .btn-secondary { background: var(--card); color: var(--pink-deep); border: 3px solid var(--pink); }
+    .btn-secondary:hover { background: var(--card-soft); }
+    .btn-large { font-size: 1.35rem; padding: 20px 24px; min-height: 68px; background: var(--pink-button); color: #FFFFFF; box-shadow: 0 6px 16px rgba(217, 87, 127, 0.28); }
+    .hero { padding: 26px 22px; gap: 14px; }
+    .hero h2 { font-size: 1.6rem; }
+    .pill {
+      display: inline-block; padding: 3px 12px; border-radius: 999px; background: var(--mint);
+      color: var(--mint-text); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.02em;
     }
-    .btn[aria-disabled="true"]:hover { filter: none; transform: none; }
-    .soon {
-      display: inline-block; padding: 3px 12px; border-radius: 999px; background: var(--lavender);
-      color: var(--lavender-text); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.02em;
-    }
+    .also { margin: 2px 0 -6px; text-align: center; color: var(--muted); font-weight: 700; font-size: 1rem; }
+    .classroom { background: var(--card-soft); color: var(--text); border: 2px dashed var(--line); font-size: 0.92rem; line-height: 1.5; }
     ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
     li::marker { color: var(--pink-deep); font-weight: 800; }
     .note {
@@ -111,6 +116,15 @@
       <span class="badge-demo">Demo version</span>
     </header>
 
+    <section class="card hero highlight" id="play" aria-labelledby="play-title">
+      <h2 id="play-title">Play Online <span class="pill">Easiest</span></h2>
+      <p>Play right in your browser on an iPhone, iPad, Android phone or computer. There is nothing to download or install.</p>
+      <a class="btn btn-large" id="play-link" href="https://elliotthenoble.github.io/ProductivityPet-web/">Play Online</a>
+      <p class="note classroom" id="classroom-note"><strong>A note for our classroom demo:</strong> your progress is saved in the browser you are using, on this device only. It does not sync between devices yet, so another phone or browser starts fresh. In Family Mode, please use fictional names for the children.</p>
+    </section>
+
+    <p class="also">Or, if you prefer an app:</p>
+
     <div class="platforms">
       <section class="card android" id="android" aria-labelledby="android-title">
         <h2 id="android-title">Android</h2>
@@ -118,12 +132,12 @@
         <!--
           ╔════════════════════════════════════════════════════════════════════════════╗
           ║  TO PUBLISH A NEWER ANDROID BUILD, CHANGE ONLY THE TWO THINGS BELOW:       ║
-          ║    1. the href of the "Download for Android" link (the new Expo build URL) ║
+          ║    1. the href of the "Download for Android" link (a new GitHub Release URL)║
           ║    2. the build label text on the line after it                            ║
           ║  Nothing else on this page needs to change, and the QR code stays the same. ║
           ╚════════════════════════════════════════════════════════════════════════════╝
         -->
-        <a class="btn" id="android-link" href="https://github.com/ElliotTheNoble/ProductivityPet/releases/download/demo-v1.0.0/ProductivityPet-Demo-v1.0.0.apk">Download for Android</a>
+        <a class="btn btn-secondary" id="android-link" href="https://github.com/ElliotTheNoble/ProductivityPet/releases/download/demo-v1.0.0/ProductivityPet-Demo-v1.0.0.apk">Download for Android</a>
         <p class="small" id="android-build">Professor Demo v1.0.0 (build 4) · November 12, 2026 · from GitHub Releases</p>
 
         <p><strong>How to install</strong></p>
@@ -138,10 +152,9 @@
       </section>
 
       <section class="card" id="iphone" aria-labelledby="iphone-title">
-        <h2 id="iphone-title">iPhone <span class="soon">Coming Soon</span></h2>
-        <p>The iPhone version is not ready yet. When it is, you will install it through Apple's TestFlight and the link will appear here.</p>
-        <span class="btn" role="link" aria-disabled="true" tabindex="-1">iPhone link coming soon</span>
-        <p class="small">Nothing to download for iPhone yet.</p>
+        <h2 id="iphone-title">iPhone &amp; iPad</h2>
+        <p>There is no iPhone or iPad app to download. Open <strong>Play Online</strong> in Safari instead: it works the same way.</p>
+        <a class="btn btn-secondary" id="iphone-play-link" href="https://elliotthenoble.github.io/ProductivityPet-web/">Play Online on iPhone &amp; iPad</a>
       </section>
     </div>
 
@@ -151,7 +164,7 @@
         <li>Create a Parent PIN (write down the recovery code it shows you).</li>
         <li>Add a child, then assign them a task with a Paw Token reward.</li>
         <li>Switch to the child, tap <strong>I did it!</strong>, then approve it as the parent.</li>
-        <li>Use made-up names: nothing leaves your phone, and uninstalling the app erases it.</li>
+        <li>Use made-up names for the children (see the note above).</li>
       </ul>
     </section>
 
@@ -159,15 +172,5 @@
       ProductivityPet demo · <a href="../PRIVACY">Privacy</a>
     </footer>
   </main>
-
-  <script>
-    // Cosmetic only: on a phone, light up the card for that phone. The page works the same without JavaScript.
-    (function () {
-      var ua = navigator.userAgent || '';
-      var id = /android/i.test(ua) ? 'android' : /iphone|ipad|ipod/i.test(ua) ? 'iphone' : '';
-      var card = id ? document.getElementById(id) : null;
-      if (card) card.classList.add('highlight');
-    })();
-  </script>
 </body>
 </html>
