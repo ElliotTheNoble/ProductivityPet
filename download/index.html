@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProductivityPet</title>
+  <meta name="description" content="Download the ProductivityPet demo: a friendly productivity pet with Family Mode for parents and kids.">
+  <meta name="theme-color" content="#FCEEF1">
+  <!-- This is a demo page: keep it out of search engines for now. Delete this line when the app is public. -->
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23F28DAE'/%3E%3Ccircle cx='32' cy='42' r='12' fill='white'/%3E%3Ccircle cx='15' cy='28' r='6' fill='white'/%3E%3Ccircle cx='28' cy='16' r='6' fill='white'/%3E%3Ccircle cx='42' cy='16' r='6' fill='white'/%3E%3Ccircle cx='53' cy='28' r='6' fill='white'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #FCEEF1;
+      --card: #FFFFFF;
+      --card-soft: #FFF4E3;
+      --text: #4A3B42;
+      --muted: #7A6670;
+      --pink: #F28DAE;
+      --pink-deep: #D9577F;
+      --lavender: #E6DBF8;
+      --lavender-text: #5B3F8F;
+      --mint: #7FD9B6;
+      --mint-text: #1F4D3A;
+      --line: rgba(150, 130, 160, 0.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #2A2030;
+        --card: #3A2D42;
+        --card-soft: #43344A;
+        --text: #F6E9EF;
+        --muted: #CDB8C3;
+        --pink-deep: #F28DAE;
+        --lavender: #54406F;
+        --lavender-text: #E6DBF8;
+        --line: rgba(255, 255, 255, 0.16);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 24px 16px 48px;
+    }
+    main { max-width: 760px; margin: 0 auto; display: grid; gap: 18px; }
+    header { text-align: center; padding: 12px 0 4px; }
+    .paw { width: 76px; height: 76px; margin: 0 auto 10px; display: block; }
+    h1 { margin: 0; font-size: clamp(2rem, 7vw, 2.8rem); line-height: 1.1; letter-spacing: -0.01em; }
+    .tagline { margin: 8px auto 0; max-width: 34em; color: var(--muted); font-size: 1.05rem; }
+    .badge-demo {
+      display: inline-block; margin-top: 12px; padding: 4px 14px; border-radius: 999px;
+      background: var(--lavender); color: var(--lavender-text); font-weight: 700; font-size: 0.85rem;
+    }
+    .platforms { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+    .card {
+      background: var(--card); border-radius: 24px; padding: 22px; border: 2px solid var(--line);
+      display: flex; flex-direction: column; gap: 12px; min-width: 0;
+    }
+    .card.android { background: var(--card-soft); }
+    .card.highlight { border-color: var(--pink); box-shadow: 0 6px 22px rgba(242, 141, 174, 0.3); }
+    .card h2 { margin: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .card p { margin: 0; }
+    .btn {
+      display: block; text-align: center; text-decoration: none; font-weight: 800; font-size: 1.1rem;
+      padding: 16px 20px; border-radius: 999px; min-height: 52px;
+      background: var(--pink); color: #FFFFFF; border: 0; cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .btn:hover { filter: saturate(1.2) brightness(0.97); transform: translateY(-1px); }
+    .btn:focus-visible { outline: 3px solid var(--lavender-text); outline-offset: 3px; }
+    .btn[aria-disabled="true"] {
+      background: var(--lavender); color: var(--lavender-text); cursor: not-allowed; opacity: 0.9;
+    }
+    .btn[aria-disabled="true"]:hover { filter: none; transform: none; }
+    .soon {
+      display: inline-block; padding: 3px 12px; border-radius: 999px; background: var(--lavender);
+      color: var(--lavender-text); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.02em;
+    }
+    ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+    li::marker { color: var(--pink-deep); font-weight: 800; }
+    .note {
+      background: var(--lavender); color: var(--lavender-text); border-radius: 16px; padding: 12px 14px;
+      font-size: 0.95rem;
+    }
+    .small { color: var(--muted); font-size: 0.9rem; }
+    .try { background: var(--card); border-radius: 24px; padding: 20px 22px; border: 2px solid var(--line); }
+    .try h2 { margin: 0 0 8px; font-size: 1.15rem; }
+    .try ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+    footer { text-align: center; color: var(--muted); font-size: 0.85rem; padding-top: 6px; }
+    footer a { color: var(--pink-deep); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <svg class="paw" viewBox="0 0 64 64" role="img" aria-label="ProductivityPet paw">
+        <rect width="64" height="64" rx="18" fill="#F28DAE"/>
+        <circle cx="32" cy="42" r="12" fill="#fff"/>
+        <circle cx="15" cy="28" r="6" fill="#fff"/>
+        <circle cx="28" cy="16" r="6" fill="#fff"/>
+        <circle cx="42" cy="16" r="6" fill="#fff"/>
+        <circle cx="53" cy="28" r="6" fill="#fff"/>
+      </svg>
+      <h1>ProductivityPet</h1>
+      <p class="tagline">Look after a virtual pet by getting things done. This demo includes <strong>Family Mode</strong>, with child profiles and a Parent Dashboard.</p>
+      <span class="badge-demo">Demo version</span>
+    </header>
+
+    <div class="platforms">
+      <section class="card android" id="android" aria-labelledby="android-title">
+        <h2 id="android-title">Android</h2>
+
+        <!--
+          ╔════════════════════════════════════════════════════════════════════════════╗
+          ║  TO PUBLISH A NEWER ANDROID BUILD, CHANGE ONLY THE TWO THINGS BELOW:       ║
+          ║    1. the href of the "Download for Android" link (the new Expo build URL) ║
+          ║    2. the build label text on the line after it                            ║
+          ║  Nothing else on this page needs to change, and the QR code stays the same. ║
+          ╚════════════════════════════════════════════════════════════════════════════╝
+        -->
+        <a class="btn" id="android-link" href="https://expo.dev/accounts/elliotthenobles-team/projects/ProductivityPet/builds/aed32add-d7b9-4942-86bb-ccc82c8294b6">Download for Android</a>
+        <p class="small" id="android-build">Professor Demo build 4 · November 12, 2026</p>
+
+        <p><strong>How to install</strong></p>
+        <ol>
+          <li>Open this page on your Android phone and tap <strong>Download for Android</strong>. On the page that opens, tap <strong>Install</strong> (or <strong>Download</strong>).</li>
+          <li>If Android asks, allow your browser to <strong>install unknown apps</strong>. This is a one-time setting.</li>
+          <li>Open the downloaded file and tap <strong>Install</strong>. If Android shows a <strong>security warning</strong>, stop and contact the person who shared this page with you to verify the download.</li>
+          <li>Open <strong>ProductivityPet Demo</strong> from your apps.</li>
+        </ol>
+        <p class="note">This is a demo <strong>APK installed outside Google Play</strong>, so Android asks for extra permission to install it. It is a separate app and only uses data stored on your own phone.</p>
+      </section>
+
+      <section class="card" id="iphone" aria-labelledby="iphone-title">
+        <h2 id="iphone-title">iPhone <span class="soon">Coming Soon</span></h2>
+        <p>The iPhone version is not ready yet. When it is, you will install it through Apple's TestFlight and the link will appear here.</p>
+        <span class="btn" role="link" aria-disabled="true" tabindex="-1">iPhone link coming soon</span>
+        <p class="small">Nothing to download for iPhone yet.</p>
+      </section>
+    </div>
+
+    <section class="try" aria-labelledby="try-title">
+      <h2 id="try-title">Things to try</h2>
+      <ul>
+        <li>Create a Parent PIN (write down the recovery code it shows you).</li>
+        <li>Add a child, then assign them a task with a Paw Token reward.</li>
+        <li>Switch to the child, tap <strong>I did it!</strong>, then approve it as the parent.</li>
+        <li>Use made-up names: nothing leaves your phone, and uninstalling the app erases it.</li>
+      </ul>
+    </section>
+
+    <footer>
+      ProductivityPet demo · <a href="../PRIVACY">Privacy</a>
+    </footer>
+  </main>
+
+  <script>
+    // Cosmetic only: on a phone, light up the card for that phone. The page works the same without JavaScript.
+    (function () {
+      var ua = navigator.userAgent || '';
+      var id = /android/i.test(ua) ? 'android' : /iphone|ipad|ipod/i.test(ua) ? 'iphone' : '';
+      var card = id ? document.getElementById(id) : null;
+      if (card) card.classList.add('highlight');
+    })();
+  </script>
+</body>
+</html>
